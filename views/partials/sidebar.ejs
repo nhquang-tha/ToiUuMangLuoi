@@ -1,0 +1,25 @@
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <h2>Telecom Admin</h2>
+        <p>Xin chào, <strong><%= currentUser.username %></strong> (<%= currentUser.role %>)</p>
+    </div>
+    <ul class="nav-links">
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/kpi-analytics">KPI Analytics</a></li>
+        <li><a href="/rf-database">RF Database</a></li>
+        <li><a href="/poi-report">POI Report</a></li>
+        <li><a href="/worst-cells">Worst Cells</a></li>
+        <li><a href="/congestion-3g">Congestion 3G</a></li>
+        <li><a href="/traffic-down">Traffic Down</a></li>
+        <li><a href="/scrip">Scrip</a></li>
+        <li><a href="/import-data">Import Data</a></li>
+    </ul>
+    
+    <div class="sidebar-footer">
+        <% if(currentUser.role === 'admin') { %>
+            <a href="/admin/add-user" class="btn-sm btn-outline">Thêm User</a>
+        <% } %>
+        <a href="/change-password" class="btn-sm btn-outline">Đổi mật khẩu</a>
+        <a href="/logout" class="btn-sm btn-danger">Đăng xuất</a>
+    </div>
+</aside>
