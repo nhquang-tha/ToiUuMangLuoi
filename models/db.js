@@ -7,7 +7,7 @@ const pool = mysql.createPool({
     user: process.env.TIDB_USER,
     password: process.env.TIDB_PASSWORD,
     database: process.env.TIDB_DATABASE,
-    ssl: { minVersion: 'TLSv1.2' } // Bắt buộc khi dùng TiDB Serverless
+    ssl: { minVersion: 'TLSv1.2' }
 });
 
 module.exports = pool;
