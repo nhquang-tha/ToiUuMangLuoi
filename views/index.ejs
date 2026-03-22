@@ -1,0 +1,19 @@
+<%- include('partials/header') %>
+
+<main class="container">
+    <section class="hero">
+        <h1>Sự tối giản là đỉnh cao của sự tinh tế</h1>
+        <p>Tập trung vào nội dung, loại bỏ sự rườm rà. Trải nghiệm mượt mà trên mọi thiết bị.</p>
+    </section>
+
+    <section class="content">
+        <h2>Giá trị cốt lõi</h2>
+        <ul class="item-list">
+            <% items.forEach(function(item) { %>
+                <li><%= item.name %></li>
+            <% }); %>
+        </ul>
+    </section>
+</main>
+
+<%- include('partials/footer') %>
