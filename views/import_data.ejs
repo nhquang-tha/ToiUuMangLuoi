@@ -1,0 +1,53 @@
+<%- include('partials/head') %>
+<div class="layout">
+    <%- include('partials/sidebar') %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1><%= page %></h1>
+        </header>
+        <div class="content-body">
+            
+            <% if(message) { %>
+                <div class="alert alert-success"><%= message %></div>
+            <% } %>
+            <% if(error) { %>
+                <div class="alert alert-danger"><%= error %></div>
+            <% } %>
+
+            <div class="card" style="max-width: 600px;">
+                <h3>Upload Dữ Liệu Tần Số (RF)</h3>
+                <p style="margin-bottom: 20px; color: #666;">Chấp nhận file định dạng .xlsx, .xls, .csv</p>
+                
+                <form action="/import-data" method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label>Chọn Database lưu trữ:</label>
+                        <select name="networkType" required>
+                            <option value="3g">Mạng 3G (RF_3G)</option>
+                            <option value="4g">Mạng 4G (RF_4G)</option>
+                            <option value="5g">Mạng 5G (RF_5G)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Chọn File:</label>
+                        <!-- Form thiết kế tối giản -->
+                        <div style="border: 2px dashed #ddd; padding: 20px; text-align: center; border-radius: 4px; background: #fafafa;">
+                            <input type="file" name="dataFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="margin-top: 10px;">Bắt đầu Import</button>
+                </form>
+            </div>
+        </div>
+    </main>
+</div>
+
+<style>
+    /* Bổ sung CSS nhỏ cho thông báo */
+    .alert { padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+    .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+</style>
+</body>
+</html>
