@@ -1,4 +1,4 @@
- require('express');
+const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { isAuthenticated } = require('../middlewares/authMiddleware');
