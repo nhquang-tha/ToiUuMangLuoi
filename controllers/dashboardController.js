@@ -23,16 +23,35 @@ exports.handleImportData = async (req, res) => {
         const sheetName = workbook.SheetNames[0];
         
         let data = [];
-        // THÊM raw: false ĐỂ ÉP THƯ VIỆN LẤY ĐÚNG ĐỊNH DẠNG NGÀY THÁNG BẰNG CHỮ
         if (networkType === 'kpi_4g') {
-            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { range: 1, raw: false });
+            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { range: 1 });
         } else {
-            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false });
+            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
         }
 
         if (data.length === 0) {
             return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!' });
         }
+
+        // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN =====================
+        // Ép tất cả các cột "Thời gian" về định dạng String chuẩn DD/MM/YYYY
+        data.forEach(row => {
+            let t = row['Thời gian'];
+            if (t !== undefined && t !== null) {
+                // Nếu SheetJS đọc ra số Serial của Excel (VD: 45314)
+                if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
+                    let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
+                    let d = String(dateObj.getDate()).padStart(2, '0');
+                    let m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    let y = dateObj.getFullYear();
+                    row['Thời gian'] = `${d}/${m}/${y}`;
+                } else if (typeof t === 'string') {
+                    // Nếu là chuỗi, cắt bỏ phần giờ phút giây (nếu có)
+                    row['Thời gian'] = t.split(' ')[0].trim();
+                }
+            }
+        });
+        // =======================================================================
 
         // ===================== LOGIC KIỂM TRA ĐÚNG CHỦNG LOẠI FILE =====================
         const requiredHeaders = {
@@ -40,11 +59,16 @@ exports.handleImportData = async (req, res) => {
             'rf_4g': ['CSHT_code', 'ENodeBID', 'PCI'],
             'rf_5g': ['CSHT_code', 'gNodeB ID', 'nrarfcn'],
             'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
-            'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'], // Yêu cầu nghiêm ngặt phải có District code, không nhận Province code
+            'kpi_4g': ['Province code', 'UL Traffic VoLTE (GB)'], // File mới dùng Province code
             'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT']
         };
 
         const headersInFile = Object.keys(data[0]);
+        // Xử lý fallback cho KPI 4G (chấp nhận District code HOẶC Province code)
+        if (networkType === 'kpi_4g' && headersInFile.includes('District code') && !headersInFile.includes('Province code')) {
+            requiredHeaders['kpi_4g'][0] = 'District code';
+        }
+
         const expectedHeaders = requiredHeaders[networkType];
         const isValidFile = expectedHeaders.every(header => headersInFile.includes(header));
         
@@ -58,17 +82,13 @@ exports.handleImportData = async (req, res) => {
         }
         // ===============================================================================
 
-        // ===================== XÓA DỮ LIỆU CŨ THEO NGÀY CÓ TRONG FILE (CHỈ ÁP DỤNG KPI) =====================
+        // ===================== XÓA DỮ LIỆU CŨ THEO NGÀY CÓ TRONG FILE =====================
         if (networkType.startsWith('kpi_')) {
-            // Lấy danh sách các ngày duy nhất có trong file upload
             const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
             
             if (uniqueDates.length > 0) {
-                // Tạo chuỗi placeholders (?, ?, ?)
                 const placeholders = uniqueDates.map(() => '?').join(',');
                 const deleteSql = `DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`;
-                
-                // Thực thi xóa các bản ghi cũ của ngày này
                 await db.query(deleteSql, uniqueDates);
                 console.log(`Đã xóa sạch dữ liệu KPI cũ của các ngày: ${uniqueDates.join(', ')} trong bảng ${networkType}`);
             }
@@ -104,7 +124,7 @@ exports.handleImportData = async (req, res) => {
         } else if (networkType === 'kpi_4g') {
             sql = `INSERT INTO kpi_4g (District_code, Site_name, CellType, Cell_name, MIMO, Thoi_gian, UL_Traffic_VoLTE_GB, Avg_UL_throughput_QCI_1, VoLTE_Traffic_Erl, Total_Traffic_VoLTE_GB, VoLTE_ERAB_Call_Setup_SR, Intra_freq_HO_SR_VoLTE, Inter_freq_HO_SR_VoLTE, DL_Traffic_VoLTE_GB, Avg_DL_throughput_QCI_1, Call_Drop_Rate_VoLTE, SRVCC_SR_LTE_to_WCDMA, SRVCC_SR_LTE_to_GSM, User_UL_Avg_Throughput_Kbps, User_DL_Avg_Throughput_kbps, User_DL_Avg_Throughput_kbps_New, Unavailable, Uplink_Latency, Traffic_Volume_UL_GB, Traffic_Volumn_DL_GB, Total_Data_Traffic_Volume_GB, Total_UE, Service_Drop_all, RRC_Conn_Estab_SR, RRC_Conn_User_Max, RRC_Conn_User_Avg, RB_Util_Rate_UL, RB_Util_Rate_DL, INTRA_HOSR_ATT, Intra_frequency_HO, Intra_eNB_HO_SR_total, Inter_frequency_HO, HO_SR_via_S1, Inter_RAT_Total_HO_SR, Other_Metrics) VALUES ?`;
             values = data.map(row => [
-                row['District code'], // Yêu cầu nghiêm ngặt lấy đúng District code
+                row['Province code'] || row['District code'], // Lấy 1 trong 2 tùy thuộc cấu trúc file
                 row['Site name'], 
                 row['CellType (L900, L1800, L2600..)'], 
                 row['Cell name'], 
