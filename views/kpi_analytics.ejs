@@ -36,8 +36,8 @@
     </main>
 </div>
 
-<!-- Tích hợp thư viện Chart.js qua CDN (Đã sửa lỗi link định dạng) -->
-<script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+<!-- Sử dụng CDNJS thay cho jsdelivr để đảm bảo tính ổn định -->
+<script src="[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)"></script>
 
 <script>
     document.getElementById('kpiSearchForm').addEventListener('submit', async function(e) {
@@ -74,15 +74,20 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // Sắp xếp dữ liệu theo ngày tháng (Cột Thoi_gian có dạng DD/MM/YYYY)
+            // BẢO VỆ CHỐNG SẬP: Ép kiểu dữ liệu về String trước khi chia cắt ngày tháng
             data.sort((a, b) => {
-                const timeA = a.Thoi_gian ? a.Thoi_gian.split('/') : ['01', '01', '1970'];
-                const timeB = b.Thoi_gian ? b.Thoi_gian.split('/') : ['01', '01', '1970'];
+                const strA = String(a.Thoi_gian || '');
+                const strB = String(b.Thoi_gian || '');
+                
+                if (!strA.includes('/') || !strB.includes('/')) return 0;
+
+                const timeA = strA.split('/');
+                const timeB = strB.split('/');
                 return new Date(timeA[2], timeA[1] - 1, timeA[0]) - new Date(timeB[2], timeB[1] - 1, timeB[0]);
             });
 
             // Mảng thời gian dùng làm trục X chung cho mọi biểu đồ
-            const labels = data.map(row => row.Thoi_gian || 'N/A');
+            const labels = data.map(row => String(row.Thoi_gian || 'N/A'));
 
             // Cấu hình các chỉ số cần vẽ tùy theo loại mạng
             let chartConfigs = [];
@@ -99,7 +104,7 @@
                     { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (GB)', color: '#3498db' },
                     { key: 'User_DL_Avg_Throughput_kbps', title: 'USER DL AVG THPUT (kbps)', color: '#9b59b6' },
                     { key: 'RB_Util_Rate_DL', title: 'RES BLK DL (%)', color: '#e67e22' },
-                    { key: 'CQI_4G', title: 'CQI 4G', color: '#34495e' } // Cập nhật CQI 4G
+                    { key: 'CQI_4G', title: 'CQI 4G', color: '#34495e' }
                 ];
             } else if (network === '5g') {
                 chartConfigs = [
@@ -110,7 +115,7 @@
             }
 
             // Vòng lặp vẽ đồ thị
-            chartConfigs.forEach((cfg, index) => {
+            chartConfigs.forEach((cfg) => {
                 // Trích xuất mảng dữ liệu trục Y (Ép kiểu về số, nếu lỗi hoặc null thì = 0)
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
@@ -125,8 +130,8 @@
                 chartTitle.style.marginBottom = '10px';
                 chartTitle.style.color = '#333';
                 
+                // Trực tiếp truyền DOM Element vào Chart.js thay vì dùng ID để tránh lỗi trùng Canvas
                 const canvas = document.createElement('canvas');
-                canvas.id = 'chart_' + index;
 
                 chartWrapper.appendChild(chartTitle);
                 chartWrapper.appendChild(canvas);
@@ -166,7 +171,8 @@
         } catch (error) {
             console.error(error);
             statusMsg.style.color = 'red';
-            statusMsg.textContent = 'Đã xảy ra lỗi hệ thống khi vẽ biểu đồ. (Chi tiết trong Console)';
+            // In chi tiết tên lỗi ra màn hình để dễ bắt mạch
+            statusMsg.textContent = 'Lỗi hệ thống khi vẽ biểu đồ: ' + error.message;
         }
     });
 </script>
