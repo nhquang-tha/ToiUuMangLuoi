@@ -25,6 +25,7 @@ pages.forEach(page => {
 // --- ROUTES CHO KPI ANALYTICS (BIỂU ĐỒ) ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
+router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData); // Route Reset KPI
 
 // --- ROUTES CHO IMPORT DATA ---
 router.get('/import-data', isAuthenticated, dashboardController.getImportPage);
