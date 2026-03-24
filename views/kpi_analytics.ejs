@@ -7,6 +7,26 @@
         </header>
         <div class="content-body">
             
+            <!-- KHU VỰC DÀNH RIÊNG CHO ADMIN: RESET DATABASE KPI -->
+            <% if(typeof userRole !== 'undefined' && userRole === 'admin') { %>
+                <div class="card" style="margin-bottom: 20px; border-left: 4px solid #e74c3c;">
+                    <h4 style="color: #c0392b; margin-top: 0; margin-bottom: 5px;">Khu Vực Admin: Làm Sạch Dữ Liệu KPI</h4>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Tính năng này sẽ xóa <strong>toàn bộ</strong> dữ liệu của bảng KPI tương ứng để bạn có thể import lại từ file trắng. Không thể hoàn tác!</p>
+                    <div style="display: flex; gap: 10px;">
+                        <form action="/kpi-data/reset/3g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Bạn có CHẮC CHẮN muốn xóa SẠCH toàn bộ dữ liệu KPI mạng 3G?');">
+                            <button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 3G</button>
+                        </form>
+                        <form action="/kpi-data/reset/4g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Bạn có CHẮC CHẮN muốn xóa SẠCH toàn bộ dữ liệu KPI mạng 4G?');">
+                            <button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 4G</button>
+                        </form>
+                        <form action="/kpi-data/reset/5g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Bạn có CHẮC CHẮN muốn xóa SẠCH toàn bộ dữ liệu KPI mạng 5G?');">
+                            <button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 5G</button>
+                        </form>
+                    </div>
+                </div>
+            <% } %>
+
+            <!-- Khung tìm kiếm Cell -->
             <div class="card" style="margin-bottom: 20px;">
                 <form id="kpiSearchForm" style="display: flex; gap: 15px; align-items: flex-end;">
                     <div class="form-group" style="margin-bottom: 0;">
@@ -40,6 +60,12 @@
     script.src = 'https://' + 'cdn.jsdelivr.net/npm/chart.js';
     document.head.appendChild(script);
 </script>
+
+<style>
+    /* Bổ sung CSS cho nút Reset Database */
+    .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 13px;}
+    .btn-danger:hover { background: #e74c3c; }
+</style>
 
 <script>
     function parseDateStr(dateStr) {
