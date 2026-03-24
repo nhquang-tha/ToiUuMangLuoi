@@ -18,16 +18,16 @@ exports.handleImportData = async (req, res) => {
             return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!' });
         }
 
-        const networkType = req.body.networkType; // rf_3g, rf_4g, kpi_4g...
-        
+        const networkType = req.body.networkType;
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         
         let data = [];
+        // THÊM raw: false ĐỂ ÉP THƯ VIỆN LẤY ĐÚNG ĐỊNH DẠNG NGÀY THÁNG BẰNG CHỮ
         if (networkType === 'kpi_4g') {
-            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { range: 1 });
+            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { range: 1, raw: false });
         } else {
-            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false });
         }
 
         if (data.length === 0) {
@@ -46,7 +46,6 @@ exports.handleImportData = async (req, res) => {
 
         const headersInFile = Object.keys(data[0]);
         const expectedHeaders = requiredHeaders[networkType];
-
         const isValidFile = expectedHeaders.every(header => headersInFile.includes(header));
         
         if (!isValidFile) {
