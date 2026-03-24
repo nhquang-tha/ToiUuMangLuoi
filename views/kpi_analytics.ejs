@@ -1,0 +1,174 @@
+<%- include('partials/head') %>
+<div class="layout">
+    <%- include('partials/sidebar') %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1><%= page %></h1>
+        </header>
+        <div class="content-body">
+            
+            <!-- Khung tìm kiếm Cell -->
+            <div class="card" style="margin-bottom: 20px;">
+                <form id="kpiSearchForm" style="display: flex; gap: 15px; align-items: flex-end;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Công Nghệ</label>
+                        <select id="networkSelect" class="form-control" required style="width: 150px; padding: 10px;">
+                            <option value="3g">Mạng 3G</option>
+                            <option value="4g">Mạng 4G</option>
+                            <option value="5g">Mạng 5G</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; max-width: 400px;">
+                        <label>Tên Cell (Cell Name)</label>
+                        <input type="text" id="cellInput" class="form-control" placeholder="Ví dụ: 3G_TXN026M23_THA hoặc 4G-HHA021M41-THA" required style="padding: 10px; width: 100%;">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: auto; padding: 10px 20px;">Xem Biểu Đồ</button>
+                </form>
+                <div id="statusMessage" style="margin-top: 15px; font-weight: bold;"></div>
+            </div>
+
+            <!-- Nơi chứa các đồ thị được sinh ra tự động -->
+            <div id="chartsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px;">
+                <!-- HTML của các biểu đồ sẽ được inject bằng Javascript ở đây -->
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- Tích hợp thư viện Chart.js qua CDN -->
+<script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+
+<script>
+    document.getElementById('kpiSearchForm').addEventListener('submit', async function(e) {
+        e.preventDefault(); // Ngăn không cho trang tải lại
+        
+        const network = document.getElementById('networkSelect').value;
+        const cellName = document.getElementById('cellInput').value.trim();
+        const statusMsg = document.getElementById('statusMessage');
+        const chartsContainer = document.getElementById('chartsContainer');
+
+        if (!cellName) return;
+
+        statusMsg.style.color = 'blue';
+        statusMsg.textContent = 'Đang tải dữ liệu...';
+        chartsContainer.innerHTML = ''; // Xóa các biểu đồ cũ
+
+        try {
+            // Gọi API lấy dữ liệu
+            const response = await fetch(`/api/kpi-data?network=${network}&cellName=${encodeURIComponent(cellName)}`);
+            const data = await response.json();
+
+            if (data.error) {
+                statusMsg.style.color = 'red';
+                statusMsg.textContent = data.error;
+                return;
+            }
+
+            if (data.length === 0) {
+                statusMsg.style.color = 'red';
+                statusMsg.textContent = `Không tìm thấy dữ liệu KPI nào cho Cell: "${cellName}" trong mạng ${network.toUpperCase()}.`;
+                return;
+            }
+
+            statusMsg.style.color = 'green';
+            statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
+
+            // Sắp xếp dữ liệu theo ngày tháng (Cột Thoi_gian có dạng DD/MM/YYYY)
+            data.sort((a, b) => {
+                const [dayA, monthA, yearA] = a.Thoi_gian.split('/');
+                const [dayB, monthB, yearB] = b.Thoi_gian.split('/');
+                return new Date(yearA, monthA - 1, dayA) - new Date(yearB, monthB - 1, dayB);
+            });
+
+            // Mảng thời gian dùng làm trục X chung cho mọi biểu đồ
+            const labels = data.map(row => row.Thoi_gian);
+
+            // Cấu hình các chỉ số cần vẽ tùy theo loại mạng
+            let chartConfigs = [];
+            
+            if (network === '3g') {
+                chartConfigs = [
+                    { key: 'PSTRAFFIC', title: 'PS TRAFFIC', color: '#3498db' },
+                    { key: 'PSCONGES', title: 'PS CONGES', color: '#e74c3c' },
+                    { key: 'TRAFFIC', title: 'TRAFFIC', color: '#2ecc71' },
+                    { key: 'CSCONGES', title: 'CS CONGES', color: '#f1c40f' }
+                ];
+            } else if (network === '4g') {
+                chartConfigs = [
+                    { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (GB)', color: '#3498db' },
+                    { key: 'User_DL_Avg_Throughput_kbps', title: 'USER DL AVG THPUT (kbps)', color: '#9b59b6' },
+                    { key: 'RB_Util_Rate_DL', title: 'RES BLK DL (%)', color: '#e67e22' },
+                    { key: 'CCQI_4G', title: 'CCQI 4G', color: '#34495e' } // Sẽ mặc định là 0 nếu DB không có cột này
+                ];
+            } else if (network === '5g') {
+                chartConfigs = [
+                    { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (GB)', color: '#3498db' },
+                    { key: 'Cell_DL_Avg_Throughput', title: 'CELL DL AVG THROUGHPUT', color: '#1abc9c' },
+                    { key: 'CQI_5G', title: 'CQI 5G', color: '#e74c3c' }
+                ];
+            }
+
+            // Vòng lặp vẽ đồ thị
+            chartConfigs.forEach((cfg, index) => {
+                // Trích xuất mảng dữ liệu trục Y (Ép kiểu về số, nếu lỗi hoặc null thì = 0)
+                const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
+
+                // Tạo thẻ DIV chứa biểu đồ (Card)
+                const chartWrapper = document.createElement('div');
+                chartWrapper.className = 'card';
+                chartWrapper.style.padding = '15px';
+                
+                const chartTitle = document.createElement('h3');
+                chartTitle.textContent = cfg.title;
+                chartTitle.style.textAlign = 'center';
+                chartTitle.style.marginBottom = '10px';
+                chartTitle.style.color = '#333';
+                
+                const canvas = document.createElement('canvas');
+                canvas.id = 'chart_' + index;
+
+                chartWrapper.appendChild(chartTitle);
+                chartWrapper.appendChild(canvas);
+                chartsContainer.appendChild(chartWrapper);
+
+                // Khởi tạo Chart.js
+                new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: cfg.title,
+                            data: dataPoints,
+                            borderColor: cfg.color,
+                            backgroundColor: cfg.color + '33', // Thêm độ trong suốt (Hex 33) cho nền
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3, // Làm cong đường đồ thị cho mềm mại
+                            pointBackgroundColor: cfg.color,
+                            pointRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false } // Ẩn chú thích vì đã có Tiêu đề H3
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            });
+
+        } catch (error) {
+            console.error(error);
+            statusMsg.style.color = 'red';
+            statusMsg.textContent = 'Đã xảy ra lỗi hệ thống khi vẽ biểu đồ.';
+        }
+    });
+</script>
+</body>
+</html>
