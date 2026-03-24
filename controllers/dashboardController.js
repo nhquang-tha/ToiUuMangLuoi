@@ -9,16 +9,13 @@ exports.renderPage = (pageName) => {
 };
 
 exports.getImportPage = (req, res) => {
-    // Lấy thông tin userRole từ session để truyền ra view
-    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
-    res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole });
+    res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null });
 };
 
 exports.handleImportData = async (req, res) => {
-    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
     try {
         if (!req.file) {
-            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!', userRole: userRole });
+            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!' });
         }
 
         const networkType = req.body.networkType;
@@ -33,7 +30,7 @@ exports.handleImportData = async (req, res) => {
         }
 
         if (data.length === 0) {
-            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!', userRole: userRole });
+            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!' });
         }
 
         // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN =====================
@@ -77,7 +74,7 @@ exports.handleImportData = async (req, res) => {
         
         if (!isValidFile) {
             return res.render('import_data', { 
-                title: 'Import Data', page: 'Import Data', message: null, userRole: userRole,
+                title: 'Import Data', page: 'Import Data', message: null,
                 error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này (Yêu cầu phải có: ${expectedHeaders.join(', ')}). Vui lòng chọn đúng file.` 
             });
         }
@@ -173,14 +170,14 @@ exports.handleImportData = async (req, res) => {
         await db.query(sql, [values]);
 
         res.render('import_data', { 
-            title: 'Import Data', page: 'Import Data', userRole: userRole,
+            title: 'Import Data', page: 'Import Data', 
             message: `Import thành công ${values.length} dòng vào cơ sở dữ liệu ${networkType.toUpperCase()}!`, error: null 
         });
 
     } catch (error) {
         console.error("Lỗi khi import file:", error);
         res.render('import_data', { 
-            title: 'Import Data', page: 'Import Data', message: null, userRole: userRole,
+            title: 'Import Data', page: 'Import Data', message: null, 
             error: 'Có lỗi xảy ra trong quá trình xử lý. (File lỗi, thiếu cột, hoặc định dạng không hỗ trợ).' 
         });
     }
