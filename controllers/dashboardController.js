@@ -35,20 +35,18 @@ exports.handleImportData = async (req, res) => {
         }
 
         // ===================== LOGIC KIỂM TRA ĐÚNG CHỦNG LOẠI FILE =====================
-        // Danh sách các cột "đặc trưng" bắt buộc phải có của từng loại file
         const requiredHeaders = {
             'rf_3g': ['CSHT_code', 'PSC', 'DL_UARFCN'],
             'rf_4g': ['CSHT_code', 'ENodeBID', 'PCI'],
             'rf_5g': ['CSHT_code', 'gNodeB ID', 'nrarfcn'],
             'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
             'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'],
-            'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'A User Uplink Average Throughput']
+            'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT'] // Đã cập nhật tiêu đề cột mới cho KPI 5G
         };
 
-        const headersInFile = Object.keys(data[0]); // Lấy danh sách tên cột của file được Upload
+        const headersInFile = Object.keys(data[0]);
         const expectedHeaders = requiredHeaders[networkType];
 
-        // Kiểm tra xem MỌI cột đặc trưng có tồn tại trong file upload hay không
         const isValidFile = expectedHeaders.every(header => headersInFile.includes(header));
         
         if (!isValidFile) {
@@ -93,9 +91,10 @@ exports.handleImportData = async (req, res) => {
                 row['District code'], row['Site name'], row['CellType (L900, L1800, L2600..)'], row['Cell name'], row['MIMO'], row['Thời gian'], row['UL Traffic VoLTE (GB)'], row['Average UL throughput of services with a QCI of 1 (kbit/s)'], row['VoLTE Traffic (Erl)'], row['Total Traffic VoLTE (GB)'], row['VoLTE E-RAB Call Setup Success Rate'], row['Intra-frequency HO Success Rates (VoLTE)'], row['Inter-frequency HO Success Rates (VoLTE)'], row['DL Traffic VoLTE (GB)'], row['Average DL throughput of services with a QCI of 1 (kbit/s)'], row['Call Drop Rate (VoLTE)'], row['SRVCC Success Rate (LTE to WCDMA)'], row['SRVCC Success Rate (LTE to GSM)'], row['User Uplink Average Throughput (Kbps)'], row['User Downlink Average Throughput (kbps)'], row['User Downlink Average Throughput (kbps) New'], row['Unavailable'], row['Uplink Latency'], row['Traffic Volume UL (GB)'], row['Traffic Volumn DL (GB)'], row['Total Data Traffic Volume (GB)'], row['Total UE'], row['Service Drop (all service)'], row['RRC Connection Establishment Success Rate (All Service)'], row['RRC Connected User_Max (Cell)'], row['RRC Connected User_Avg (Cell)'], row['Resource Block Untilizing Rate Uplink (%)'], row['Resource Block Untilizing Rate Downlink (%)'], row['INTRA_HOSR_ATT (Attemp intra hosr (exe phrase))'], row['Intra-frequency HO (%)'], row['Intra eNB HO SR total'], row['Inter-frequency HO (%)'], row['Handover Success Rate via S1 (%)'], row['Inter RAT Total HO SR (from HO preparation start until successful HO execution)'], null
             ]);
         } else if (networkType === 'kpi_5g') {
+            // Đã cập nhật đúng với định dạng cột của file kpi5gprovince-34384-20260324130742.csv
             sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
             values = data.map(row => [
-                row['Nhà cung cấp'], row['Tỉnh'], row['Tên GNODEB'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['GNODEB_ID'], row['CELL_ID'], row['Thời gian'], row['A User Uplink Average Throughput'], row['CQI_5G'], row['Intra-SgNB PScell Change'], row['Average User Number'], row['Downlink Resource Block Ultilization'], row['Uplink Resource Block Ultilization'], row['Cell avaibility rate'], row['Maximum User Number'], row['UL Traffic Volume (GB)'], row['DL Traffic Volume (GB)'], row['Cell Uplink Average Throughput'], row['Cell Downlink Average Throughput'], row['SgNB Abnormal Release Rate'], row['SgNB Addition Success Rate'], row['A User Downlink Average Throughput'], row['Total Data Traffic Volume (GB)'], row['Inter-SgNB PScell Change']
+                row['Nhà cung cấp'], row['Tỉnh'], row['Tên GNODEB'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['GNODEB_ID'], row['CELL_ID'], row['Thời gian'], row['USER_UL_AVG_THROUGHPUT'], row['CQI_5G'], row['INTRA_SGNB_PS_CHANGE'], row['USER_AVG_NUMBER'], row['DLINK_RES_BLK_ULT'], row['ULINK_RES_BLK_ULT'], row['CELL_AVAIBILITY_RATE'], row['USER_MAX_NUMBER'], row['UL_TRAFFIC_VOLUME'], row['DL_TRAFFIC_VOLUME'], row['CELL_UL_AVG_THROUGHPUT'], row['CELL_DL_AVG_THROUGHPUT'], row['SGNB_ABN_RELEASE_RATE'], row['SGNB_ADD_SUCCESS_RATE'], row['USER_DL_AVG_THROUGHPUT'], row['TRAFFIC'], row['INTER_SGNB_PS_CHANGE']
             ]);
         }
 
