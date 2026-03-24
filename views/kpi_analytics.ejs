@@ -34,24 +34,20 @@
     </main>
 </div>
 
-<!-- SỬA LỖI: Link thư viện gốc của jsdelivr chuẩn nhất -->
+<!-- ĐÂY LÀ DÒNG CHUẨN XÁC ĐỂ LOAD THƯ VIỆN CHART.JS -->
 <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
 
 <script>
-    // Hàm chuẩn hóa thời gian (Hỗ trợ định dạng DD/MM/YYYY, chuỗi rỗng, hoặc Excel Date Serial)
     function parseDateStr(dateStr) {
         if (!dateStr) return new Date(0);
         
         const str = String(dateStr).trim();
-        // Xử lý chuỗi có chứa dấu "/"
         if (str.includes('/')) {
-            const parts = str.split(' ')[0].split('/'); // Cắt bỏ giờ phút nếu có
+            const parts = str.split(' ')[0].split('/'); 
             if (parts.length === 3) {
-                // Giả định định dạng VN: DD/MM/YYYY
                 return new Date(parts[2], parts[1] - 1, parts[0]);
             }
         }
-        // Fallback
         return new Date(str);
     }
 
@@ -88,10 +84,8 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // Áp dụng hàm parseDateStr để sắp xếp an toàn
             data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
-            // Trích xuất nhãn trục X (Hiển thị thời gian trực tiếp từ DB)
             const labels = data.map(row => String(row.Thoi_gian || 'N/A'));
 
             let chartConfigs = [];
