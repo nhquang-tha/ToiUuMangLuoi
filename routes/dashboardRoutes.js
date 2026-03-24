@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { isAuthenticated } = require('../middlewares/authMiddleware');
+// THÊM isAdmin vào đây
+const { isAuthenticated, isAdmin } = require('../middlewares/authMiddleware');
 const dashboardController = require('../controllers/dashboardController');
-const rfController = require('../controllers/rfController'); // Import Controller mới
+const rfController = require('../controllers/rfController'); 
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Danh sách các menu tĩnh
 const pages = [
     { path: '/', name: 'Dashboard' },
     { path: '/kpi-analytics', name: 'KPI Analytics' },
@@ -31,5 +31,8 @@ router.get('/rf-database', isAuthenticated, rfController.getList);
 router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
 router.post('/rf-database/:action/:network/:id?', isAuthenticated, rfController.saveData);
 router.post('/rf-database/delete/:network/:id', isAuthenticated, rfController.deleteData);
+
+// Route thực hiện Reset DB (Chỉ Admin mới có quyền)
+router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
 
 module.exports = router;
