@@ -15,22 +15,28 @@
             <% } %>
 
             <div class="card" style="max-width: 600px;">
-                <h3>Upload Dữ Liệu Tần Số (RF)</h3>
+                <h3>Upload Dữ Liệu Tần Số & Hiệu Năng</h3>
                 <p style="margin-bottom: 20px; color: #666;">Chấp nhận file định dạng .xlsx, .xls, .csv</p>
                 
                 <form action="/import-data" method="POST" enctype="multipart/form-data">
                     <div class="form-group">
                         <label>Chọn Database lưu trữ:</label>
                         <select name="networkType" required>
-                            <option value="3g">Mạng 3G (RF_3G)</option>
-                            <option value="4g">Mạng 4G (RF_4G)</option>
-                            <option value="5g">Mạng 5G (RF_5G)</option>
+                            <optgroup label="Cơ sở dữ liệu trạm (RF)">
+                                <option value="rf_3g">Trạm Mạng 3G (RF_3G)</option>
+                                <option value="rf_4g">Trạm Mạng 4G (RF_4G)</option>
+                                <option value="rf_5g">Trạm Mạng 5G (RF_5G)</option>
+                            </optgroup>
+                            <optgroup label="Cơ sở dữ liệu hiệu năng (KPI)">
+                                <option value="kpi_3g">KPI Mạng 3G</option>
+                                <option value="kpi_4g">KPI Mạng 4G</option>
+                                <option value="kpi_5g">KPI Mạng 5G</option>
+                            </optgroup>
                         </select>
                     </div>
 
                     <div class="form-group">
                         <label>Chọn File:</label>
-                        <!-- Form thiết kế tối giản -->
                         <div style="border: 2px dashed #ddd; padding: 20px; text-align: center; border-radius: 4px; background: #fafafa;">
                             <input type="file" name="dataFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" required>
                         </div>
@@ -44,7 +50,6 @@
 </div>
 
 <style>
-    /* Bổ sung CSS nhỏ cho thông báo */
     .alert { padding: 15px; margin-bottom: 20px; border-radius: 4px; }
     .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
