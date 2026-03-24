@@ -9,76 +9,57 @@ const rfSchema = {
 
 // 1. Hiển thị danh sách dữ liệu
 exports.getList = async (req, res) => {
-    const network = req.query.network || '3g'; // Mặc định là 3G
+    const network = req.query.network || '3g'; 
     const tableName = `rf_${network}`;
     
     try {
-        // Lấy 100 bản ghi mới nhất để tránh lag trình duyệt
         const [rows] = await db.query(`SELECT * FROM ${tableName} ORDER BY id DESC LIMIT 100`);
-        
         res.render('rf_database', {
-            title: 'RF Database',
-            page: 'RF Database',
-            network: network,
-            data: rows
+            title: 'RF Database', page: 'RF Database', network: network, data: rows
         });
     } catch (error) {
-        console.error(error);
-        res.status(500).send("Lỗi tải dữ liệu");
+        console.error(error); res.status(500).send("Lỗi tải dữ liệu");
     }
 };
 
-// 2. Hiển thị Form (Chi tiết / Thêm mới / Cập nhật)
+// 2. Hiển thị Form
 exports.getForm = async (req, res) => {
     const { network, action, id } = req.params;
     const tableName = `rf_${network}`;
     const columns = rfSchema[network];
-    
-    let recordData = {}; // Data rỗng nếu là Add
+    let recordData = {}; 
     
     try {
         if (action === 'edit' || action === 'detail') {
             const [rows] = await db.query(`SELECT * FROM ${tableName} WHERE id = ?`, [id]);
             if (rows.length > 0) recordData = rows[0];
         }
-        
         let titleMap = { 'add': 'Thêm Mới RF', 'edit': 'Sửa RF', 'detail': 'Chi Tiết RF' };
-
         res.render('rf_form', {
-            title: titleMap[action] + ` (${network.toUpperCase()})`,
-            page: 'RF Database',
-            network: network,
-            action: action, // 'add', 'edit', 'detail'
-            id: id,
-            columns: columns,
-            data: recordData
+            title: titleMap[action] + ` (${network.toUpperCase()})`, page: 'RF Database',
+            network: network, action: action, id: id, columns: columns, data: recordData
         });
     } catch (error) {
-        console.error(error);
-        res.status(500).send("Lỗi tải form");
+        console.error(error); res.status(500).send("Lỗi tải form");
     }
 };
 
-// 3. Xử lý lưu dữ liệu (Thêm hoặc Sửa)
+// 3. Xử lý lưu dữ liệu
 exports.saveData = async (req, res) => {
     const { network, action, id } = req.params;
     const tableName = `rf_${network}`;
-    const data = req.body; // Dữ liệu từ form
+    const data = req.body; 
     
     try {
-        if (action === 'add') {
-            await db.query(`INSERT INTO ${tableName} SET ?`, data);
-        } else if (action === 'edit') {
-            await db.query(`UPDATE ${tableName} SET ? WHERE id = ?`, [data, id]);
-        }
+        if (action === 'add') { await db.query(`INSERT INTO ${tableName} SET ?`, data); } 
+        else if (action === 'edit') { await db.query(`UPDATE ${tableName} SET ? WHERE id = ?`, [data, id]); }
         res.redirect(`/rf-database?network=${network}`);
     } catch (error) {
-        console.error(error);
-        res.status(500).send("Lỗi lưu dữ liệu");
+        console.error(error); res.status(500).send("Lỗi lưu dữ liệu");
     }
 };
 
-// 4. Xử lý Xóa dữ liệu
+// 4. Xử lý Xóa dữ liệu 1 dòng
 exports.deleteData = async (req, res) => {
     const { network, id } = req.params;
     const tableName = `rf_${network}`;
@@ -86,7 +67,20 @@ exports.deleteData = async (req, res) => {
         await db.query(`DELETE FROM ${tableName} WHERE id = ?`, [id]);
         res.redirect(`/rf-database?network=${network}`);
     } catch (error) {
+        console.error(error); res.status(500).send("Lỗi xóa dữ liệu");
+    }
+};
+
+// 5. Chức năng Reset toàn bộ Database (Dành riêng cho Admin)
+exports.resetData = async (req, res) => {
+    const { network } = req.params;
+    const tableName = `rf_${network}`;
+    try {
+        // Lệnh TRUNCATE xóa sạch dữ liệu và đưa ID về lại 1, nhanh hơn DELETE
+        await db.query(`TRUNCATE TABLE ${tableName}`);
+        res.redirect(`/rf-database?network=${network}`);
+    } catch (error) {
         console.error(error);
-        res.status(500).send("Lỗi xóa dữ liệu");
+        res.status(500).send("Lỗi reset dữ liệu. Vui lòng thử lại sau.");
     }
 };
