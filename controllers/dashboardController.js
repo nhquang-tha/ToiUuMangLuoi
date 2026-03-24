@@ -9,13 +9,16 @@ exports.renderPage = (pageName) => {
 };
 
 exports.getImportPage = (req, res) => {
-    res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null });
+    // Lấy thông tin userRole từ session để truyền ra view
+    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
+    res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole });
 };
 
 exports.handleImportData = async (req, res) => {
+    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
     try {
         if (!req.file) {
-            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!' });
+            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!', userRole: userRole });
         }
 
         const networkType = req.body.networkType;
@@ -30,7 +33,7 @@ exports.handleImportData = async (req, res) => {
         }
 
         if (data.length === 0) {
-            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!' });
+            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!', userRole: userRole });
         }
 
         // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN =====================
@@ -48,7 +51,6 @@ exports.handleImportData = async (req, res) => {
                 }
             }
         });
-        // =======================================================================
 
         // ===================== LOGIC KIỂM TRA ĐÚNG CHỦNG LOẠI FILE =====================
         const requiredHeaders = {
@@ -56,13 +58,12 @@ exports.handleImportData = async (req, res) => {
             'rf_4g': ['CSHT_code', 'ENodeBID', 'PCI'],
             'rf_5g': ['CSHT_code', 'gNodeB ID', 'nrarfcn'],
             'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
-            'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'], // Mặc định
+            'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'],
             'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT']
         };
 
         const headersInFile = Object.keys(data[0]);
         
-        // Tự động nhận dạng thông minh: Nếu file KPI 4G chứa "Province code" thay vì "District code"
         if (networkType === 'kpi_4g') {
             if (headersInFile.includes('Province code')) {
                 requiredHeaders['kpi_4g'][0] = 'Province code';
@@ -76,13 +77,10 @@ exports.handleImportData = async (req, res) => {
         
         if (!isValidFile) {
             return res.render('import_data', { 
-                title: 'Import Data', 
-                page: 'Import Data', 
-                message: null, 
+                title: 'Import Data', page: 'Import Data', message: null, userRole: userRole,
                 error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này (Yêu cầu phải có: ${expectedHeaders.join(', ')}). Vui lòng chọn đúng file.` 
             });
         }
-        // ===============================================================================
 
         // ===================== XÓA DỮ LIỆU CŨ THEO NGÀY CÓ TRONG FILE =====================
         if (networkType.startsWith('kpi_')) {
@@ -92,10 +90,8 @@ exports.handleImportData = async (req, res) => {
                 const placeholders = uniqueDates.map(() => '?').join(',');
                 const deleteSql = `DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`;
                 await db.query(deleteSql, uniqueDates);
-                console.log(`Đã xóa sạch dữ liệu KPI cũ của các ngày: ${uniqueDates.join(', ')} trong bảng ${networkType}`);
             }
         }
-        // ====================================================================================================
 
         let sql = '';
         let values = [];
@@ -126,7 +122,7 @@ exports.handleImportData = async (req, res) => {
         } else if (networkType === 'kpi_4g') {
             sql = `INSERT INTO kpi_4g (District_code, Site_name, CellType, Cell_name, MIMO, Thoi_gian, UL_Traffic_VoLTE_GB, Avg_UL_throughput_QCI_1, VoLTE_Traffic_Erl, Total_Traffic_VoLTE_GB, VoLTE_ERAB_Call_Setup_SR, Intra_freq_HO_SR_VoLTE, Inter_freq_HO_SR_VoLTE, DL_Traffic_VoLTE_GB, Avg_DL_throughput_QCI_1, Call_Drop_Rate_VoLTE, SRVCC_SR_LTE_to_WCDMA, SRVCC_SR_LTE_to_GSM, User_UL_Avg_Throughput_Kbps, User_DL_Avg_Throughput_kbps, User_DL_Avg_Throughput_kbps_New, Unavailable, Uplink_Latency, Traffic_Volume_UL_GB, Traffic_Volumn_DL_GB, Total_Data_Traffic_Volume_GB, Total_UE, Service_Drop_all, RRC_Conn_Estab_SR, RRC_Conn_User_Max, RRC_Conn_User_Avg, RB_Util_Rate_UL, RB_Util_Rate_DL, INTRA_HOSR_ATT, Intra_frequency_HO, Intra_eNB_HO_SR_total, Inter_frequency_HO, HO_SR_via_S1, Inter_RAT_Total_HO_SR, Other_Metrics) VALUES ?`;
             values = data.map(row => [
-                row['Province code'] || row['District code'], // Lấy 1 trong 2 tùy cấu trúc cột của file
+                row['Province code'] || row['District code'], 
                 row['Site name'], 
                 row['CellType (L900, L1800, L2600..)'], 
                 row['Cell name'], 
@@ -177,14 +173,14 @@ exports.handleImportData = async (req, res) => {
         await db.query(sql, [values]);
 
         res.render('import_data', { 
-            title: 'Import Data', page: 'Import Data', 
+            title: 'Import Data', page: 'Import Data', userRole: userRole,
             message: `Import thành công ${values.length} dòng vào cơ sở dữ liệu ${networkType.toUpperCase()}!`, error: null 
         });
 
     } catch (error) {
         console.error("Lỗi khi import file:", error);
         res.render('import_data', { 
-            title: 'Import Data', page: 'Import Data', message: null, 
+            title: 'Import Data', page: 'Import Data', message: null, userRole: userRole,
             error: 'Có lỗi xảy ra trong quá trình xử lý. (File lỗi, thiếu cột, hoặc định dạng không hỗ trợ).' 
         });
     }
