@@ -36,7 +36,7 @@
     </main>
 </div>
 
-<!-- Tích hợp thư viện Chart.js qua CDN -->
+<!-- Tích hợp thư viện Chart.js qua CDN (Đã sửa lỗi link định dạng) -->
 <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
 
 <script>
@@ -76,13 +76,13 @@
 
             // Sắp xếp dữ liệu theo ngày tháng (Cột Thoi_gian có dạng DD/MM/YYYY)
             data.sort((a, b) => {
-                const [dayA, monthA, yearA] = a.Thoi_gian.split('/');
-                const [dayB, monthB, yearB] = b.Thoi_gian.split('/');
-                return new Date(yearA, monthA - 1, dayA) - new Date(yearB, monthB - 1, dayB);
+                const timeA = a.Thoi_gian ? a.Thoi_gian.split('/') : ['01', '01', '1970'];
+                const timeB = b.Thoi_gian ? b.Thoi_gian.split('/') : ['01', '01', '1970'];
+                return new Date(timeA[2], timeA[1] - 1, timeA[0]) - new Date(timeB[2], timeB[1] - 1, timeB[0]);
             });
 
             // Mảng thời gian dùng làm trục X chung cho mọi biểu đồ
-            const labels = data.map(row => row.Thoi_gian);
+            const labels = data.map(row => row.Thoi_gian || 'N/A');
 
             // Cấu hình các chỉ số cần vẽ tùy theo loại mạng
             let chartConfigs = [];
@@ -166,7 +166,7 @@
         } catch (error) {
             console.error(error);
             statusMsg.style.color = 'red';
-            statusMsg.textContent = 'Đã xảy ra lỗi hệ thống khi vẽ biểu đồ.';
+            statusMsg.textContent = 'Đã xảy ra lỗi hệ thống khi vẽ biểu đồ. (Chi tiết trong Console)';
         }
     });
 </script>
