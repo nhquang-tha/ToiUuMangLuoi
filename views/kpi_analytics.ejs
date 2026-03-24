@@ -34,8 +34,8 @@
     </main>
 </div>
 
-<!-- SỬA LỖI: Dùng URL protocol-relative (bỏ https:) để không bị tự động tạo siêu liên kết lỗi -->
-<script src="//[cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)"></script>
+<!-- SỬA LỖI: Link thư viện gốc của jsdelivr chuẩn nhất -->
+<script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
 
 <script>
     // Hàm chuẩn hóa thời gian (Hỗ trợ định dạng DD/MM/YYYY, chuỗi rỗng, hoặc Excel Date Serial)
@@ -43,11 +43,6 @@
         if (!dateStr) return new Date(0);
         
         const str = String(dateStr).trim();
-        // Xử lý nếu DB trả ra số (Excel Serial Date do import cũ)
-        if (!isNaN(str) && Number(str) > 40000) {
-            return new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
-        }
-
         // Xử lý chuỗi có chứa dấu "/"
         if (str.includes('/')) {
             const parts = str.split(' ')[0].split('/'); // Cắt bỏ giờ phút nếu có
