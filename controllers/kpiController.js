@@ -2,9 +2,7 @@ const db = require('../models/db');
 
 // Hiển thị giao diện trang KPI Analytics
 exports.getKpiAnalyticsPage = (req, res) => {
-    // Trích xuất role của user đang đăng nhập (để ẩn/hiện nút Reset)
-    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
-    res.render('kpi_analytics', { title: 'KPI Analytics', page: 'KPI Analytics', userRole: userRole });
+    res.render('kpi_analytics', { title: 'KPI Analytics', page: 'KPI Analytics' });
 };
 
 // API trả về dữ liệu dạng JSON cho biểu đồ
@@ -46,8 +44,8 @@ exports.resetData = async (req, res) => {
     try {
         // Lệnh TRUNCATE xóa sạch dữ liệu và đưa ID về lại 1
         await db.query(`TRUNCATE TABLE ${tableName}`);
-        // Trả về một script hiện thông báo Alert và điều hướng lại trang KPI
-        res.send(`<script>alert('Đã xóa sạch toàn bộ dữ liệu bảng ${tableName.toUpperCase()} thành công! Bạn có thể tiến hành Import lại từ đầu.'); window.location.href='/kpi-analytics';</script>`);
+        // Trả về một script hiện thông báo Alert và quay lại trang trước đó (Import Data)
+        res.send(`<script>alert('Đã xóa sạch toàn bộ dữ liệu bảng ${tableName.toUpperCase()} thành công! Bạn có thể tiến hành Import lại từ đầu.'); window.location.href='/import-data';</script>`);
     } catch (error) {
         console.error(error);
         res.status(500).send("Lỗi reset dữ liệu KPI. Vui lòng thử lại sau.");
