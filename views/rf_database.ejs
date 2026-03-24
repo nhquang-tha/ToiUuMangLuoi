@@ -14,7 +14,17 @@
                     <a href="/rf-database?network=4g" class="btn-sm <%= network === '4g' ? 'btn-primary' : 'btn-outline-dark' %>">Mạng 4G</a>
                     <a href="/rf-database?network=5g" class="btn-sm <%= network === '5g' ? 'btn-primary' : 'btn-outline-dark' %>">Mạng 5G</a>
                 </div>
-                <a href="/rf-database/add/<%= network %>" class="btn-sm btn-success">+ Thêm Mới Trạm <%= network.toUpperCase() %></a>
+                
+                <!-- Khu vực nút hành động -->
+                <div>
+                    <!-- CHỈ ADMIN mới nhìn thấy nút Reset Database -->
+                    <% if(currentUser.role === 'admin') { %>
+                        <form action="/rf-database/reset/<%= network %>" method="POST" style="display:inline;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Hành động này sẽ xóa SẠCH TOÀN BỘ dữ liệu của bảng <%= network.toUpperCase() %>. Bạn có CHẮC CHẮN muốn tiếp tục?');">
+                            <button type="submit" class="btn-sm btn-danger" style="margin-right: 10px;">⚠ Reset Database <%= network.toUpperCase() %></button>
+                        </form>
+                    <% } %>
+                    <a href="/rf-database/add/<%= network %>" class="btn-sm btn-success">+ Thêm Mới Trạm <%= network.toUpperCase() %></a>
+                </div>
             </div>
 
             <div class="card" style="overflow-x: auto;">
@@ -33,7 +43,7 @@
                     </thead>
                     <tbody>
                         <% if(data.length === 0) { %>
-                            <tr><td colspan="8" style="text-align: center;">Chưa có dữ liệu</td></tr>
+                            <tr><td colspan="8" style="text-align: center; padding: 30px;">Chưa có dữ liệu trong Database <%= network.toUpperCase() %></td></tr>
                         <% } else { %>
                             <% data.forEach(function(row) { %>
                                 <tr>
@@ -47,8 +57,6 @@
                                     <td class="actions-col">
                                         <a href="/rf-database/detail/<%= network %>/<%= row.id %>" class="btn-action btn-view">Chi tiết</a>
                                         <a href="/rf-database/edit/<%= network %>/<%= row.id %>" class="btn-action btn-edit">Sửa</a>
-                                        
-                                        <!-- Nút Xóa (Dùng form để an toàn hơn) -->
                                         <form action="/rf-database/delete/<%= network %>/<%= row.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Bạn có chắc chắn muốn xóa trạm này?');">
                                             <button type="submit" class="btn-action btn-delete">Xóa</button>
                                         </form>
@@ -68,6 +76,8 @@
     .btn-outline-dark { border: 1px solid #bdc3c7; color: #2c3e50; text-decoration: none; }
     .btn-outline-dark:hover { background: #ecf0f1; }
     .btn-success { background: #27ae60; color: white; text-decoration: none; border: none; }
+    .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; }
+    .btn-danger:hover { background: #e74c3c; }
     
     .data-table { width: 100%; border-collapse: collapse; min-width: 900px; }
     .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; font-size: 14px; }
