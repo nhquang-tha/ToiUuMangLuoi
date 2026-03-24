@@ -8,7 +8,7 @@ const kpiController = require('../controllers/kpiController'); // IMPORT THÊM C
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Danh sách các menu tĩnh (ĐÃ BỎ kpi-analytics RA ĐỂ XỬ LÝ RIÊNG)
+// Danh sách các menu tĩnh
 const pages = [
     { path: '/', name: 'Dashboard' },
     { path: '/poi-report', name: 'POI Report' },
