@@ -7,7 +7,6 @@
         </header>
         <div class="content-body">
             
-            <!-- Khung tìm kiếm Cell -->
             <div class="card" style="margin-bottom: 20px;">
                 <form id="kpiSearchForm" style="display: flex; gap: 15px; align-items: flex-end;">
                     <div class="form-group" style="margin-bottom: 0;">
@@ -27,7 +26,6 @@
                 <div id="statusMessage" style="margin-top: 15px; font-weight: bold;"></div>
             </div>
 
-            <!-- Nơi chứa các đồ thị được sinh ra tự động -->
             <div id="chartsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px;">
                 <!-- HTML của các biểu đồ sẽ được inject bằng Javascript ở đây -->
             </div>
@@ -36,12 +34,34 @@
     </main>
 </div>
 
-<!-- Sử dụng CDNJS thay cho jsdelivr để đảm bảo tính ổn định -->
+<!-- SỬA LỖI: Đường link Chart.js sạch sẽ, không có dấu ngoặc Markdown -->
 <script src="[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)"></script>
 
 <script>
+    // Hàm chuẩn hóa thời gian (Hỗ trợ định dạng DD/MM/YYYY, chuỗi rỗng, hoặc Excel Date Serial)
+    function parseDateStr(dateStr) {
+        if (!dateStr) return new Date(0);
+        
+        const str = String(dateStr).trim();
+        // Xử lý nếu DB trả ra số (Excel Serial Date do import cũ)
+        if (!isNaN(str) && Number(str) > 40000) {
+            return new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
+        }
+
+        // Xử lý chuỗi có chứa dấu "/"
+        if (str.includes('/')) {
+            const parts = str.split(' ')[0].split('/'); // Cắt bỏ giờ phút nếu có
+            if (parts.length === 3) {
+                // Giả định định dạng VN: DD/MM/YYYY
+                return new Date(parts[2], parts[1] - 1, parts[0]);
+            }
+        }
+        // Fallback
+        return new Date(str);
+    }
+
     document.getElementById('kpiSearchForm').addEventListener('submit', async function(e) {
-        e.preventDefault(); // Ngăn không cho trang tải lại
+        e.preventDefault(); 
         
         const network = document.getElementById('networkSelect').value;
         const cellName = document.getElementById('cellInput').value.trim();
@@ -52,10 +72,9 @@
 
         statusMsg.style.color = 'blue';
         statusMsg.textContent = 'Đang tải dữ liệu...';
-        chartsContainer.innerHTML = ''; // Xóa các biểu đồ cũ
+        chartsContainer.innerHTML = '';
 
         try {
-            // Gọi API lấy dữ liệu
             const response = await fetch(`/api/kpi-data?network=${network}&cellName=${encodeURIComponent(cellName)}`);
             const data = await response.json();
 
@@ -74,24 +93,13 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // BẢO VỆ CHỐNG SẬP: Ép kiểu dữ liệu về String trước khi chia cắt ngày tháng
-            data.sort((a, b) => {
-                const strA = String(a.Thoi_gian || '');
-                const strB = String(b.Thoi_gian || '');
-                
-                if (!strA.includes('/') || !strB.includes('/')) return 0;
+            // Áp dụng hàm parseDateStr để sắp xếp an toàn
+            data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
-                const timeA = strA.split('/');
-                const timeB = strB.split('/');
-                return new Date(timeA[2], timeA[1] - 1, timeA[0]) - new Date(timeB[2], timeB[1] - 1, timeB[0]);
-            });
-
-            // Mảng thời gian dùng làm trục X chung cho mọi biểu đồ
+            // Trích xuất nhãn trục X (Hiển thị thời gian trực tiếp từ DB)
             const labels = data.map(row => String(row.Thoi_gian || 'N/A'));
 
-            // Cấu hình các chỉ số cần vẽ tùy theo loại mạng
             let chartConfigs = [];
-            
             if (network === '3g') {
                 chartConfigs = [
                     { key: 'PSTRAFFIC', title: 'PS TRAFFIC', color: '#3498db' },
@@ -104,7 +112,7 @@
                     { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (GB)', color: '#3498db' },
                     { key: 'User_DL_Avg_Throughput_kbps', title: 'USER DL AVG THPUT (kbps)', color: '#9b59b6' },
                     { key: 'RB_Util_Rate_DL', title: 'RES BLK DL (%)', color: '#e67e22' },
-                    { key: 'CQI_4G', title: 'CQI 4G', color: '#34495e' }
+                    { key: 'CQI_4G', title: 'CQI 4G', color: '#34495e' } 
                 ];
             } else if (network === '5g') {
                 chartConfigs = [
@@ -114,12 +122,9 @@
                 ];
             }
 
-            // Vòng lặp vẽ đồ thị
             chartConfigs.forEach((cfg) => {
-                // Trích xuất mảng dữ liệu trục Y (Ép kiểu về số, nếu lỗi hoặc null thì = 0)
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
-                // Tạo thẻ DIV chứa biểu đồ (Card)
                 const chartWrapper = document.createElement('div');
                 chartWrapper.className = 'card';
                 chartWrapper.style.padding = '15px';
@@ -130,14 +135,12 @@
                 chartTitle.style.marginBottom = '10px';
                 chartTitle.style.color = '#333';
                 
-                // Trực tiếp truyền DOM Element vào Chart.js thay vì dùng ID để tránh lỗi trùng Canvas
                 const canvas = document.createElement('canvas');
 
                 chartWrapper.appendChild(chartTitle);
                 chartWrapper.appendChild(canvas);
                 chartsContainer.appendChild(chartWrapper);
 
-                // Khởi tạo Chart.js
                 new Chart(canvas, {
                     type: 'line',
                     data: {
@@ -146,24 +149,18 @@
                             label: cfg.title,
                             data: dataPoints,
                             borderColor: cfg.color,
-                            backgroundColor: cfg.color + '33', // Thêm độ trong suốt (Hex 33) cho nền
+                            backgroundColor: cfg.color + '33',
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.3, // Làm cong đường đồ thị cho mềm mại
+                            tension: 0.3,
                             pointBackgroundColor: cfg.color,
                             pointRadius: 4
                         }]
                     },
                     options: {
                         responsive: true,
-                        plugins: {
-                            legend: { display: false } // Ẩn chú thích vì đã có Tiêu đề H3
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
-                        }
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } }
                     }
                 });
             });
@@ -171,7 +168,6 @@
         } catch (error) {
             console.error(error);
             statusMsg.style.color = 'red';
-            // In chi tiết tên lỗi ra màn hình để dễ bắt mạch
             statusMsg.textContent = 'Lỗi hệ thống khi vẽ biểu đồ: ' + error.message;
         }
     });
