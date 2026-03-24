@@ -40,7 +40,7 @@ exports.handleImportData = async (req, res) => {
             'rf_4g': ['CSHT_code', 'ENodeBID', 'PCI'],
             'rf_5g': ['CSHT_code', 'gNodeB ID', 'nrarfcn'],
             'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
-            'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'],
+            'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'], // Yêu cầu nghiêm ngặt phải có District code, không nhận Province code
             'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT']
         };
 
@@ -53,7 +53,7 @@ exports.handleImportData = async (req, res) => {
                 title: 'Import Data', 
                 page: 'Import Data', 
                 message: null, 
-                error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này. Vui lòng chọn đúng file.` 
+                error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này (Yêu cầu phải có ${expectedHeaders.join(', ')}). Vui lòng chọn đúng file.` 
             });
         }
         // ===============================================================================
@@ -104,7 +104,46 @@ exports.handleImportData = async (req, res) => {
         } else if (networkType === 'kpi_4g') {
             sql = `INSERT INTO kpi_4g (District_code, Site_name, CellType, Cell_name, MIMO, Thoi_gian, UL_Traffic_VoLTE_GB, Avg_UL_throughput_QCI_1, VoLTE_Traffic_Erl, Total_Traffic_VoLTE_GB, VoLTE_ERAB_Call_Setup_SR, Intra_freq_HO_SR_VoLTE, Inter_freq_HO_SR_VoLTE, DL_Traffic_VoLTE_GB, Avg_DL_throughput_QCI_1, Call_Drop_Rate_VoLTE, SRVCC_SR_LTE_to_WCDMA, SRVCC_SR_LTE_to_GSM, User_UL_Avg_Throughput_Kbps, User_DL_Avg_Throughput_kbps, User_DL_Avg_Throughput_kbps_New, Unavailable, Uplink_Latency, Traffic_Volume_UL_GB, Traffic_Volumn_DL_GB, Total_Data_Traffic_Volume_GB, Total_UE, Service_Drop_all, RRC_Conn_Estab_SR, RRC_Conn_User_Max, RRC_Conn_User_Avg, RB_Util_Rate_UL, RB_Util_Rate_DL, INTRA_HOSR_ATT, Intra_frequency_HO, Intra_eNB_HO_SR_total, Inter_frequency_HO, HO_SR_via_S1, Inter_RAT_Total_HO_SR, Other_Metrics) VALUES ?`;
             values = data.map(row => [
-                row['District code'], row['Site name'], row['CellType (L900, L1800, L2600..)'], row['Cell name'], row['MIMO'], row['Thời gian'], row['UL Traffic VoLTE (GB)'], row['Average UL throughput of services with a QCI of 1 (kbit/s)'], row['VoLTE Traffic (Erl)'], row['Total Traffic VoLTE (GB)'], row['VoLTE E-RAB Call Setup Success Rate'], row['Intra-frequency HO Success Rates (VoLTE)'], row['Inter-frequency HO Success Rates (VoLTE)'], row['DL Traffic VoLTE (GB)'], row['Average DL throughput of services with a QCI of 1 (kbit/s)'], row['Call Drop Rate (VoLTE)'], row['SRVCC Success Rate (LTE to WCDMA)'], row['SRVCC Success Rate (LTE to GSM)'], row['User Uplink Average Throughput (Kbps)'], row['User Downlink Average Throughput (kbps)'], row['User Downlink Average Throughput (kbps) New'], row['Unavailable'], row['Uplink Latency'], row['Traffic Volume UL (GB)'], row['Traffic Volumn DL (GB)'], row['Total Data Traffic Volume (GB)'], row['Total UE'], row['Service Drop (all service)'], row['RRC Connection Establishment Success Rate (All Service)'], row['RRC Connected User_Max (Cell)'], row['RRC Connected User_Avg (Cell)'], row['Resource Block Untilizing Rate Uplink (%)'], row['Resource Block Untilizing Rate Downlink (%)'], row['INTRA_HOSR_ATT (Attemp intra hosr (exe phrase))'], row['Intra-frequency HO (%)'], row['Intra eNB HO SR total'], row['Inter-frequency HO (%)'], row['Handover Success Rate via S1 (%)'], row['Inter RAT Total HO SR (from HO preparation start until successful HO execution)'], null
+                row['District code'], // Yêu cầu nghiêm ngặt lấy đúng District code
+                row['Site name'], 
+                row['CellType (L900, L1800, L2600..)'], 
+                row['Cell name'], 
+                row['MIMO'], 
+                row['Thời gian'], 
+                row['UL Traffic VoLTE (GB)'], 
+                row['Average UL throughput of services with a QCI of 1 (kbit/s)'], 
+                row['VoLTE Traffic (Erl)'], 
+                row['Total Traffic VoLTE (GB)'], 
+                row['VoLTE E-RAB Call Setup Success Rate'], 
+                row['Intra-frequency HO Success Rates (VoLTE)'], 
+                row['Inter-frequency HO Success Rates (VoLTE)'], 
+                row['DL Traffic VoLTE (GB)'], 
+                row['Average DL throughput of services with a QCI of 1 (kbit/s)'], 
+                row['Call Drop Rate (VoLTE)'], 
+                row['SRVCC Success Rate (LTE to WCDMA)'], 
+                row['SRVCC Success Rate (LTE to GSM)'], 
+                row['User Uplink Average Throughput (Kbps)'], 
+                row['User Downlink Average Throughput (kbps)'], 
+                row['User Downlink Average Throughput (kbps) New'], 
+                row['Unavailable'], 
+                row['Uplink Latency'], 
+                row['Traffic Volume UL (GB)'], 
+                row['Traffic Volumn DL (GB)'], 
+                row['Total Data Traffic Volume (GB)'], 
+                row['Total UE'], 
+                row['Service Drop (all service)'], 
+                row['RRC Connection Establishment Success Rate (All Service)'], 
+                row['RRC Connected User_Max (Cell)'], 
+                row['RRC Connected User_Avg (Cell)'], 
+                row['Resource Block Untilizing Rate Uplink (%)'], 
+                row['Resource Block Untilizing Rate Downlink (%)'], 
+                row['INTRA_HOSR_ATT (Attemp intra hosr (exe phrase))'], 
+                row['Intra-frequency HO (%)'], 
+                row['Intra eNB HO SR total'], 
+                row['Inter-frequency HO (%)'], 
+                row['Handover Success Rate via S1 (%)'], 
+                row['Inter RAT Total HO SR (from HO preparation start until successful HO execution)'], 
+                null
             ]);
         } else if (networkType === 'kpi_5g') {
             sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
