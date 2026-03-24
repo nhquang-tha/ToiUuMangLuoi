@@ -34,11 +34,9 @@ exports.handleImportData = async (req, res) => {
         }
 
         // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN =====================
-        // Ép tất cả các cột "Thời gian" về định dạng String chuẩn DD/MM/YYYY
         data.forEach(row => {
             let t = row['Thời gian'];
             if (t !== undefined && t !== null) {
-                // Nếu SheetJS đọc ra số Serial của Excel (VD: 45314)
                 if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
                     let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
                     let d = String(dateObj.getDate()).padStart(2, '0');
@@ -46,7 +44,6 @@ exports.handleImportData = async (req, res) => {
                     let y = dateObj.getFullYear();
                     row['Thời gian'] = `${d}/${m}/${y}`;
                 } else if (typeof t === 'string') {
-                    // Nếu là chuỗi, cắt bỏ phần giờ phút giây (nếu có)
                     row['Thời gian'] = t.split(' ')[0].trim();
                 }
             }
@@ -59,14 +56,19 @@ exports.handleImportData = async (req, res) => {
             'rf_4g': ['CSHT_code', 'ENodeBID', 'PCI'],
             'rf_5g': ['CSHT_code', 'gNodeB ID', 'nrarfcn'],
             'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
-            'kpi_4g': ['Province code', 'UL Traffic VoLTE (GB)'], // File mới dùng Province code
+            'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'], // Mặc định
             'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT']
         };
 
         const headersInFile = Object.keys(data[0]);
-        // Xử lý fallback cho KPI 4G (chấp nhận District code HOẶC Province code)
-        if (networkType === 'kpi_4g' && headersInFile.includes('District code') && !headersInFile.includes('Province code')) {
-            requiredHeaders['kpi_4g'][0] = 'District code';
+        
+        // Tự động nhận dạng thông minh: Nếu file KPI 4G chứa "Province code" thay vì "District code"
+        if (networkType === 'kpi_4g') {
+            if (headersInFile.includes('Province code')) {
+                requiredHeaders['kpi_4g'][0] = 'Province code';
+            } else if (headersInFile.includes('District code')) {
+                requiredHeaders['kpi_4g'][0] = 'District code';
+            }
         }
 
         const expectedHeaders = requiredHeaders[networkType];
@@ -77,7 +79,7 @@ exports.handleImportData = async (req, res) => {
                 title: 'Import Data', 
                 page: 'Import Data', 
                 message: null, 
-                error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này (Yêu cầu phải có ${expectedHeaders.join(', ')}). Vui lòng chọn đúng file.` 
+                error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này (Yêu cầu phải có: ${expectedHeaders.join(', ')}). Vui lòng chọn đúng file.` 
             });
         }
         // ===============================================================================
@@ -124,7 +126,7 @@ exports.handleImportData = async (req, res) => {
         } else if (networkType === 'kpi_4g') {
             sql = `INSERT INTO kpi_4g (District_code, Site_name, CellType, Cell_name, MIMO, Thoi_gian, UL_Traffic_VoLTE_GB, Avg_UL_throughput_QCI_1, VoLTE_Traffic_Erl, Total_Traffic_VoLTE_GB, VoLTE_ERAB_Call_Setup_SR, Intra_freq_HO_SR_VoLTE, Inter_freq_HO_SR_VoLTE, DL_Traffic_VoLTE_GB, Avg_DL_throughput_QCI_1, Call_Drop_Rate_VoLTE, SRVCC_SR_LTE_to_WCDMA, SRVCC_SR_LTE_to_GSM, User_UL_Avg_Throughput_Kbps, User_DL_Avg_Throughput_kbps, User_DL_Avg_Throughput_kbps_New, Unavailable, Uplink_Latency, Traffic_Volume_UL_GB, Traffic_Volumn_DL_GB, Total_Data_Traffic_Volume_GB, Total_UE, Service_Drop_all, RRC_Conn_Estab_SR, RRC_Conn_User_Max, RRC_Conn_User_Avg, RB_Util_Rate_UL, RB_Util_Rate_DL, INTRA_HOSR_ATT, Intra_frequency_HO, Intra_eNB_HO_SR_total, Inter_frequency_HO, HO_SR_via_S1, Inter_RAT_Total_HO_SR, Other_Metrics) VALUES ?`;
             values = data.map(row => [
-                row['Province code'] || row['District code'], // Lấy 1 trong 2 tùy thuộc cấu trúc file
+                row['District code'] || row['Province code'], // Lấy 1 trong 2 tùy cấu trúc cột của file
                 row['Site name'], 
                 row['CellType (L900, L1800, L2600..)'], 
                 row['Cell name'], 
