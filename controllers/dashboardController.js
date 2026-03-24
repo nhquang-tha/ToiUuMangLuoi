@@ -58,6 +58,23 @@ exports.handleImportData = async (req, res) => {
         }
         // ===============================================================================
 
+        // ===================== XÓA DỮ LIỆU CŨ THEO NGÀY CÓ TRONG FILE (CHỈ ÁP DỤNG KPI) =====================
+        if (networkType.startsWith('kpi_')) {
+            // Lấy danh sách các ngày duy nhất có trong file upload
+            const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
+            
+            if (uniqueDates.length > 0) {
+                // Tạo chuỗi placeholders (?, ?, ?)
+                const placeholders = uniqueDates.map(() => '?').join(',');
+                const deleteSql = `DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`;
+                
+                // Thực thi xóa các bản ghi cũ của ngày này
+                await db.query(deleteSql, uniqueDates);
+                console.log(`Đã xóa sạch dữ liệu KPI cũ của các ngày: ${uniqueDates.join(', ')} trong bảng ${networkType}`);
+            }
+        }
+        // ====================================================================================================
+
         let sql = '';
         let values = [];
 
