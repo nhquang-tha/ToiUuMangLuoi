@@ -34,8 +34,12 @@
     </main>
 </div>
 
-<!-- ĐÂY LÀ DÒNG CHUẨN XÁC ĐỂ LOAD THƯ VIỆN CHART.JS -->
-<script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+<!-- SỬA LỖI TRIỆT ĐỂ: Nhúng Script thông qua nối chuỗi để tránh việc Chat tự động tạo link -->
+<script>
+    const script = document.createElement('script');
+    script.src = 'https://' + 'cdn.jsdelivr.net/npm/chart.js';
+    document.head.appendChild(script);
+</script>
 
 <script>
     function parseDateStr(dateStr) {
@@ -66,6 +70,16 @@
         chartsContainer.innerHTML = '';
 
         try {
+            // Chờ cho thư viện Chart.js tải xong trước khi vẽ biểu đồ
+            if (typeof Chart === 'undefined') {
+                statusMsg.style.color = 'orange';
+                statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
+                await new Promise(r => setTimeout(r, 800)); // Đợi 0.8 giây
+                if (typeof Chart === 'undefined') {
+                    throw new Error("Không thể tải thư viện Chart.js từ mạng.");
+                }
+            }
+
             const response = await fetch(`/api/kpi-data?network=${network}&cellName=${encodeURIComponent(cellName)}`);
             const data = await response.json();
 
