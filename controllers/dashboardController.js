@@ -8,30 +8,36 @@ async function getKpiHistory() {
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
-        // Hàm parse ngày DD/MM/YYYY siêu mạnh (lọc sạch dấu ngoặc kép hoặc khoảng trắng thừa)
+        // Hàm parse ngày SIÊU MẠNH: Dùng Regex chỉ lấy đúng các con số, vứt bỏ mọi rác (BOM, khoảng trắng, \r, \n, ngoặc kép...)
         const parseDate = (d) => {
             if(!d) return 0;
-            // Làm sạch: bỏ khoảng trắng và các dấu ngoặc kép (") nếu có
-            let str = String(d).trim().replace(/["']/g, '');
-            if (str.includes(' ')) str = str.split(' ')[0]; // Cắt bỏ giờ phút
-            if (str.includes('/')) {
-                const parts = str.split('/');
-                if (parts.length === 3) {
-                    return new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0])).getTime();
-                }
+            const matches = String(d).match(/\d+/g); // Trích xuất tất cả các cụm số
+            if (matches && matches.length >= 3) {
+                // Nhận diện Year (do có thể là YYYY-MM-DD hoặc DD/MM/YYYY)
+                let year = matches[0].length === 4 ? matches[0] : matches[2];
+                let month = matches[1];
+                let day = matches[0].length === 4 ? matches[2] : matches[0];
+                return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
             }
-            const fallback = new Date(str).getTime();
-            return isNaN(fallback) ? 0 : fallback;
+            return 0;
         };
 
-        // Sắp xếp TĂNG DẦN (a - b): Ngày cũ xếp trước, ngày mới xếp sau
         const sortDates = (rows) => rows
             .map(r => {
-                // Xóa ngoặc kép nếu lỡ lưu vào DB
-                return r.Thoi_gian ? r.Thoi_gian.replace(/["']/g, '').trim() : '';
+                // Chuẩn hóa chuỗi hiển thị ra giao diện cho sạch đẹp
+                if (!r.Thoi_gian) return '';
+                const m = String(r.Thoi_gian).match(/\d+/g);
+                if (m && m.length >= 3) {
+                    let y = m[0].length === 4 ? m[0] : m[2];
+                    let mo = m[1];
+                    let d = m[0].length === 4 ? m[2] : m[0];
+                    return `${d.padStart(2, '0')}/${mo.padStart(2, '0')}/${y}`;
+                }
+                return String(r.Thoi_gian).trim();
             })
             .filter(Boolean)
-            .sort((a, b) => parseDate(a) - parseDate(b));
+            .filter((value, index, self) => self.indexOf(value) === index) // Loại bỏ các ngày bị trùng sau khi chuẩn hóa
+            .sort((a, b) => parseDate(a) - parseDate(b)); // Sắp xếp TĂNG DẦN: Cũ đến Mới
 
         return {
             kpi3g: sortDates(rows3g),
@@ -81,7 +87,7 @@ exports.handleImportData = async (req, res) => {
             return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!', userRole: userRole, history: history });
         }
 
-        // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN =====================
+        // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN TRƯỚC KHI INSERT =====================
         data.forEach(row => {
             let t = row['Thời gian'];
             if (t !== undefined && t !== null) {
@@ -92,8 +98,17 @@ exports.handleImportData = async (req, res) => {
                     let y = dateObj.getFullYear();
                     row['Thời gian'] = `${d}/${m}/${y}`;
                 } else if (typeof t === 'string') {
-                    // Cắt sạch khoảng trắng và dấu ngoặc kép thừa
-                    row['Thời gian'] = t.split(' ')[0].replace(/["']/g, '').trim();
+                    // Dùng Regex để ép lại thành định dạng sạch sẽ DD/MM/YYYY
+                    const matches = String(t).match(/\d+/g);
+                    if (matches && matches.length >= 3) {
+                        let y = matches[0].length === 4 ? matches[0] : matches[2];
+                        let mo = matches[1];
+                        let d = matches[0].length === 4 ? matches[2] : matches[0];
+                        if (y.length < 4) y = "20" + y; // Dự phòng lỗi năm 2 số
+                        row['Thời gian'] = `${d.padStart(2, '0')}/${mo.padStart(2, '0')}/${y}`;
+                    } else {
+                        row['Thời gian'] = t.trim();
+                    }
                 }
             }
         });
