@@ -1,43 +1,34 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// Hàm hỗ trợ: Lấy lịch sử các ngày đã import KPI
+// Hàm hỗ trợ: Lấy lịch sử các ngày đã import KPI (Sắp xếp TĂNG DẦN: Cũ tới Mới)
 async function getKpiHistory() {
     try {
         const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
-        // Hàm parse ngày SIÊU MẠNH: Dùng Regex chỉ lấy đúng các con số, vứt bỏ mọi rác (BOM, khoảng trắng, \r, \n, ngoặc kép...)
+        // Hàm Parse thần thánh: Xóa hết mọi thứ trừ SỐ và DẤU GẠCH CHÉO
         const parseDate = (d) => {
             if(!d) return 0;
-            const matches = String(d).match(/\d+/g); // Trích xuất tất cả các cụm số
-            if (matches && matches.length >= 3) {
-                // Nhận diện Year (do có thể là YYYY-MM-DD hoặc DD/MM/YYYY)
-                let year = matches[0].length === 4 ? matches[0] : matches[2];
-                let month = matches[1];
-                let day = matches[0].length === 4 ? matches[2] : matches[0];
-                return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+            let str = String(d).replace(/[^0-9\/]/g, ''); // Lọc siêu sạch
+            let parts = str.split('/');
+            if (parts.length === 3) {
+                // new Date(Năm, Tháng (0-11), Ngày)
+                return new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0])).getTime();
             }
             return 0;
         };
 
-        const sortDates = (rows) => rows
-            .map(r => {
-                // Chuẩn hóa chuỗi hiển thị ra giao diện cho sạch đẹp
-                if (!r.Thoi_gian) return '';
-                const m = String(r.Thoi_gian).match(/\d+/g);
-                if (m && m.length >= 3) {
-                    let y = m[0].length === 4 ? m[0] : m[2];
-                    let mo = m[1];
-                    let d = m[0].length === 4 ? m[2] : m[0];
-                    return `${d.padStart(2, '0')}/${mo.padStart(2, '0')}/${y}`;
-                }
-                return String(r.Thoi_gian).trim();
-            })
-            .filter(Boolean)
-            .filter((value, index, self) => self.indexOf(value) === index) // Loại bỏ các ngày bị trùng sau khi chuẩn hóa
-            .sort((a, b) => parseDate(a) - parseDate(b)); // Sắp xếp TĂNG DẦN: Cũ đến Mới
+        const sortDates = (rows) => {
+            let uniqueDates = [...new Set(rows.map(r => {
+                if(!r.Thoi_gian) return '';
+                return String(r.Thoi_gian).replace(/[^0-9\/]/g, '');
+            }).filter(Boolean))];
+
+            // Sắp xếp tăng dần
+            return uniqueDates.sort((a, b) => parseDate(a) - parseDate(b));
+        };
 
         return {
             kpi3g: sortDates(rows3g),
@@ -59,13 +50,13 @@ exports.renderPage = (pageName) => {
 
 exports.getImportPage = async (req, res) => {
     const userRole = req.session && req.session.user ? req.session.user.role : 'user';
-    const history = await getKpiHistory(); // Lấy lịch sử data
+    const history = await getKpiHistory(); 
     res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole, history: history });
 };
 
 exports.handleImportData = async (req, res) => {
     const userRole = req.session && req.session.user ? req.session.user.role : 'user';
-    let history = await getKpiHistory(); // Lấy sẵn lịch sử để render lại khi có lỗi
+    let history = await getKpiHistory(); 
 
     try {
         if (!req.file) {
@@ -98,17 +89,8 @@ exports.handleImportData = async (req, res) => {
                     let y = dateObj.getFullYear();
                     row['Thời gian'] = `${d}/${m}/${y}`;
                 } else if (typeof t === 'string') {
-                    // Dùng Regex để ép lại thành định dạng sạch sẽ DD/MM/YYYY
-                    const matches = String(t).match(/\d+/g);
-                    if (matches && matches.length >= 3) {
-                        let y = matches[0].length === 4 ? matches[0] : matches[2];
-                        let mo = matches[1];
-                        let d = matches[0].length === 4 ? matches[2] : matches[0];
-                        if (y.length < 4) y = "20" + y; // Dự phòng lỗi năm 2 số
-                        row['Thời gian'] = `${d.padStart(2, '0')}/${mo.padStart(2, '0')}/${y}`;
-                    } else {
-                        row['Thời gian'] = t.trim();
-                    }
+                    // Xóa rác, ép về DD/MM/YYYY chuẩn
+                    row['Thời gian'] = t.replace(/[^0-9\/]/g, '');
                 }
             }
         });
@@ -125,22 +107,14 @@ exports.handleImportData = async (req, res) => {
 
         const headersInFile = Object.keys(data[0]);
         
-        // Nhận diện linh hoạt cho KPI 4G
         if (networkType === 'kpi_4g') {
-            if (headersInFile.includes('Province code')) {
-                requiredHeaders['kpi_4g'][0] = 'Province code';
-            } else if (headersInFile.includes('District code')) {
-                requiredHeaders['kpi_4g'][0] = 'District code';
-            }
+            if (headersInFile.includes('Province code')) requiredHeaders['kpi_4g'][0] = 'Province code';
+            else if (headersInFile.includes('District code')) requiredHeaders['kpi_4g'][0] = 'District code';
         }
         
-        // Nhận diện linh hoạt cho KPI 5G (Hỗ trợ cả tên cột viết tắt và tên tiếng Anh đầy đủ)
         if (networkType === 'kpi_5g') {
-            if (headersInFile.includes('A User Uplink Average Throughput')) {
-                requiredHeaders['kpi_5g'][2] = 'A User Uplink Average Throughput';
-            } else if (headersInFile.includes('USER_UL_AVG_THROUGHPUT')) {
-                requiredHeaders['kpi_5g'][2] = 'USER_UL_AVG_THROUGHPUT';
-            }
+            if (headersInFile.includes('A User Uplink Average Throughput')) requiredHeaders['kpi_5g'][2] = 'A User Uplink Average Throughput';
+            else if (headersInFile.includes('USER_UL_AVG_THROUGHPUT')) requiredHeaders['kpi_5g'][2] = 'USER_UL_AVG_THROUGHPUT';
         }
 
         const expectedHeaders = requiredHeaders[networkType];
@@ -156,7 +130,6 @@ exports.handleImportData = async (req, res) => {
         // ===================== XÓA DỮ LIỆU CŨ THEO NGÀY CÓ TRONG FILE =====================
         if (networkType.startsWith('kpi_')) {
             const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
-            
             if (uniqueDates.length > 0) {
                 const placeholders = uniqueDates.map(() => '?').join(',');
                 const deleteSql = `DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`;
@@ -268,7 +241,7 @@ exports.handleImportData = async (req, res) => {
 
         await db.query(sql, [values]);
         
-        history = await getKpiHistory();
+        history = await getKpiHistory(); // Load lại lịch sử
 
         res.render('import_data', { 
             title: 'Import Data', page: 'Import Data', userRole: userRole, history: history,
