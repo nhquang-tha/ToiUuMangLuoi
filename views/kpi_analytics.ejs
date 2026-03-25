@@ -58,17 +58,27 @@
 </script>
 
 <script>
-    // Hàm Parse ngày siêu cấp cứu cánh: Lọc sạch mọi rác để lấy đúng Timestamp
-    function parseDateStr(dateStr) {
+    // Hàm Parse ngày: Xóa sạch rác, chỉ giữ số và gạch chéo
+    function convertToTimestamp(dateStr) {
         if (!dateStr) return 0;
-        // Quét chuỗi, xóa sạch mọi thứ, CHỈ GIỮ LẠI SỐ VÀ DẤU /
         let str = String(dateStr).replace(/[^0-9\/]/g, '');
         let parts = str.split('/');
         if (parts.length === 3) {
-            // Ép kiểu: Date(Năm, Tháng(0-11), Ngày)
+            // Định dạng là DD/MM/YYYY
             return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
         }
         return 0;
+    }
+
+    // Hàm trả về chuỗi hiển thị gọn gàng
+    function formatPrettyDate(dateStr) {
+        if (!dateStr) return 'N/A';
+        let str = String(dateStr).replace(/[^0-9\/]/g, '');
+        let parts = str.split('/');
+        if (parts.length === 3) {
+            return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[2]}`;
+        }
+        return str;
     }
 
     // Đóng Popup khi ấn X hoặc click ra bên ngoài
@@ -107,31 +117,41 @@
             }
 
             const response = await fetch(`/api/kpi-data?network=${network}&cellName=${encodeURIComponent(cellName)}`);
-            const data = await response.json();
+            let rawData = await response.json();
 
-            if (data.error) {
+            if (rawData.error) {
                 statusMsg.style.color = 'red';
-                statusMsg.textContent = data.error;
+                statusMsg.textContent = rawData.error;
                 return;
             }
 
-            if (data.length === 0) {
+            if (rawData.length === 0) {
                 statusMsg.style.color = 'red';
                 statusMsg.textContent = `Không tìm thấy dữ liệu KPI nào cho Cell: "${cellName}" trong mạng ${network.toUpperCase()}.`;
                 return;
             }
 
-            statusMsg.style.color = 'green';
-            statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
-
-            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC TĂNG DẦN: (a - b) Tuần tự từ cũ đến mới
-            data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
-
-            // Trích xuất Nhãn trục X sau khi đã lọc sạch rác
-            const labels = data.map(row => {
-                if(!row.Thoi_gian) return '';
-                return String(row.Thoi_gian).replace(/[^0-9\/]/g, '');
+            // --- BƯỚC 1: LỌC TRÙNG LẶP DỮ LIỆU BẰNG MAP (1 ngày chỉ được lấy 1 bản ghi) ---
+            let uniqueDataMap = new Map();
+            rawData.forEach(row => {
+                let ts = convertToTimestamp(row.Thoi_gian);
+                if(ts > 0) {
+                    let prettyDate = formatPrettyDate(row.Thoi_gian);
+                    uniqueDataMap.set(prettyDate, row); // Ghi đè nếu ngày bị lặp
+                }
             });
+
+            // Chuyển Map trở lại thành mảng
+            let data = Array.from(uniqueDataMap.values());
+
+            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN THEO TIMESTAMP ---
+            data.sort((a, b) => convertToTimestamp(a.Thoi_gian) - convertToTimestamp(b.Thoi_gian));
+
+            statusMsg.style.color = 'green';
+            statusMsg.textContent = `Tìm thấy ${data.length} ngày dữ liệu duy nhất cho Cell: ${cellName}.`;
+
+            // Map nhãn trục X (Chắc chắn 100% là unique và tăng dần)
+            const labels = data.map(row => formatPrettyDate(row.Thoi_gian));
 
             let chartConfigs = [];
             if (network === '3g') {
@@ -157,7 +177,7 @@
             }
 
             chartConfigs.forEach((cfg) => {
-                // Trích xuất các chỉ số theo đúng trục thời gian
+                // Trích xuất các chỉ số tương ứng trục thời gian
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
                 const chartWrapper = document.createElement('div');
