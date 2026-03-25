@@ -8,13 +8,12 @@ async function getKpiHistory() {
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
-        // Hàm Parse thần thánh: Xóa hết mọi thứ trừ SỐ và DẤU GẠCH CHÉO
+        // Hàm Parse thần thánh: Lấy chuẩn định dạng DD/MM/YYYY
         const parseDate = (d) => {
             if(!d) return 0;
-            let str = String(d).replace(/[^0-9\/]/g, ''); // Lọc siêu sạch
+            let str = String(d).replace(/[^0-9\/]/g, ''); 
             let parts = str.split('/');
             if (parts.length === 3) {
-                // new Date(Năm, Tháng (0-11), Ngày)
                 return new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0])).getTime();
             }
             return 0;
@@ -26,7 +25,7 @@ async function getKpiHistory() {
                 return String(r.Thoi_gian).replace(/[^0-9\/]/g, '');
             }).filter(Boolean))];
 
-            // Sắp xếp tăng dần
+            // Sắp xếp tăng dần (ASC)
             return uniqueDates.sort((a, b) => parseDate(a) - parseDate(b));
         };
 
