@@ -4,7 +4,8 @@ const multer = require('multer');
 const { isAuthenticated, isAdmin } = require('../middlewares/authMiddleware');
 const dashboardController = require('../controllers/dashboardController');
 const rfController = require('../controllers/rfController'); 
-const kpiController = require('../controllers/kpiController'); // IMPORT THÊM CONTROLLER KPI
+const kpiController = require('../controllers/kpiController');
+const userController = require('../controllers/userController'); // IMPORT USER CONTROLLER
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -22,14 +23,15 @@ pages.forEach(page => {
     router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
 });
 
-// --- ROUTES CHO KPI ANALYTICS (BIỂU ĐỒ) ---
+// --- ROUTES CHO KPI ANALYTICS ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
-router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData); // Route Reset KPI
+// (Nút Reset KPI đặt ở Import Data, nhưng route xử lý vẫn nằm ở kpiController)
+router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
 
 // --- ROUTES CHO IMPORT DATA ---
-router.get('/import-data', isAuthenticated, dashboardController.getImportPage);
-router.post('/import-data', isAuthenticated, upload.single('dataFile'), dashboardController.handleImportData);
+router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
+router.post('/import-data', isAuthenticated, isAdmin, upload.single('dataFile'), dashboardController.handleImportData);
 
 // --- ROUTES CHO RF DATABASE (CRUD) ---
 router.get('/rf-database', isAuthenticated, rfController.getList);
@@ -37,5 +39,21 @@ router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.g
 router.post('/rf-database/:action/:network/:id?', isAuthenticated, rfController.saveData);
 router.post('/rf-database/delete/:network/:id', isAuthenticated, rfController.deleteData);
 router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
+
+// --- ROUTES CHO SYSTEM (QUẢN LÝ USER & PROFILE) ---
+// Profile (Tất cả User đã đăng nhập đều vào được)
+router.get('/system/profile', isAuthenticated, userController.getProfilePage);
+router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
+
+// User Manager (Chỉ Admin mới vào được)
+router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
+router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
+router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
+
+// Route đăng xuất nhanh
+router.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
+});
 
 module.exports = router;
