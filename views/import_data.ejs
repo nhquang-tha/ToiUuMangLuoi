@@ -16,7 +16,7 @@
 
             <!-- KHU VỰC DÀNH RIÊNG CHO ADMIN: RESET DATABASE KPI -->
             <% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
-                <div class="card" style="margin-bottom: 20px; border-left: 4px solid #e74c3c; max-width: 600px;">
+                <div class="card" style="margin-bottom: 20px; border-left: 4px solid #e74c3c;">
                     <h4 style="color: #c0392b; margin-top: 0; margin-bottom: 5px;">Khu Vực Admin: Làm Sạch Dữ Liệu KPI</h4>
                     <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Dùng tính năng này để xóa <strong>toàn bộ</strong> dữ liệu KPI cũ và tiến hành Import lại từ đầu (Không thể hoàn tác).</p>
                     <div style="display: flex; gap: 10px;">
@@ -33,37 +33,93 @@
                 </div>
             <% } %>
 
-            <div class="card" style="max-width: 600px;">
-                <h3>Upload Dữ Liệu Tần Số & Hiệu Năng</h3>
-                <p style="margin-bottom: 20px; color: #666;">Chấp nhận file định dạng .xlsx, .xls, .csv</p>
-                
-                <form action="/import-data" method="POST" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label>Chọn Database lưu trữ:</label>
-                        <select name="networkType" required>
-                            <optgroup label="Cơ sở dữ liệu trạm (RF)">
-                                <option value="rf_3g">Trạm Mạng 3G (RF_3G)</option>
-                                <option value="rf_4g">Trạm Mạng 4G (RF_4G)</option>
-                                <option value="rf_5g">Trạm Mạng 5G (RF_5G)</option>
-                            </optgroup>
-                            <optgroup label="Cơ sở dữ liệu hiệu năng (KPI)">
-                                <option value="kpi_3g">KPI Mạng 3G</option>
-                                <option value="kpi_4g">KPI Mạng 4G</option>
-                                <option value="kpi_5g">KPI Mạng 5G</option>
-                            </optgroup>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Chọn File:</label>
-                        <div style="border: 2px dashed #ddd; padding: 20px; text-align: center; border-radius: 4px; background: #fafafa;">
-                            <input type="file" name="dataFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" required>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <!-- CỘT TRÁI: FORM UPLOAD -->
+                <div class="card" style="flex: 1; min-width: 400px; max-width: 500px; height: fit-content;">
+                    <h3>Upload Dữ Liệu Tần Số & Hiệu Năng</h3>
+                    <p style="margin-bottom: 20px; color: #666;">Chấp nhận file định dạng .xlsx, .xls, .csv</p>
+                    
+                    <form action="/import-data" method="POST" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label>Chọn Database lưu trữ:</label>
+                            <select name="networkType" class="form-control" required style="width: 100%; padding: 10px;">
+                                <optgroup label="Cơ sở dữ liệu trạm (RF)">
+                                    <option value="rf_3g">Trạm Mạng 3G (RF_3G)</option>
+                                    <option value="rf_4g">Trạm Mạng 4G (RF_4G)</option>
+                                    <option value="rf_5g">Trạm Mạng 5G (RF_5G)</option>
+                                </optgroup>
+                                <optgroup label="Cơ sở dữ liệu hiệu năng (KPI)">
+                                    <option value="kpi_3g">KPI Mạng 3G</option>
+                                    <option value="kpi_4g">KPI Mạng 4G</option>
+                                    <option value="kpi_5g">KPI Mạng 5G</option>
+                                </optgroup>
+                            </select>
                         </div>
-                    </div>
 
-                    <button type="submit" class="btn-primary" style="margin-top: 10px;">Bắt đầu Import</button>
-                </form>
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label>Chọn File:</label>
+                            <div style="border: 2px dashed #3498db; padding: 30px 10px; text-align: center; border-radius: 6px; background: #f0f8ff;">
+                                <input type="file" name="dataFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" required>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 15px;">Bắt đầu Import</button>
+                    </form>
+                </div>
+
+                <!-- CỘT PHẢI: LỊCH SỬ DỮ LIỆU KPI -->
+                <div class="card" style="flex: 2; min-width: 400px;">
+                    <h3>Data History (Lịch sử dữ liệu KPI đã Import)</h3>
+                    <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Hệ thống hiển thị danh sách các ngày hiện đang có dữ liệu trong Database. Nếu Import trùng ngày, hệ thống sẽ tự động xóa bản ghi cũ của ngày đó để ghi đè dữ liệu mới.</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        
+                        <!-- Block 3G -->
+                        <div style="border: 1px solid #ecf0f1; padding: 15px; border-radius: 6px; background: #fff;">
+                            <h4 style="margin-top: 0; color: #2980b9; margin-bottom: 10px; border-bottom: 1px solid #ecf0f1; padding-bottom: 5px;">Dữ Liệu KPI 3G</h4>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <% if(history && history.kpi3g && history.kpi3g.length > 0) { %>
+                                    <% history.kpi3g.forEach(date => { %>
+                                        <span class="date-badge date-3g"><i style="margin-right: 4px;">📅</i><%= date %></span>
+                                    <% }) %>
+                                <% } else { %>
+                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu trong hệ thống...</span>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Block 4G -->
+                        <div style="border: 1px solid #ecf0f1; padding: 15px; border-radius: 6px; background: #fff;">
+                            <h4 style="margin-top: 0; color: #8e44ad; margin-bottom: 10px; border-bottom: 1px solid #ecf0f1; padding-bottom: 5px;">Dữ Liệu KPI 4G</h4>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <% if(history && history.kpi4g && history.kpi4g.length > 0) { %>
+                                    <% history.kpi4g.forEach(date => { %>
+                                        <span class="date-badge date-4g"><i style="margin-right: 4px;">📅</i><%= date %></span>
+                                    <% }) %>
+                                <% } else { %>
+                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu trong hệ thống...</span>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Block 5G -->
+                        <div style="border: 1px solid #ecf0f1; padding: 15px; border-radius: 6px; background: #fff;">
+                            <h4 style="margin-top: 0; color: #16a085; margin-bottom: 10px; border-bottom: 1px solid #ecf0f1; padding-bottom: 5px;">Dữ Liệu KPI 5G</h4>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <% if(history && history.kpi5g && history.kpi5g.length > 0) { %>
+                                    <% history.kpi5g.forEach(date => { %>
+                                        <span class="date-badge date-5g"><i style="margin-right: 4px;">📅</i><%= date %></span>
+                                    <% }) %>
+                                <% } else { %>
+                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu trong hệ thống...</span>
+                                <% } %>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
             </div>
+
         </div>
     </main>
 </div>
@@ -74,6 +130,19 @@
     .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 13px;}
     .btn-danger:hover { background: #e74c3c; }
+    
+    /* Style cho các Tag Lịch sử ngày tháng */
+    .date-badge { 
+        padding: 5px 12px; 
+        border-radius: 15px; 
+        font-size: 12px; 
+        font-weight: 600; 
+        display: inline-block;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .date-3g { background: #e3f2fd; color: #2980b9; border: 1px solid #bce0fd; }
+    .date-4g { background: #f4ecf8; color: #8e44ad; border: 1px solid #e1cbed; }
+    .date-5g { background: #e8f8f5; color: #16a085; border: 1px solid #bce8e0; }
 </style>
 </body>
 </html>
