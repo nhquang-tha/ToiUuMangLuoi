@@ -61,7 +61,8 @@
     // Hàm Parse ngày siêu cấp cứu cánh: Xử lý mọi loại dị bản để có Timestamp chuẩn xếp thứ tự
     function parseDateStr(dateStr) {
         if (!dateStr) return 0;
-        let str = String(dateStr).trim();
+        // Bóc tách toàn bộ dấu ngoặc kép rác và khoảng trắng thừa nếu có
+        let str = String(dateStr).trim().replace(/["']/g, '');
         
         // Cắt bỏ phần giờ phút nếu bị dính (VD: 05/01/2026 10:00 -> 05/01/2026)
         if (str.includes(' ')) {
@@ -90,7 +91,7 @@
     // Hàm chuẩn hóa chuỗi X-axis cho đẹp và đồng nhất (DD/MM/YYYY)
     function formatDateLabel(dateStr) {
         if (!dateStr) return 'N/A';
-        let str = String(dateStr).trim();
+        let str = String(dateStr).trim().replace(/["']/g, '');
         if (str.includes(' ')) str = str.split(' ')[0];
         if (str.includes('/')) return str; // Đã là DD/MM/YYYY thì giữ nguyên
         
@@ -158,7 +159,7 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC: Tuần tự từ cũ đến mới dựa trên Timestamp đã bóc tách
+            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC TĂNG DẦN: Tuần tự từ cũ đến mới dựa trên Timestamp đã bóc tách
             data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
             // Map nhãn trục X (Đã được chuẩn hóa DD/MM/YYYY)
