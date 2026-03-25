@@ -96,11 +96,21 @@ exports.handleImportData = async (req, res) => {
 
         const headersInFile = Object.keys(data[0]);
         
+        // Nhận diện linh hoạt cho KPI 4G
         if (networkType === 'kpi_4g') {
             if (headersInFile.includes('Province code')) {
                 requiredHeaders['kpi_4g'][0] = 'Province code';
             } else if (headersInFile.includes('District code')) {
                 requiredHeaders['kpi_4g'][0] = 'District code';
+            }
+        }
+        
+        // Nhận diện linh hoạt cho KPI 5G (Hỗ trợ cả tên cột viết tắt và tên tiếng Anh đầy đủ)
+        if (networkType === 'kpi_5g') {
+            if (headersInFile.includes('A User Uplink Average Throughput')) {
+                requiredHeaders['kpi_5g'][2] = 'A User Uplink Average Throughput';
+            } else if (headersInFile.includes('USER_UL_AVG_THROUGHPUT')) {
+                requiredHeaders['kpi_5g'][2] = 'USER_UL_AVG_THROUGHPUT';
             }
         }
 
@@ -196,9 +206,35 @@ exports.handleImportData = async (req, res) => {
                 null
             ]);
         } else if (networkType === 'kpi_5g') {
+            // Hỗ trợ cả 2 định dạng cột của PMS (Tiếng anh đầy đủ hoặc Viết tắt) bằng toán tử ||
             sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
             values = data.map(row => [
-                row['Nhà cung cấp'], row['Tỉnh'], row['Tên GNODEB'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['GNODEB_ID'], row['CELL_ID'], row['Thời gian'], row['USER_UL_AVG_THROUGHPUT'], row['CQI_5G'], row['INTRA_SGNB_PS_CHANGE'], row['USER_AVG_NUMBER'], row['DLINK_RES_BLK_ULT'], row['ULINK_RES_BLK_ULT'], row['CELL_AVAIBILITY_RATE'], row['USER_MAX_NUMBER'], row['UL_TRAFFIC_VOLUME'], row['DL_TRAFFIC_VOLUME'], row['CELL_UL_AVG_THROUGHPUT'], row['CELL_DL_AVG_THROUGHPUT'], row['SGNB_ABN_RELEASE_RATE'], row['SGNB_ADD_SUCCESS_RATE'], row['USER_DL_AVG_THROUGHPUT'], row['TRAFFIC'], row['INTER_SGNB_PS_CHANGE']
+                row['Nhà cung cấp'], 
+                row['Tỉnh'], 
+                row['Tên GNODEB'], 
+                row['Tên CELL'], 
+                row['Mã VNP'], 
+                row['Loại NE'], 
+                row['GNODEB_ID'] || row['GNODEB ID'], 
+                row['CELL_ID'] || row['CELL ID'], 
+                row['Thời gian'], 
+                row['A User Uplink Average Throughput'] || row['USER_UL_AVG_THROUGHPUT'], 
+                row['CQI_5G'], 
+                row['Intra-SgNB PScell Change'] || row['INTRA_SGNB_PS_CHANGE'], 
+                row['Average User Number'] || row['USER_AVG_NUMBER'], 
+                row['Downlink Resource Block Ultilization'] || row['DLINK_RES_BLK_ULT'], 
+                row['Uplink Resource Block Ultilization'] || row['ULINK_RES_BLK_ULT'], 
+                row['Cell avaibility rate'] || row['CELL_AVAIBILITY_RATE'], 
+                row['Maximum User Number'] || row['USER_MAX_NUMBER'], 
+                row['UL Traffic Volume (GB)'] || row['UL_TRAFFIC_VOLUME'], 
+                row['DL Traffic Volume (GB)'] || row['DL_TRAFFIC_VOLUME'], 
+                row['Cell Uplink Average Throughput'] || row['CELL_UL_AVG_THROUGHPUT'], 
+                row['Cell Downlink Average Throughput'] || row['CELL_DL_AVG_THROUGHPUT'], 
+                row['SgNB Abnormal Release Rate'] || row['SGNB_ABN_RELEASE_RATE'], 
+                row['SgNB Addition Success Rate'] || row['SGNB_ADD_SUCCESS_RATE'], 
+                row['A User Downlink Average Throughput'] || row['USER_DL_AVG_THROUGHPUT'], 
+                row['Total Data Traffic Volume (GB)'] || row['TRAFFIC'], 
+                row['Inter-SgNB PScell Change'] || row['INTER_SGNB_PS_CHANGE']
             ]);
         }
 
