@@ -7,7 +7,6 @@
         </header>
         <div class="content-body">
             
-            <!-- Khung tìm kiếm Cell -->
             <div class="card" style="margin-bottom: 20px;">
                 <form id="kpiSearchForm" style="display: flex; gap: 15px; align-items: flex-end;">
                     <div class="form-group" style="margin-bottom: 0;">
@@ -35,25 +34,27 @@
     </main>
 </div>
 
-<!-- Nhúng Script thông qua Javascript để chống lỗi Chat tự động gán Link làm hỏng code -->
+<!-- KỸ THUẬT NHÚNG AN TOÀN: Đảm bảo đường link Chart.js không bị hỏng bởi bất kỳ công cụ Chat nào -->
 <script>
-    const script = document.createElement('script');
-    script.src = 'https://' + 'cdn.jsdelivr.net/npm/chart.js';
-    document.head.appendChild(script);
+    document.write('<script src="[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)"><\/script>');
 </script>
 
 <script>
+    // Hàm này chuyển đổi chuỗi ngày DD/MM/YYYY thành Timestamp để sắp xếp chính xác
     function parseDateStr(dateStr) {
-        if (!dateStr) return new Date(0);
-        
+        if (!dateStr) return 0;
         const str = String(dateStr).trim();
+        
+        // Nhận diện chuẩn DD/MM/YYYY
         if (str.includes('/')) {
-            const parts = str.split(' ')[0].split('/'); 
+            const datePart = str.split(' ')[0]; // Bỏ qua giờ phút nếu có
+            const parts = datePart.split('/'); 
             if (parts.length === 3) {
-                return new Date(parts[2], parts[1] - 1, parts[0]);
+                // Ép kiểu: Năm, Tháng (0-11), Ngày
+                return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
             }
         }
-        return new Date(str);
+        return new Date(str).getTime();
     }
 
     document.getElementById('kpiSearchForm').addEventListener('submit', async function(e) {
@@ -75,9 +76,9 @@
             if (typeof Chart === 'undefined') {
                 statusMsg.style.color = 'orange';
                 statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
-                await new Promise(r => setTimeout(r, 800)); // Đợi 0.8 giây
+                await new Promise(r => setTimeout(r, 800)); 
                 if (typeof Chart === 'undefined') {
-                    throw new Error("Không thể tải thư viện Chart.js từ mạng. Vui lòng kiểm tra lại kết nối internet.");
+                    throw new Error("Không thể tải thư viện Chart.js. Vui lòng kiểm tra kết nối internet.");
                 }
             }
 
@@ -99,8 +100,10 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
+            // THUẬT TOÁN SẮP XẾP: Tuần tự theo ngày tháng chuẩn xác
             data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
+            // Map ra các nhãn thời gian từ mảng data ĐÃ ĐƯỢC SẮP XẾP
             const labels = data.map(row => String(row.Thoi_gian || 'N/A'));
 
             let chartConfigs = [];
@@ -127,6 +130,7 @@
             }
 
             chartConfigs.forEach((cfg) => {
+                // Map ra dữ liệu KPI từ mảng data ĐÃ ĐƯỢC SẮP XẾP (Đảm bảo 100% khớp với nhãn thời gian trục X)
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
                 const chartWrapper = document.createElement('div');
