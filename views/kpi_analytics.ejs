@@ -27,14 +27,25 @@
             </div>
 
             <div id="chartsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px;">
-                <!-- HTML của các biểu đồ sẽ được inject bằng Javascript ở đây -->
+                <!-- HTML của các biểu đồ sẽ được tự động chèn vào đây -->
             </div>
 
         </div>
     </main>
 </div>
 
-<!-- KỸ THUẬT NHÚNG AN TOÀN: Ghép chuỗi thủ công để 100% chống hệ thống Chat tự động tạo link làm hỏng code -->
+<!-- MODAL POPUP PHÓNG TO BIỂU ĐỒ KHI CLICK -->
+<div id="chartModal" style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.85); backdrop-filter: blur(4px);">
+    <div style="background-color:#fff; margin: 3% auto; padding: 25px; width: 90%; max-width: 1200px; border-radius: 12px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+        <span id="closeModal" style="position:absolute; right:20px; top:15px; color:#555; font-size:32px; font-weight:bold; cursor:pointer; line-height:1;">&times;</span>
+        <h2 id="modalTitle" style="text-align:center; margin-top:0; margin-bottom:20px; color:#2c3e50;">Chi Tiết Biểu Đồ</h2>
+        <div style="width:100%; height:70vh; position:relative;">
+            <canvas id="modalCanvas"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- KỸ THUẬT NHÚNG AN TOÀN: Ghép chuỗi thủ công để chống Chat tự động tạo link làm hỏng code -->
 <script>
     (function() {
         var scriptTag = document.createElement('script');
@@ -47,22 +58,62 @@
 </script>
 
 <script>
-    // Hàm này chuyển đổi chuỗi ngày DD/MM/YYYY thành Timestamp để sắp xếp chính xác
+    // Hàm Parse ngày siêu cấp cứu cánh: Xử lý mọi loại dị bản để có Timestamp chuẩn xếp thứ tự
     function parseDateStr(dateStr) {
         if (!dateStr) return 0;
-        const str = String(dateStr).trim();
+        let str = String(dateStr).trim();
         
+        // Cắt bỏ phần giờ phút nếu bị dính (VD: 05/01/2026 10:00 -> 05/01/2026)
+        if (str.includes(' ')) {
+            str = str.split(' ')[0];
+        }
+
         // Nhận diện chuẩn DD/MM/YYYY
         if (str.includes('/')) {
-            const datePart = str.split(' ')[0]; // Bỏ qua giờ phút nếu có
-            const parts = datePart.split('/'); 
+            const parts = str.split('/'); 
             if (parts.length === 3) {
                 // Ép kiểu: Năm, Tháng (0-11), Ngày
                 return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
             }
         }
-        return new Date(str).getTime();
+        
+        // Nhận diện YYYY-MM-DD
+        if (str.includes('-')) {
+            const parsed = new Date(str).getTime();
+            if (!isNaN(parsed)) return parsed;
+        }
+
+        const fallback = new Date(str).getTime();
+        return isNaN(fallback) ? 0 : fallback;
     }
+
+    // Hàm chuẩn hóa chuỗi X-axis cho đẹp và đồng nhất (DD/MM/YYYY)
+    function formatDateLabel(dateStr) {
+        if (!dateStr) return 'N/A';
+        let str = String(dateStr).trim();
+        if (str.includes(' ')) str = str.split(' ')[0];
+        if (str.includes('/')) return str; // Đã là DD/MM/YYYY thì giữ nguyên
+        
+        // Nếu là Date string hoặc ISO
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+        return str;
+    }
+
+    // Đóng Popup khi ấn X hoặc click ra bên ngoài
+    document.getElementById('closeModal').onclick = function() {
+        document.getElementById('chartModal').style.display = 'none';
+    };
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('chartModal')) {
+            document.getElementById('chartModal').style.display = 'none';
+        }
+    };
 
     document.getElementById('kpiSearchForm').addEventListener('submit', async function(e) {
         e.preventDefault(); 
@@ -79,7 +130,7 @@
         chartsContainer.innerHTML = '';
 
         try {
-            // Chờ cho thư viện Chart.js tải xong trước khi vẽ biểu đồ (Tăng thời gian lên 1.5 giây)
+            // Đảm bảo Chart.js đã được tải
             if (typeof Chart === 'undefined') {
                 statusMsg.style.color = 'orange';
                 statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
@@ -107,11 +158,11 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // THUẬT TOÁN SẮP XẾP: Tuần tự theo ngày tháng chuẩn xác
+            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC: Tuần tự từ cũ đến mới dựa trên Timestamp đã bóc tách
             data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
-            // Map ra các nhãn thời gian từ mảng data ĐÃ ĐƯỢC SẮP XẾP
-            const labels = data.map(row => String(row.Thoi_gian || 'N/A'));
+            // Map nhãn trục X (Đã được chuẩn hóa DD/MM/YYYY)
+            const labels = data.map(row => formatDateLabel(row.Thoi_gian));
 
             let chartConfigs = [];
             if (network === '3g') {
@@ -137,13 +188,26 @@
             }
 
             chartConfigs.forEach((cfg) => {
-                // Map ra dữ liệu KPI từ mảng data ĐÃ ĐƯỢC SẮP XẾP (Đảm bảo 100% khớp với nhãn thời gian trục X)
+                // Trích xuất các chỉ số theo đúng trục thời gian
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
                 const chartWrapper = document.createElement('div');
                 chartWrapper.className = 'card';
                 chartWrapper.style.padding = '15px';
+                chartWrapper.style.cursor = 'pointer';
+                chartWrapper.style.transition = 'transform 0.2s, box-shadow 0.2s';
+                chartWrapper.title = "Click để phóng to biểu đồ này";
                 
+                // Hiệu ứng Hover khi trỏ chuột
+                chartWrapper.onmouseover = function() {
+                    this.style.transform = 'scale(1.02)';
+                    this.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
+                };
+                chartWrapper.onmouseout = function() {
+                    this.style.transform = 'scale(1)';
+                    this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)'; // Box shadow chuẩn của Card
+                };
+
                 const chartTitle = document.createElement('h3');
                 chartTitle.textContent = cfg.title;
                 chartTitle.style.textAlign = 'center';
@@ -156,6 +220,7 @@
                 chartWrapper.appendChild(canvas);
                 chartsContainer.appendChild(chartWrapper);
 
+                // Khởi tạo Chart dạng nhỏ
                 new Chart(canvas, {
                     type: 'line',
                     data: {
@@ -178,6 +243,55 @@
                         scales: { y: { beginAtZero: true } }
                     }
                 });
+
+                // LOGIC PHÓNG TO POPUP KHI CLICK VÀO BIỂU ĐỒ NÀY
+                chartWrapper.onclick = function() {
+                    document.getElementById('chartModal').style.display = 'block';
+                    document.getElementById('modalTitle').textContent = cfg.title + " (" + cellName + ")";
+                    
+                    // Xóa instance cũ của Popup Chart nếu có để không bị đè dữ liệu
+                    if (window.modalChartInstance) {
+                        window.modalChartInstance.destroy();
+                    }
+                    
+                    const ctx = document.getElementById('modalCanvas').getContext('2d');
+                    window.modalChartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: cfg.title,
+                                data: dataPoints,
+                                borderColor: cfg.color,
+                                backgroundColor: cfg.color + '33',
+                                borderWidth: 3,
+                                fill: true,
+                                tension: 0.3,
+                                pointBackgroundColor: cfg.color,
+                                pointRadius: 6,
+                                pointHoverRadius: 9
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false, // Phóng to thả ga full container
+                            plugins: { 
+                                legend: { display: false },
+                                tooltip: {
+                                    mode: 'index',
+                                    intersect: false,
+                                    titleFont: { size: 14 },
+                                    bodyFont: { size: 14 },
+                                    padding: 10
+                                }
+                            },
+                            scales: { 
+                                y: { beginAtZero: true, ticks: { font: { size: 14 } } },
+                                x: { ticks: { font: { size: 13 } } }
+                            }
+                        }
+                    });
+                };
             });
 
         } catch (error) {
