@@ -58,52 +58,30 @@
 </script>
 
 <script>
-    // Hàm Parse ngày siêu cấp cứu cánh: Xử lý mọi loại dị bản để có Timestamp chuẩn xếp thứ tự
+    // Hàm Parse ngày siêu cấp cứu cánh: Lọc sạch mọi rác bằng Regex để lấy đúng Timestamp
     function parseDateStr(dateStr) {
         if (!dateStr) return 0;
-        // Bóc tách toàn bộ dấu ngoặc kép rác và khoảng trắng thừa nếu có
-        let str = String(dateStr).trim().replace(/["']/g, '');
-        
-        // Cắt bỏ phần giờ phút nếu bị dính (VD: 05/01/2026 10:00 -> 05/01/2026)
-        if (str.includes(' ')) {
-            str = str.split(' ')[0];
+        const matches = String(dateStr).match(/\d+/g);
+        if (matches && matches.length >= 3) {
+            let year = matches[0].length === 4 ? matches[0] : matches[2];
+            let month = matches[1];
+            let day = matches[0].length === 4 ? matches[2] : matches[0];
+            return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
         }
-
-        // Nhận diện chuẩn DD/MM/YYYY
-        if (str.includes('/')) {
-            const parts = str.split('/'); 
-            if (parts.length === 3) {
-                // Ép kiểu: Năm, Tháng (0-11), Ngày
-                return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
-            }
-        }
-        
-        // Nhận diện YYYY-MM-DD
-        if (str.includes('-')) {
-            const parsed = new Date(str).getTime();
-            if (!isNaN(parsed)) return parsed;
-        }
-
-        const fallback = new Date(str).getTime();
-        return isNaN(fallback) ? 0 : fallback;
+        return 0;
     }
 
     // Hàm chuẩn hóa chuỗi X-axis cho đẹp và đồng nhất (DD/MM/YYYY)
     function formatDateLabel(dateStr) {
         if (!dateStr) return 'N/A';
-        let str = String(dateStr).trim().replace(/["']/g, '');
-        if (str.includes(' ')) str = str.split(' ')[0];
-        if (str.includes('/')) return str; // Đã là DD/MM/YYYY thì giữ nguyên
-        
-        // Nếu là Date string hoặc ISO
-        const d = new Date(str);
-        if (!isNaN(d.getTime())) {
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            return `${day}/${month}/${year}`;
+        const matches = String(dateStr).match(/\d+/g);
+        if (matches && matches.length >= 3) {
+            let year = matches[0].length === 4 ? matches[0] : matches[2];
+            let month = matches[1];
+            let day = matches[0].length === 4 ? matches[2] : matches[0];
+            return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
         }
-        return str;
+        return String(dateStr).trim();
     }
 
     // Đóng Popup khi ấn X hoặc click ra bên ngoài
@@ -159,7 +137,7 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC TĂNG DẦN: Tuần tự từ cũ đến mới dựa trên Timestamp đã bóc tách
+            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC TĂNG DẦN: (a - b) Tuần tự từ cũ đến mới dựa trên Timestamp đã bóc tách
             data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
             // Map nhãn trục X (Đã được chuẩn hóa DD/MM/YYYY)
