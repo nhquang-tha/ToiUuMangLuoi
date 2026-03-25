@@ -1,6 +1,36 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
+// Hàm hỗ trợ: Lấy lịch sử các ngày đã import KPI
+async function getKpiHistory() {
+    try {
+        const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
+        const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
+        const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
+
+        // Hàm parse ngày DD/MM/YYYY để sắp xếp
+        const parseDate = (d) => {
+            if(!d) return 0;
+            const parts = d.split('/');
+            return new Date(parts[2], parts[1]-1, parts[0]).getTime();
+        };
+
+        const sortDates = (rows) => rows
+            .map(r => r.Thoi_gian)
+            .filter(Boolean)
+            .sort((a, b) => parseDate(b) - parseDate(a)); // Mới nhất xếp trước
+
+        return {
+            kpi3g: sortDates(rows3g),
+            kpi4g: sortDates(rows4g),
+            kpi5g: sortDates(rows5g)
+        };
+    } catch (e) {
+        console.error("Lỗi lấy lịch sử KPI:", e);
+        return { kpi3g: [], kpi4g: [], kpi5g: [] };
+    }
+}
+
 exports.renderPage = (pageName) => {
     return async (req, res) => {
         try { res.render('dashboard', { title: pageName, page: pageName }); } 
@@ -8,14 +38,19 @@ exports.renderPage = (pageName) => {
     };
 };
 
-exports.getImportPage = (req, res) => {
-    res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null });
+exports.getImportPage = async (req, res) => {
+    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
+    const history = await getKpiHistory(); // Lấy lịch sử data
+    res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole, history: history });
 };
 
 exports.handleImportData = async (req, res) => {
+    const userRole = req.session && req.session.user ? req.session.user.role : 'user';
+    let history = await getKpiHistory(); // Lấy sẵn lịch sử để render lại khi có lỗi
+
     try {
         if (!req.file) {
-            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!' });
+            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'Vui lòng chọn một file!', userRole: userRole, history: history });
         }
 
         const networkType = req.body.networkType;
@@ -30,7 +65,7 @@ exports.handleImportData = async (req, res) => {
         }
 
         if (data.length === 0) {
-            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!' });
+            return res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: 'File rỗng hoặc không đúng định dạng!', userRole: userRole, history: history });
         }
 
         // ===================== CHUẨN HÓA DỮ LIỆU THỜI GIAN =====================
@@ -74,7 +109,7 @@ exports.handleImportData = async (req, res) => {
         
         if (!isValidFile) {
             return res.render('import_data', { 
-                title: 'Import Data', page: 'Import Data', message: null,
+                title: 'Import Data', page: 'Import Data', message: null, userRole: userRole, history: history,
                 error: `⚠️ PHÁT HIỆN SAI FILE! Bạn đang chọn import vào bảng ${networkType.toUpperCase()} nhưng cấu trúc file tải lên không chứa các cột đặc trưng của mạng này (Yêu cầu phải có: ${expectedHeaders.join(', ')}). Vui lòng chọn đúng file.` 
             });
         }
@@ -93,7 +128,7 @@ exports.handleImportData = async (req, res) => {
         let sql = '';
         let values = [];
 
-        // MAPPING DỮ LIỆU BẢNG RF
+        // MAPPING DỮ LIỆU BẢNG RF (Code cũ giữ nguyên)
         if (networkType === 'rf_3g') {
             sql = `INSERT INTO rf_3g (CSHT_code, CELL_NAME, Cell_code, Site_code, Latitude, Longitude, Equipment, Frenquency, PSC, DL_UARFCN, BSC_LAC, CI, Anten_height, Azimuth, M_T, E_T, Total_tilt, Hang_SX, Antena, Swap, Start_day, Ghi_chu) VALUES ?`;
             values = data.map(row => [
@@ -168,16 +203,19 @@ exports.handleImportData = async (req, res) => {
         }
 
         await db.query(sql, [values]);
+        
+        // Sau khi Insert thành công, load lại lịch sử mới nhất
+        history = await getKpiHistory();
 
         res.render('import_data', { 
-            title: 'Import Data', page: 'Import Data', 
+            title: 'Import Data', page: 'Import Data', userRole: userRole, history: history,
             message: `Import thành công ${values.length} dòng vào cơ sở dữ liệu ${networkType.toUpperCase()}!`, error: null 
         });
 
     } catch (error) {
         console.error("Lỗi khi import file:", error);
         res.render('import_data', { 
-            title: 'Import Data', page: 'Import Data', message: null, 
+            title: 'Import Data', page: 'Import Data', message: null, userRole: userRole, history: history,
             error: 'Có lỗi xảy ra trong quá trình xử lý. (File lỗi, thiếu cột, hoặc định dạng không hỗ trợ).' 
         });
     }
