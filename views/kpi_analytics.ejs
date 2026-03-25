@@ -34,9 +34,16 @@
     </main>
 </div>
 
-<!-- KỸ THUẬT NHÚNG AN TOÀN: Đảm bảo đường link Chart.js không bị hỏng bởi bất kỳ công cụ Chat nào -->
+<!-- KỸ THUẬT NHÚNG AN TOÀN: Ghép chuỗi thủ công để 100% chống hệ thống Chat tự động tạo link làm hỏng code -->
 <script>
-    document.write('<script src="[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)"><\/script>');
+    (function() {
+        var scriptTag = document.createElement('script');
+        var p1 = 'https://';
+        var p2 = 'cdn.jsdelivr.net';
+        var p3 = '/npm/chart.js';
+        scriptTag.src = p1 + p2 + p3;
+        document.head.appendChild(scriptTag);
+    })();
 </script>
 
 <script>
@@ -72,11 +79,11 @@
         chartsContainer.innerHTML = '';
 
         try {
-            // Chờ cho thư viện Chart.js tải xong trước khi vẽ biểu đồ
+            // Chờ cho thư viện Chart.js tải xong trước khi vẽ biểu đồ (Tăng thời gian lên 1.5 giây)
             if (typeof Chart === 'undefined') {
                 statusMsg.style.color = 'orange';
                 statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
-                await new Promise(r => setTimeout(r, 800)); 
+                await new Promise(r => setTimeout(r, 1500)); 
                 if (typeof Chart === 'undefined') {
                     throw new Error("Không thể tải thư viện Chart.js. Vui lòng kiểm tra kết nối internet.");
                 }
