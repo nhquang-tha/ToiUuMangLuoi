@@ -45,7 +45,7 @@
     </div>
 </div>
 
-<!-- KỸ THUẬT NHÚNG AN TOÀN: Ghép chuỗi thủ công để chống Chat tự động tạo link làm hỏng code -->
+<!-- KỸ THUẬT NHÚNG AN TOÀN -->
 <script>
     (function() {
         var scriptTag = document.createElement('script');
@@ -58,30 +58,17 @@
 </script>
 
 <script>
-    // Hàm Parse ngày siêu cấp cứu cánh: Lọc sạch mọi rác bằng Regex để lấy đúng Timestamp
+    // Hàm Parse ngày siêu cấp cứu cánh: Lọc sạch mọi rác để lấy đúng Timestamp
     function parseDateStr(dateStr) {
         if (!dateStr) return 0;
-        const matches = String(dateStr).match(/\d+/g);
-        if (matches && matches.length >= 3) {
-            let year = matches[0].length === 4 ? matches[0] : matches[2];
-            let month = matches[1];
-            let day = matches[0].length === 4 ? matches[2] : matches[0];
-            return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+        // Quét chuỗi, xóa sạch mọi thứ, CHỈ GIỮ LẠI SỐ VÀ DẤU /
+        let str = String(dateStr).replace(/[^0-9\/]/g, '');
+        let parts = str.split('/');
+        if (parts.length === 3) {
+            // Ép kiểu: Date(Năm, Tháng(0-11), Ngày)
+            return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
         }
         return 0;
-    }
-
-    // Hàm chuẩn hóa chuỗi X-axis cho đẹp và đồng nhất (DD/MM/YYYY)
-    function formatDateLabel(dateStr) {
-        if (!dateStr) return 'N/A';
-        const matches = String(dateStr).match(/\d+/g);
-        if (matches && matches.length >= 3) {
-            let year = matches[0].length === 4 ? matches[0] : matches[2];
-            let month = matches[1];
-            let day = matches[0].length === 4 ? matches[2] : matches[0];
-            return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
-        }
-        return String(dateStr).trim();
     }
 
     // Đóng Popup khi ấn X hoặc click ra bên ngoài
@@ -137,11 +124,14 @@
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} bản ghi dữ liệu cho Cell: ${cellName}.`;
 
-            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC TĂNG DẦN: (a - b) Tuần tự từ cũ đến mới dựa trên Timestamp đã bóc tách
+            // THUẬT TOÁN SẮP XẾP CHÍNH XÁC TĂNG DẦN: (a - b) Tuần tự từ cũ đến mới
             data.sort((a, b) => parseDateStr(a.Thoi_gian) - parseDateStr(b.Thoi_gian));
 
-            // Map nhãn trục X (Đã được chuẩn hóa DD/MM/YYYY)
-            const labels = data.map(row => formatDateLabel(row.Thoi_gian));
+            // Trích xuất Nhãn trục X sau khi đã lọc sạch rác
+            const labels = data.map(row => {
+                if(!row.Thoi_gian) return '';
+                return String(row.Thoi_gian).replace(/[^0-9\/]/g, '');
+            });
 
             let chartConfigs = [];
             if (network === '3g') {
@@ -184,7 +174,7 @@
                 };
                 chartWrapper.onmouseout = function() {
                     this.style.transform = 'scale(1)';
-                    this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)'; // Box shadow chuẩn của Card
+                    this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)'; 
                 };
 
                 const chartTitle = document.createElement('h3');
@@ -228,7 +218,6 @@
                     document.getElementById('chartModal').style.display = 'block';
                     document.getElementById('modalTitle').textContent = cfg.title + " (" + cellName + ")";
                     
-                    // Xóa instance cũ của Popup Chart nếu có để không bị đè dữ liệu
                     if (window.modalChartInstance) {
                         window.modalChartInstance.destroy();
                     }
@@ -253,7 +242,7 @@
                         },
                         options: {
                             responsive: true,
-                            maintainAspectRatio: false, // Phóng to thả ga full container
+                            maintainAspectRatio: false, 
                             plugins: { 
                                 legend: { display: false },
                                 tooltip: {
