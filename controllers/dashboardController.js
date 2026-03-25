@@ -8,17 +8,30 @@ async function getKpiHistory() {
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
-        // Hàm parse ngày DD/MM/YYYY để sắp xếp
+        // Hàm parse ngày DD/MM/YYYY siêu mạnh (lọc sạch dấu ngoặc kép hoặc khoảng trắng thừa)
         const parseDate = (d) => {
             if(!d) return 0;
-            const parts = d.split('/');
-            return new Date(parts[2], parts[1]-1, parts[0]).getTime();
+            // Làm sạch: bỏ khoảng trắng và các dấu ngoặc kép (") nếu có
+            let str = String(d).trim().replace(/["']/g, '');
+            if (str.includes(' ')) str = str.split(' ')[0]; // Cắt bỏ giờ phút
+            if (str.includes('/')) {
+                const parts = str.split('/');
+                if (parts.length === 3) {
+                    return new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0])).getTime();
+                }
+            }
+            const fallback = new Date(str).getTime();
+            return isNaN(fallback) ? 0 : fallback;
         };
 
+        // Sắp xếp TĂNG DẦN (a - b): Ngày cũ xếp trước, ngày mới xếp sau
         const sortDates = (rows) => rows
-            .map(r => r.Thoi_gian)
+            .map(r => {
+                // Xóa ngoặc kép nếu lỡ lưu vào DB
+                return r.Thoi_gian ? r.Thoi_gian.replace(/["']/g, '').trim() : '';
+            })
             .filter(Boolean)
-            .sort((a, b) => parseDate(b) - parseDate(a)); // Mới nhất xếp trước
+            .sort((a, b) => parseDate(a) - parseDate(b));
 
         return {
             kpi3g: sortDates(rows3g),
@@ -79,7 +92,8 @@ exports.handleImportData = async (req, res) => {
                     let y = dateObj.getFullYear();
                     row['Thời gian'] = `${d}/${m}/${y}`;
                 } else if (typeof t === 'string') {
-                    row['Thời gian'] = t.split(' ')[0].trim();
+                    // Cắt sạch khoảng trắng và dấu ngoặc kép thừa
+                    row['Thời gian'] = t.split(' ')[0].replace(/["']/g, '').trim();
                 }
             }
         });
@@ -138,7 +152,7 @@ exports.handleImportData = async (req, res) => {
         let sql = '';
         let values = [];
 
-        // MAPPING DỮ LIỆU BẢNG RF (Code cũ giữ nguyên)
+        // MAPPING DỮ LIỆU BẢNG RF
         if (networkType === 'rf_3g') {
             sql = `INSERT INTO rf_3g (CSHT_code, CELL_NAME, Cell_code, Site_code, Latitude, Longitude, Equipment, Frenquency, PSC, DL_UARFCN, BSC_LAC, CI, Anten_height, Azimuth, M_T, E_T, Total_tilt, Hang_SX, Antena, Swap, Start_day, Ghi_chu) VALUES ?`;
             values = data.map(row => [
