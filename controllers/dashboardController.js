@@ -206,7 +206,6 @@ exports.handleImportData = async (req, res) => {
                 null
             ]);
         } else if (networkType === 'kpi_5g') {
-            // Hỗ trợ cả 2 định dạng cột của PMS (Tiếng anh đầy đủ hoặc Viết tắt) bằng toán tử ||
             sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
             values = data.map(row => [
                 row['Nhà cung cấp'], 
@@ -240,7 +239,6 @@ exports.handleImportData = async (req, res) => {
 
         await db.query(sql, [values]);
         
-        // Sau khi Insert thành công, load lại lịch sử mới nhất
         history = await getKpiHistory();
 
         res.render('import_data', { 
