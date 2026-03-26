@@ -1,9 +1,15 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// 1. ENGINE: BIẾN CHUỖI DD/MM/YYYY THÀNH SỐ NGUYÊN ĐỂ SẮP XẾP TOÁN HỌC
+// 1. ENGINE: BIẾN CHUỖI DD/MM/YYYY VÀ OBJECT DATE THÀNH SỐ NGUYÊN ĐỂ SẮP XẾP TOÁN HỌC
 function dateToInteger(val) {
     if (!val) return 0;
+    
+    // BẮT LỖI TỪ DATABASE: Nếu DB trả về thẳng Object Date, tính toán trực tiếp!
+    if (val instanceof Date && !isNaN(val)) {
+        return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
+    }
+
     let str = String(val).trim();
     
     // Nếu DB bị lọt định dạng ISO YYYY-MM-DD
@@ -49,7 +55,7 @@ async function getKpiHistory() {
             let nums = rows.map(r => dateToInteger(r.Thoi_gian)).filter(n => n > 0);
             // Bước 2: Dùng Set để lọc trùng lặp
             let uniqueNums = [...new Set(nums)];
-            // Bước 3: Sort toán học từ bé đến lớn
+            // Bước 3: Sort toán học từ bé đến lớn (Tuần tự tuyệt đối)
             uniqueNums.sort((a, b) => a - b);
             // Bước 4: Trả lại định dạng DD/MM/YYYY chuẩn VN
             return uniqueNums.map(n => integerToDDMMYYYY(n));
@@ -109,14 +115,12 @@ exports.handleImportData = async (req, res) => {
                 let t = row['Thời gian'];
                 if (t !== undefined && t !== null) {
                     if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
-                        // Xử lý Serial Date của Excel
                         let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
                         let d = String(dateObj.getDate()).padStart(2, '0');
                         let m = String(dateObj.getMonth() + 1).padStart(2, '0');
                         let y = dateObj.getFullYear();
                         row['Thời gian'] = `${d}/${m}/${y}`;
                     } else {
-                        // Xử lý chuỗi. Dùng engine toán học ép về DD/MM/YYYY chuẩn
                         let num = dateToInteger(t);
                         if (num > 0) {
                             row['Thời gian'] = integerToDDMMYYYY(num);
