@@ -1,9 +1,10 @@
 <%- include('partials/head') %>
 
 <style>
-    #map { width: 100%; height: calc(100vh - 100px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
+    /* Chỉnh map chiếm full màn hình làm việc */
+    #map { width: 100%; height: calc(100vh - 80px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
     
-    /* Thiết kế Popup để chứa Full thông tin RF (Thêm thanh cuộn) */
+    /* Style cho Popup chứa chi tiết RF */
     .rf-popup { max-width: 380px; min-width: 250px; }
     .rf-popup-content { max-height: 300px; overflow-y: auto; padding-right: 5px; }
     .rf-popup table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px;}
@@ -11,47 +12,27 @@
     .rf-popup th { background-color: #f4f6f8; color: #2c3e50; white-space: nowrap; width: 45%;}
     .rf-popup h3 { margin: 0 0 5px 0; color: #2980b9; font-size: 15px; border-bottom: 2px solid #3498db; padding-bottom: 5px;}
     
-    .map-legend { position: absolute; bottom: 30px; right: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2);}
-    .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
-    .legend-color { width: 15px; height: 15px; margin-right: 8px; border-radius: 50%; }
-    
     #map-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-weight: bold; color: #2980b9;}
 
-    /* Style cho Bộ lọc Mạng */
-    .filter-control { position: absolute; top: 15px; right: 50px; z-index: 1000; background: white; padding: 10px 15px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; }
+    /* Custom Style cho các nút điều khiển mới (GPS, Fullscreen) */
+    .leaflet-control-custom { background: #fff; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); }
+    .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
+    .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
+    
+    /* Style cho dropdown filter gắn vào Map */
+    .custom-filter-select { padding: 4px 8px; font-size: 13px; font-weight: bold; border-radius: 4px; border: 2px solid rgba(0,0,0,0.2); box-shadow: 0 1px 5px rgba(0,0,0,0.65); outline: none; cursor: pointer; color: #2c3e50; }
 </style>
 
 <div class="layout">
     <%- include('partials/sidebar') %>
-    <main class="main-content">
+    <main class="main-content" id="mainMapArea">
         <header class="topbar">
             <h1><%= page %></h1>
         </header>
-        <div class="content-body" style="padding-bottom: 0;">
-            <div style="position: relative;">
-                
+        <div class="content-body" style="padding-bottom: 0; padding-top: 10px;">
+            <div style="position: relative;" id="mapWrapper">
                 <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
-                
-                <!-- BỘ LỌC CÔNG NGHỆ CELL -->
-                <div class="filter-control" id="filterPanel" style="display: none;">
-                    <label style="font-weight: bold; font-size: 14px; color: #2c3e50;">Hiển thị Cell:</label>
-                    <select id="networkFilter" style="padding: 6px 12px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer; font-weight: bold; color: #34495e;">
-                        <option value="4G" selected>Chỉ vẽ mạng 4G</option>
-                        <option value="3G">Chỉ vẽ mạng 3G</option>
-                        <option value="5G">Chỉ vẽ mạng 5G</option>
-                        <option value="ALL">Vẽ tất cả (3G + 4G + 5G)</option>
-                    </select>
-                </div>
-
                 <div id="map"></div>
-
-                <!-- Bảng Chú Thích Màu Sắc -->
-                <div class="map-legend">
-                    <strong style="display:block; margin-bottom: 5px; font-size:13px;">Màu sắc công nghệ:</strong>
-                    <div class="legend-item"><div class="legend-color" style="background: #3498db; border: 1px solid #2980b9;"></div><span style="font-size: 12px;">3G Cell</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #9b59b6; border: 1px solid #8e44ad;"></div><span style="font-size: 12px;">4G Cell</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #2ecc71; border: 1px solid #27ae60;"></div><span style="font-size: 12px;">5G Cell</span></div>
-                </div>
             </div>
         </div>
     </main>
@@ -59,13 +40,13 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // 1. CHÈN CSS LEAFLET BẰNG BASE64
+        // 1. TẢI CSS LEAFLET AN TOÀN QUA BASE64
         const cssLink = document.createElement('link');
         cssLink.rel = 'stylesheet';
         cssLink.href = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuY3Nz');
         document.head.appendChild(cssLink);
 
-        // 2. CHÈN JS LEAFLET BẰNG BASE64 VÀ CHỜ TẢI XONG
+        // 2. TẢI JS LEAFLET VÀ CHẠY BẢN ĐỒ
         const jsScript = document.createElement('script');
         jsScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuanM=');
         
@@ -81,7 +62,9 @@
         document.head.appendChild(jsScript);
     });
 
-    // HÀM KHỞI TẠO BẢN ĐỒ CHÍNH
+    // =====================================================================
+    // HÀM KHỞI TẠO BẢN ĐỒ VÀ CÁC THÀNH PHẦN (CHỈ GỌI KHI LEAFLET ĐÃ TẢI XONG)
+    // =====================================================================
     function initGISMap() {
         var map = L.map('map').setView([19.806692, 105.77611], 12); 
 
@@ -102,7 +85,68 @@
         };
         L.control.layers(baseMaps).addTo(map);
 
-        // THUẬT TOÁN VẼ CÁNH QUẠT (SECTOR)
+        // =========================================================
+        // THÊM CÁC NÚT ĐIỀU KHIỂN CUSTOM (FULLSCREEN & GPS & FILTER)
+        // =========================================================
+
+        // 1. Nút Full Screen
+        var fullscreenControl = L.control({position: 'topleft'});
+        fullscreenControl.onAdd = function () {
+            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+            div.innerHTML = '<a href="#" title="Phóng to Toàn màn hình" onclick="toggleFullScreen(); return false;">⛶</a>';
+            return div;
+        };
+        fullscreenControl.addTo(map);
+
+        window.toggleFullScreen = function() {
+            var elem = document.getElementById('mapWrapper');
+            if (!document.fullscreenElement) {
+                elem.requestFullscreen().catch(err => { alert(`Lỗi mở Fullscreen: ${err.message}`); });
+            } else {
+                document.exitFullscreen();
+            }
+        };
+
+        // 2. Nút GPS
+        var gpsControl = L.control({position: 'topleft'});
+        gpsControl.onAdd = function () {
+            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+            div.innerHTML = '<a href="#" title="Định vị trí của bạn" onclick="locateUser(); return false;">📍</a>';
+            return div;
+        };
+        gpsControl.addTo(map);
+
+        var userMarker;
+        window.locateUser = function() {
+            map.locate({setView: true, maxZoom: 16});
+        };
+        map.on('locationfound', function(e) {
+            if (userMarker) { map.removeLayer(userMarker); }
+            userMarker = L.marker(e.latlng).addTo(map).bindPopup("Bạn đang ở đây!").openPopup();
+        });
+        map.on('locationerror', function(e) {
+            alert("Không thể lấy vị trí. Hãy chắc chắn bạn đã cấp quyền Location cho trình duyệt.");
+        });
+
+        // 3. Dropdown Bộ Lọc Công Nghệ (Filter)
+        var filterControl = L.control({position: 'topright'});
+        filterControl.onAdd = function () {
+            var div = L.DomUtil.create('div', 'leaflet-control');
+            div.innerHTML = `
+                <select id="networkFilter" class="custom-filter-select" title="Chọn loại Cell để hiển thị">
+                    <option value="4G" selected>Hiển thị Cell 4G</option>
+                    <option value="3G">Hiển thị Cell 3G</option>
+                    <option value="5G">Hiển thị Cell 5G</option>
+                </select>
+            `;
+            L.DomEvent.disableClickPropagation(div); // Ngăn không cho thao tác chuột bấm xuyên xuống bản đồ
+            return div;
+        };
+        filterControl.addTo(map);
+
+        // =========================================================
+        // THUẬT TOÁN VẼ CÁNH QUẠT LƯỢNG GIÁC
+        // =========================================================
         function createSectorPolygon(lat, lng, azimuth, radiusMeters, beamwidth) {
             var R = 6378137; 
             var center = [lat, lng];
@@ -124,18 +168,16 @@
             return points;
         }
 
-        // Biến lưu trữ dữ liệu tổng và Layer hiện tại
+        // =========================================================
+        // LẤY DỮ LIỆU & RENDER
+        // =========================================================
         var allMapData = [];
-        var sectorLayerGroup = L.layerGroup().addTo(map); // Lớp riêng chứa các quạt
+        var sectorLayerGroup = L.layerGroup().addTo(map);
 
-        // HÀM VẼ LẠI BẢN ĐỒ DỰA THEO FILTER
         function renderMap(filterType) {
-            sectorLayerGroup.clearLayers(); // Xóa sạch quạt cũ trước khi vẽ mới
+            sectorLayerGroup.clearLayers(); 
 
-            var filteredData = allMapData;
-            if (filterType !== 'ALL') {
-                filteredData = allMapData.filter(cell => cell.network === filterType);
-            }
+            var filteredData = allMapData.filter(cell => cell.network === filterType);
 
             filteredData.forEach(cell => {
                 var lat = parseFloat(cell.Latitude);
@@ -144,13 +186,14 @@
                 
                 if(isNaN(lat) || isNaN(lon)) return; 
 
+                // YÊU CẦU MÀU SẮC MỚI: 4G = ĐỎ, 3G = VÀNG, 5G = XANH LÁ
                 var color, fillColor, radius;
-                if (cell.network === '3G') {
-                    color = '#2980b9'; fillColor = '#3498db'; radius = 250;
-                } else if (cell.network === '4G') {
-                    color = '#8e44ad'; fillColor = '#9b59b6'; radius = 200;
-                } else {
-                    color = '#27ae60'; fillColor = '#2ecc71'; radius = 150;
+                if (cell.network === '4G') {
+                    color = '#c0392b'; fillColor = '#e74c3c'; radius = 200; // ĐỎ
+                } else if (cell.network === '3G') {
+                    color = '#f39c12'; fillColor = '#f1c40f'; radius = 250; // VÀNG
+                } else if (cell.network === '5G') {
+                    color = '#27ae60'; fillColor = '#2ecc71'; radius = 150; // XANH LÁ
                 }
 
                 var beamwidth = 65; 
@@ -159,7 +202,7 @@
                     color: color, weight: 1, fillColor: fillColor, fillOpacity: 0.6
                 });
 
-                // TẠO BẢNG HIỂN THỊ ĐỘNG: Lấy sạch mọi dữ liệu trả về theo đúng thứ tự DB
+                // BẢNG THÔNG TIN ĐỘNG: Duyệt qua tất cả Key của Cell
                 var tableRows = '';
                 for (let key in cell) {
                     if (cell.hasOwnProperty(key) && key !== 'network') {
@@ -168,8 +211,6 @@
                         tableRows += `<tr><th>${key}</th><td>${val}</td></tr>`;
                     }
                 }
-
-                let displayTitle = cell.CELL_NAME || cell.SITE_NAME || cell.cell_name || 'Không xác định';
 
                 var popupHtml = `
                     <div class="rf-popup">
@@ -187,12 +228,11 @@
                 sector.on('mouseover', function () { this.setStyle({fillOpacity: 0.9, weight: 2}); });
                 sector.on('mouseout', function () { this.setStyle({fillOpacity: 0.6, weight: 1}); });
 
-                // Thêm sector vào LayerGroup
                 sector.addTo(sectorLayerGroup);
             });
         }
 
-        // TẢI DỮ LIỆU RF MỘT LẦN VÀ BẬT BỘ LỌC
+        // FETCH DATA
         fetch('/api/gis-data')
             .then(res => {
                 if(!res.ok) throw new Error("Lỗi HTTP: " + res.status);
@@ -200,23 +240,21 @@
             })
             .then(data => {
                 document.getElementById('map-loading').style.display = 'none'; 
-                document.getElementById('filterPanel').style.display = 'flex'; // Hiện thanh công cụ chọn Mạng
                 
                 if (!data || data.length === 0) {
                     alert("Chưa có dữ liệu trạm RF trong Database.");
                     return;
                 }
 
-                allMapData = data; // Lưu bộ nhớ cache tại Frontend
+                allMapData = data; 
                 
-                // MẶC ĐỊNH VẼ MÌNH CELL 4G
+                // MẶC ĐỊNH VẼ MÌNH CELL 4G (Vì value của select đang là 4G mặc định)
                 renderMap('4G');
 
-                // Bắt sự kiện khi người dùng chọn Mạng khác
+                // Lắng nghe sự kiện lọc
                 document.getElementById('networkFilter').addEventListener('change', function(e) {
                     renderMap(e.target.value);
                 });
-
             })
             .catch(err => {
                 console.error("Lỗi lấy dữ liệu GIS:", err);
