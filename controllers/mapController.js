@@ -6,8 +6,6 @@ exports.getMapPage = (req, res) => {
 
 exports.getMapData = async (req, res) => {
     try {
-        // Fix cú pháp SQL: SELECT 'Network', tableName.* FROM tableName
-        // Đồng thời lọc thêm điều kiện tọa độ không được là chuỗi rỗng ''
         const q3g = `SELECT '3G' as network, rf_3g.* FROM rf_3g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL AND Latitude != '' AND Longitude != ''`;
         const q4g = `SELECT '4G' as network, rf_4g.* FROM rf_4g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL AND Latitude != '' AND Longitude != ''`;
         const q5g = `SELECT '5G' as network, rf_5g.* FROM rf_5g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL AND Latitude != '' AND Longitude != ''`;
@@ -16,7 +14,6 @@ exports.getMapData = async (req, res) => {
         const [rows4g] = await db.query(q4g);
         const [rows5g] = await db.query(q5g);
 
-        // Nối mảng trả về cho Frontend vẽ
         const allData = [...rows3g, ...rows4g, ...rows5g];
         res.json(allData);
 
