@@ -1,63 +1,41 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// 1. ENGINE CỐT LÕI: ÉP MỌI ĐỊNH DẠNG VỀ SỐ YYYYMMDD ĐỂ SORT
-function parseDateToNumber(val) {
-    if (!val) return 0;
-
-    // A. Nếu DB trả về Object Date gốc
-    if (val instanceof Date && !isNaN(val)) {
-        return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
-    }
-
-    // B. Xử lý chuỗi
-    let str = String(val).trim().replace(/["'\r\n]/g, '');
-
-    // Nếu là dạng chuẩn Việt Nam: DD/MM/YYYY
-    if (str.includes('/')) {
-        let datePart = str.split(' ')[0]; // Bỏ giờ phút
-        let parts = datePart.split('/');
-        if (parts.length === 3) {
-            let d = parseInt(parts[0], 10);
-            let m = parseInt(parts[1], 10);
-            let y = parseInt(parts[2], 10);
-            if (y < 100) y += 2000;
-            if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
-        }
-    }
-
-    // Nếu CSDL trả về chuỗi ISO YYYY-MM-DD
-    if (str.includes('-')) {
-        let datePart = str.split('T')[0].split(' ')[0];
-        let parts = datePart.split('-');
-        if (parts.length === 3) {
-            let y = parseInt(parts[0], 10);
-            let m = parseInt(parts[1], 10);
-            let d = parseInt(parts[2], 10);
-            if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
-        }
-    }
-
-    // Fallback
-    let fb = new Date(str);
-    if (!isNaN(fb)) return (fb.getFullYear() * 10000) + ((fb.getMonth() + 1) * 100) + fb.getDate();
-
-    return 0;
-}
-
-// 2. ENGINE HIỂN THỊ: TỪ SỐ YYYYMMDD TRẢ VỀ CHUỖI DD/MM/YYYY CHUẨN
-function formatDateToDDMMYYYY(val) {
-    let num = parseDateToNumber(val);
-    if (num === 0) return String(val); // Lỗi thì trả về chuỗi gốc
+// =========================================================================
+// BỘ MÁY GIẢI MÃ THỜI GIAN (REGEX ENGINE) - KHÔNG SỢ LỖI DB
+// =========================================================================
+function extractDateInfo(val) {
+    if (!val) return null;
+    let str = String(val);
     
-    let strNum = String(num);
-    let y = strNum.substring(0, 4);
-    let m = strNum.substring(4, 6);
-    let d = strNum.substring(6, 8);
-    return `${d}/${m}/${y}`;
+    // 1. Quét tìm định dạng Việt Nam (DD/MM/YYYY hoặc DD-MM-YYYY)
+    let matchVN = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (matchVN) return { d: parseInt(matchVN[1], 10), m: parseInt(matchVN[2], 10), y: parseInt(matchVN[3], 10) };
+
+    // 2. Quét tìm định dạng ISO Database (YYYY-MM-DD)
+    let matchISO = str.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (matchISO) return { d: parseInt(matchISO[3], 10), m: parseInt(matchISO[2], 10), y: parseInt(matchISO[1], 10) };
+
+    // 3. Quét Object Date nguyên thủy
+    let dObj = new Date(val);
+    if (!isNaN(dObj.getTime())) return { d: dObj.getDate(), m: dObj.getMonth() + 1, y: dObj.getFullYear() };
+
+    return null; // Trả về null nếu hoàn toàn là rác
 }
 
-// LẤY LỊCH SỬ KPI ĐÃ ĐƯỢC LỌC TRÙNG & SẮP XẾP CHUẨN
+function getSortableYYYYMMDD(val) {
+    let info = extractDateInfo(val);
+    if (info) return (info.y * 10000) + (info.m * 100) + info.d; // VD: 20260118
+    return 0; 
+}
+
+function getStandardDDMMYYYY(val) {
+    let info = extractDateInfo(val);
+    if (info) return `${String(info.d).padStart(2, '0')}/${String(info.m).padStart(2, '0')}/${info.y}`;
+    return String(val); // Fallback
+}
+// =========================================================================
+
 async function getKpiHistory() {
     try {
         const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
@@ -65,14 +43,14 @@ async function getKpiHistory() {
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
         const processHistory = (rows) => {
-            // Lấy danh sách số YYYYMMDD hợp lệ
-            let nums = rows.map(r => parseDateToNumber(r.Thoi_gian)).filter(n => n > 0);
-            // Lọc trùng lặp
-            let uniqueNums = [...new Set(nums)];
-            // Sắp xếp số học (Bé đến Lớn)
-            uniqueNums.sort((a, b) => a - b);
-            // Chuyển lại thành chuỗi hiển thị DD/MM/YYYY
-            return uniqueNums.map(num => formatDateToDDMMYYYY(num));
+            let maps = new Map();
+            rows.forEach(r => {
+                let num = getSortableYYYYMMDD(r.Thoi_gian);
+                if (num > 0) maps.set(num, getStandardDDMMYYYY(r.Thoi_gian));
+            });
+            // Sắp xếp các Keys (chính là YYYYMMDD) tăng dần
+            let sortedNums = Array.from(maps.keys()).sort((a, b) => a - b);
+            return sortedNums.map(num => maps.get(num));
         };
 
         return { kpi3g: processHistory(rows3g), kpi4g: processHistory(rows4g), kpi5g: processHistory(rows5g) };
@@ -125,15 +103,15 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // CHUẨN HÓA VÀ LƯU THỜI GIAN THEO FORMAT DD/MM/YYYY CHUẨN
+            // CHUẨN HÓA DỮ LIỆU THỜI GIAN THEO FORMAT DD/MM/YYYY TRƯỚC KHI LƯU
             data.forEach(row => {
                 let t = row['Thời gian'];
                 if (t !== undefined && t !== null) {
                     if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
                         let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
-                        row['Thời gian'] = formatDateToDDMMYYYY(dateObj);
+                        row['Thời gian'] = getStandardDDMMYYYY(dateObj);
                     } else {
-                        row['Thời gian'] = formatDateToDDMMYYYY(t);
+                        row['Thời gian'] = getStandardDDMMYYYY(t);
                     }
                 }
             });
