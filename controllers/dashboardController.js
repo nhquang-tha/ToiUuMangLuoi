@@ -1,42 +1,42 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// 1. ENGINE: BIẾN CHUỖI DD/MM/YYYY VÀ OBJECT DATE THÀNH SỐ NGUYÊN ĐỂ SẮP XẾP TOÁN HỌC
-function dateToInteger(val) {
+// 1. ENGINE TOÁN HỌC: BIẾN CHUỖI VỀ SỐ YYYYMMDD ĐỂ SORT
+function parseDateToSortableInteger(val) {
     if (!val) return 0;
     
-    // BẮT LỖI TỪ DATABASE: Nếu DB trả về thẳng Object Date, tính toán trực tiếp!
-    if (val instanceof Date && !isNaN(val)) {
-        return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
-    }
+    let str = String(val).replace(/["'\r\n]/g, '').trim().split(' ')[0];
 
-    let str = String(val).trim();
-    
-    // Nếu DB bị lọt định dạng ISO YYYY-MM-DD
-    if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
-        let parts = str.split('T')[0].split('-');
-        return parseInt(parts[0], 10) * 10000 + parseInt(parts[1], 10) * 100 + parseInt(parts[2], 10);
-    }
-
-    // Định dạng chuẩn DD/MM/YYYY
-    let cleanStr = str.replace(/[^0-9\/]/g, '');
-    if (cleanStr.includes('/')) {
-        let parts = cleanStr.split('/');
+    // Xử lý chuỗi VN (DD/MM/YYYY)
+    if (str.includes('/')) {
+        let parts = str.split('/');
         if (parts.length === 3) {
-            let y = parseInt(parts[2], 10);
-            if (y < 100) y += 2000;
-            let m = parseInt(parts[1], 10);
             let d = parseInt(parts[0], 10);
-            return (y * 10000) + (m * 100) + d; // Tạo số YYYYMMDD
+            let m = parseInt(parts[1], 10);
+            let y = parseInt(parts[2], 10);
+            
+            // Khắc phục rác nếu file bị lộn format Mỹ (Tháng/Ngày/Năm)
+            if (m > 12 && d <= 12) { let temp = m; m = d; d = temp; }
+            if (y < 100) y += 2000;
+            
+            if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
+        }
+    }
+    
+    // Xử lý ISO DB (YYYY-MM-DD)
+    if (str.includes('-')) {
+        let parts = str.split('T')[0].split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+            return parseInt(parts[0], 10) * 10000 + parseInt(parts[1], 10) * 100 + parseInt(parts[2], 10);
         }
     }
     return 0;
 }
 
-// 2. ENGINE: TỪ SỐ NGUYÊN TRẢ LẠI ĐỊNH DẠNG DD/MM/YYYY ĐỂ HIỂN THỊ
+// 2. ENGINE HIỂN THỊ: TỪ SỐ NGUYÊN TRẢ LẠI DD/MM/YYYY
 function integerToDDMMYYYY(num) {
     if (!num || num === 0) return '';
-    let s = String(num); // VD: 20260118
+    let s = String(num); 
     if (s.length !== 8) return '';
     let y = s.substring(0, 4);
     let m = s.substring(4, 6);
@@ -51,13 +51,13 @@ async function getKpiHistory() {
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
         const processHistory = (rows) => {
-            // Bước 1: Gán hết thành số nguyên để lọc sạch rác
-            let nums = rows.map(r => dateToInteger(r.Thoi_gian)).filter(n => n > 0);
-            // Bước 2: Dùng Set để lọc trùng lặp
-            let uniqueNums = [...new Set(nums)];
-            // Bước 3: Sort toán học từ bé đến lớn (Tuần tự tuyệt đối)
+            // Lọc ra các số YYYYMMDD hợp lệ và xóa trùng lặp
+            let uniqueNums = [...new Set(rows.map(r => parseDateToSortableInteger(r.Thoi_gian)).filter(n => n > 0))];
+            
+            // Sắp xếp TOÁN HỌC từ bé đến lớn
             uniqueNums.sort((a, b) => a - b);
-            // Bước 4: Trả lại định dạng DD/MM/YYYY chuẩn VN
+            
+            // Trả về dạng String
             return uniqueNums.map(n => integerToDDMMYYYY(n));
         };
 
@@ -93,17 +93,16 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
+    // VÒNG LẶP XỬ LÝ NHIỀU FILE
     for (let file of req.files) {
         try {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             
-            let data = [];
-            if (networkType === 'kpi_4g') {
-                data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { range: 1 });
-            } else {
-                data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-            }
+            // QUAN TRỌNG: raw: false ÉP BUỘC thư viện trả về dạng CHỮ chuẩn nguyên gốc, ko cho tự đoán ngày tháng
+            let parseOptions = { raw: false, defval: "" };
+            if (networkType === 'kpi_4g') parseOptions.range = 1;
+            let data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], parseOptions);
 
             if (data.length === 0) {
                 errorLogs.push(`File ${file.originalname} rỗng.`);
@@ -114,16 +113,19 @@ exports.handleImportData = async (req, res) => {
             data.forEach(row => {
                 let t = row['Thời gian'];
                 if (t !== undefined && t !== null) {
-                    if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
+                    if (!isNaN(t) && Number(t) > 30000 && typeof t === 'number') { // Serial Number Excel
                         let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
                         let d = String(dateObj.getDate()).padStart(2, '0');
                         let m = String(dateObj.getMonth() + 1).padStart(2, '0');
                         let y = dateObj.getFullYear();
                         row['Thời gian'] = `${d}/${m}/${y}`;
                     } else {
-                        let num = dateToInteger(t);
+                        // Ép chuỗi text thành định dạng chuẩn nhất bằng Engine Toán học
+                        let num = parseDateToSortableInteger(t);
                         if (num > 0) {
                             row['Thời gian'] = integerToDDMMYYYY(num);
+                        } else {
+                            row['Thời gian'] = String(t).trim();
                         }
                     }
                 }
