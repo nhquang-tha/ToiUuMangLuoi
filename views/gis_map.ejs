@@ -1,5 +1,9 @@
 <%- include('partials/head') %>
 
+<!-- Sử dụng link dạng "//" để lách hệ thống tự động nhận dạng liên kết (Protocol-Relative URL) -->
+<link rel="stylesheet" href="//[unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)" />
+<script src="//[unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)"></script>
+
 <style>
     #map { width: 100%; height: calc(100vh - 100px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
     .rf-popup table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;}
@@ -10,6 +14,8 @@
     .map-legend { position: absolute; bottom: 30px; right: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2);}
     .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
     .legend-color { width: 15px; height: 15px; margin-right: 8px; border-radius: 50%; }
+    
+    #map-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-weight: bold; color: #2980b9;}
 </style>
 
 <div class="layout">
@@ -20,6 +26,7 @@
         </header>
         <div class="content-body" style="padding-bottom: 0;">
             <div style="position: relative;">
+                <div id="map-loading">Đang tải dữ liệu trạm phát sóng...</div>
                 <div id="map"></div>
                 <!-- Bảng Chú Thích Màu Sắc -->
                 <div class="map-legend">
@@ -33,40 +40,22 @@
     </main>
 </div>
 
-<!-- KỸ THUẬT NHÚNG CHỐNG LỖI TỰ ĐỘNG TẠO LINK -->
 <script>
-    // Tải CSS Leaflet an toàn
-    var cssLink = document.createElement('link');
-    cssLink.rel = 'stylesheet';
-    cssLink.href = 'https://' + '[unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)';
-    document.head.appendChild(cssLink);
-
-    // Tải JS Leaflet an toàn
-    var jsScript = document.createElement('script');
-    jsScript.src = 'https://' + '[unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)';
-    
-    // Chỉ khởi tạo bản đồ SAU KHI thư viện Leaflet tải xong
-    jsScript.onload = function() {
-        initGISMap();
-    };
-    document.head.appendChild(jsScript);
-
-    // HÀM KHỞI TẠO BẢN ĐỒ CHÍNH
-    function initGISMap() {
-        // Khởi tạo ở trung tâm Thanh Hóa
+    document.addEventListener('DOMContentLoaded', function() {
+        // HÀM KHỞI TẠO BẢN ĐỒ CHÍNH (Set view mặc định ở Thanh Hóa)
         var map = L.map('map').setView([19.806692, 105.77611], 12); 
 
-        // Nối chuỗi URL để tránh bị Chatbot tự nhận diện và format lỗi
-        var strGoogleSat = 'http://{s}.' + '[google.com/vt/lyrs=s&x=](https://google.com/vt/lyrs=s&x=){x}&y={y}&z={z}';
-        var strGoogleMap = 'http://{s}.' + '[google.com/vt/lyrs=m&x=](https://google.com/vt/lyrs=m&x=){x}&y={y}&z={z}';
-        var strOSM = 'https://{s}.' + 'tile.openstreetmap.org/{z}/{x}/{y}.png';
+        // Khai báo Layers (Dùng Protocol-relative URL để miễn nhiễm với hệ thống chat)
+        var strGoogleSat = '//[mt1.google.com/vt/lyrs=s&x=](https://mt1.google.com/vt/lyrs=s&x=){x}&y={y}&z={z}';
+        var strGoogleMap = '//[mt1.google.com/vt/lyrs=m&x=](https://mt1.google.com/vt/lyrs=m&x=){x}&y={y}&z={z}';
+        var strOSM = '//a.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-        // Tạo các Layers
+        // Tạo các Lớp bản đồ
         var osmLayer = L.tileLayer(strOSM, { maxZoom: 19, attribution: '© OpenStreetMap' });
         var googleSat = L.tileLayer(strGoogleSat, { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google Satellite' });
         var googleStreets = L.tileLayer(strGoogleMap, { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google Map' });
 
-        googleStreets.addTo(map); // Mặc định bật Google Map cơ bản
+        googleStreets.addTo(map); // Bật Google Map Streets mặc định
 
         var baseMaps = {
             "Google Streets (Cơ bản)": googleStreets,
@@ -76,10 +65,10 @@
         L.control.layers(baseMaps).addTo(map);
 
         // =====================================================================
-        // THUẬT TOÁN VẼ CÁNH QUẠT (SECTOR)
+        // THUẬT TOÁN VẼ CÁNH QUẠT (SECTOR) - DÙNG LƯỢNG GIÁC
         // =====================================================================
         function createSectorPolygon(lat, lng, azimuth, radiusMeters, beamwidth) {
-            var R = 6378137; // Bán kính Trái Đất
+            var R = 6378137; // Bán kính Trái Đất (mét)
             var center = [lat, lng];
             var points = [center];
             
@@ -92,7 +81,7 @@
                 var dx = radiusMeters * Math.sin(angleRad);
                 var dy = radiusMeters * Math.cos(angleRad);
                 
-                // Quy đổi sang độ Lat/Lng
+                // Quy đổi độ lệch (mét) sang độ Lat/Lng
                 var dLat = dy / R * (180 / Math.PI);
                 var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
                 
@@ -103,11 +92,18 @@
         }
 
         // =====================================================================
-        // LẤY DỮ LIỆU TỪ API VÀ VẼ LÊN BẢN ĐỒ
+        // LẤY DỮ LIỆU RF TỪ BACKEND VÀ VẼ LÊN BẢN ĐỒ
         // =====================================================================
         fetch('/api/gis-data')
             .then(res => res.json())
             .then(data => {
+                document.getElementById('map-loading').style.display = 'none'; // Ẩn thông báo loading
+                
+                if (!data || data.length === 0) {
+                    alert("Chưa có dữ liệu trạm RF trong Database.");
+                    return;
+                }
+
                 console.log("Đã tải " + data.length + " cells");
                 data.forEach(cell => {
                     var lat = parseFloat(cell.Latitude);
@@ -116,6 +112,7 @@
                     
                     if(isNaN(lat) || isNaN(lon)) return; // Bỏ qua trạm lỗi tọa độ
 
+                    // Cấu hình hiển thị theo Mạng
                     var color, fillColor, radius;
                     if (cell.network === '3G') {
                         color = '#2980b9'; fillColor = '#3498db'; radius = 250;
@@ -126,11 +123,14 @@
                     }
 
                     var beamwidth = 65; // Mở góc mặc định 65 độ
+                    
+                    // Tạo và thêm Polygon cánh quạt vào Bản đồ
                     var sectorPoints = createSectorPolygon(lat, lon, azi, radius, beamwidth);
                     var sector = L.polygon(sectorPoints, {
                         color: color, weight: 1, fillColor: fillColor, fillOpacity: 0.6
                     }).addTo(map);
 
+                    // Template Popup hiển thị dữ liệu DB RF
                     var popupHtml = `
                         <div class="rf-popup">
                             <h3>Trạm ${cell.Site_code} - Mạng ${cell.network}</h3>
@@ -146,11 +146,15 @@
                     `;
                     sector.bindPopup(popupHtml);
                     
-                    // Hiệu ứng Hover
+                    // Hiệu ứng Hover nổi bật
                     sector.on('mouseover', function () { this.setStyle({fillOpacity: 0.9, weight: 2}); });
                     sector.on('mouseout', function () { this.setStyle({fillOpacity: 0.6, weight: 1}); });
                 });
             })
-            .catch(err => console.error("Lỗi lấy dữ liệu GIS:", err));
-    }
+            .catch(err => {
+                console.error("Lỗi lấy dữ liệu GIS:", err);
+                document.getElementById('map-loading').textContent = "Lỗi tải dữ liệu!";
+                document.getElementById('map-loading').style.color = "red";
+            });
+    });
 </script>
