@@ -58,51 +58,48 @@
 </script>
 
 <script>
-    // Ép chuỗi "DD/MM/YYYY" thành số nguyên YYYYMMDD để sort (Bắt chước Python %d/%m/%Y)
-    function dateToNumber(dateStr) {
-        if (!dateStr) return 0;
-        let str = String(dateStr).trim().replace(/["'\r\n]/g, ''); // Cắt sạch rác
-        if (str.includes(' ')) str = str.split(' ')[0]; // Lấy ngày bỏ giờ
-        
-        let parts = str.split('/');
-        if (parts.length === 3) {
-            let d = parseInt(parts[0], 10);
-            let m = parseInt(parts[1], 10);
-            let y = parseInt(parts[2], 10);
-            if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+    // 1. ENGINE CỐT LÕI: ÉP MỌI ĐỊNH DẠNG VỀ SỐ YYYYMMDD ĐỂ SORT
+    function parseDateToNumber(val) {
+        if (!val) return 0;
+        let str = String(val).trim().replace(/["'\r\n]/g, '');
+
+        if (str.includes('/')) {
+            let datePart = str.split(' ')[0]; 
+            let parts = datePart.split('/');
+            if (parts.length === 3) {
+                let d = parseInt(parts[0], 10);
+                let m = parseInt(parts[1], 10);
+                let y = parseInt(parts[2], 10);
                 if (y < 100) y += 2000;
-                return (y * 10000) + (m * 100) + d; // Ví dụ: 20260118
+                if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
             }
         }
-        
-        // Nếu DB bị lọt ISO format: YYYY-MM-DD
+
         if (str.includes('-')) {
-            let parts = str.split('-');
-            if (parts.length === 3 && parts[0].length === 4) {
-                 return (parseInt(parts[0], 10) * 10000) + (parseInt(parts[1], 10) * 100) + parseInt(parts[2], 10);
+            let datePart = str.split('T')[0].split(' ')[0];
+            let parts = datePart.split('-');
+            if (parts.length === 3) {
+                let y = parseInt(parts[0], 10);
+                let m = parseInt(parts[1], 10);
+                let d = parseInt(parts[2], 10);
+                if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
             }
         }
+
+        let fb = new Date(str);
+        if (!isNaN(fb)) return (fb.getFullYear() * 10000) + ((fb.getMonth() + 1) * 100) + fb.getDate();
         return 0;
     }
 
-    function formatPrettyDate(dateStr) {
-        if (!dateStr) return 'N/A';
-        let str = String(dateStr).trim().replace(/["'\r\n]/g, '');
-        if (str.includes(' ')) str = str.split(' ')[0];
-        
-        let parts = str.split('/');
-        if (parts.length === 3) {
-            let y = parts[2].length === 2 ? "20" + parts[2] : parts[2];
-            return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${y}`;
-        }
-        
-        if (str.includes('-')) {
-            let parts = str.split('-');
-            if (parts.length === 3 && parts[0].length === 4) {
-                return `${parts[2].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[0]}`;
-            }
-        }
-        return str;
+    // 2. ENGINE HIỂN THỊ: TỪ SỐ YYYYMMDD TRẢ VỀ CHUỖI DD/MM/YYYY CHUẨN
+    function formatDateToDDMMYYYY(val) {
+        let num = parseDateToNumber(val);
+        if (num === 0) return String(val); 
+        let strNum = String(num);
+        let y = strNum.substring(0, 4);
+        let m = strNum.substring(4, 6);
+        let d = strNum.substring(6, 8);
+        return `${d}/${m}/${y}`;
     }
 
     // Đóng Popup
@@ -154,20 +151,20 @@
                 return;
             }
 
-            // --- BƯỚC 1: XÓA TRÙNG LẶP & GÁN SỐ NGUYÊN SORT ---
+            // --- BƯỚC 1: XÓA TRÙNG LẶP DỰA TRÊN SỐ YYYYMMDD ---
             let uniqueDataMap = new Map();
             rawData.forEach(row => {
-                let sortNum = dateToNumber(row.Thoi_gian);
+                let sortNum = parseDateToNumber(row.Thoi_gian);
                 if(sortNum > 0) {
                     row.sortNum = sortNum;
-                    row.Thoi_gian = formatPrettyDate(row.Thoi_gian); // Ép hiển thị chuẩn
+                    row.Thoi_gian = formatDateToDDMMYYYY(row.Thoi_gian); // Ép hiển thị chuẩn ngay từ đây
                     uniqueDataMap.set(sortNum, row); 
                 }
             });
 
             let data = Array.from(uniqueDataMap.values());
 
-            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN ---
+            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN (Trị số thời gian bé xếp trước, lớn xếp sau) ---
             data.sort((a, b) => a.sortNum - b.sortNum);
 
             statusMsg.style.color = 'green';
