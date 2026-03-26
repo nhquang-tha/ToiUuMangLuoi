@@ -45,7 +45,7 @@
     </div>
 </div>
 
-<!-- KỸ THUẬT NHÚNG AN TOÀN BẰNG NATIVE JS -->
+<!-- KỸ THUẬT NHÚNG AN TOÀN -->
 <script>
     const scriptTag = document.createElement('script');
     scriptTag.src = '[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)';
@@ -54,51 +54,39 @@
 
 <script>
     // =========================================================================
-    // BỘ MÁY ÉP KIỂU NGÀY THÁNG - MÔ PHỎNG PYTHON STRPTIME
+    // ENGINE SẮP XẾP THỜI GIAN TOÁN HỌC - TƯƠNG ĐƯƠNG PYTHON STRPTIME
     // =========================================================================
-    
-    function strictParseDateToNumber(val) {
+    function dateToInteger(val) {
         if (!val) return 0;
+        let str = String(val).trim();
         
-        if (val instanceof Date && !isNaN(val)) {
-            return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
+        // 1. Nếu CSDL bị lọt ISO YYYY-MM-DD
+        if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+            let parts = str.split('T')[0].split('-');
+            return parseInt(parts[0], 10) * 10000 + parseInt(parts[1], 10) * 100 + parseInt(parts[2], 10);
         }
 
-        let str = String(val).replace(/["']/g, '').trim().split(' ')[0]; 
-        
-        if (str.includes('/')) {
-            let parts = str.split('/');
+        // 2. Định dạng chuẩn VN DD/MM/YYYY
+        let cleanStr = str.replace(/[^0-9\/]/g, '');
+        if (cleanStr.includes('/')) {
+            let parts = cleanStr.split('/');
             if (parts.length === 3) {
                 let y = parseInt(parts[2], 10);
                 if (y < 100) y += 2000;
                 let m = parseInt(parts[1], 10);
                 let d = parseInt(parts[0], 10);
-                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
+                return (y * 10000) + (m * 100) + d; // YYYYMMDD
             }
         }
-        
-        if (str.includes('-')) {
-            let parts = str.split('T')[0].split('-');
-            if (parts.length === 3 && parts[0].length === 4) {
-                let y = parseInt(parts[0], 10);
-                let m = parseInt(parts[1], 10);
-                let d = parseInt(parts[2], 10);
-                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
-            }
-        }
-        
         return 0;
     }
 
-    function formatNumberToDDMMYYYY(num) {
-        if (!num || num === 0) return 'N/A';
-        let s = String(num);
-        let y = s.substring(0, 4);
-        let m = s.substring(4, 6);
-        let d = s.substring(6, 8);
-        return `${d}/${m}/${y}`;
+    function integerToDDMMYYYY(num) {
+        if (!num) return '';
+        let s = String(num); // VD: 20260118
+        if (s.length !== 8) return '';
+        return `${s.substring(6,8)}/${s.substring(4,6)}/${s.substring(0,4)}`;
     }
-
     // =========================================================================
 
     // Đóng Popup
@@ -150,26 +138,27 @@
                 return;
             }
 
-            // --- BƯỚC 1: GẮN SỐ NGUYÊN VÀ LỌC TRÙNG LẶP ---
+            // --- BƯỚC 1: XÓA TRÙNG LẶP & ÉP THÀNH SỐ NGUYÊN (DEDUPLICATE & PARSE) ---
             let uniqueDataMap = new Map();
             rawData.forEach(row => {
-                let sortNum = strictParseDateToNumber(row.Thoi_gian);
+                let sortNum = dateToInteger(row.Thoi_gian);
                 if(sortNum > 0) {
-                    row.sort_value = sortNum;
-                    row.display_label = formatNumberToDDMMYYYY(sortNum); 
+                    row._sortNum = sortNum; // Gắn biến ẩn để làm cơ sở sắp xếp
+                    row.Thoi_gian = integerToDDMMYYYY(sortNum); // Ép hiển thị ra chữ
                     uniqueDataMap.set(sortNum, row); 
                 }
             });
 
             let data = Array.from(uniqueDataMap.values());
 
-            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN (Trị số thời gian bé xếp trước, lớn xếp sau) ---
-            data.sort((a, b) => a.sort_value - b.sort_value);
+            // --- BƯỚC 2: SORT TOÁN HỌC (TĂNG DẦN TỪ TRÁI SANG PHẢI TRÊN BIỂU ĐỒ) ---
+            data.sort((a, b) => a._sortNum - b._sortNum);
 
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} ngày dữ liệu duy nhất cho Cell: ${cellName}.`;
 
-            const labels = data.map(row => row.display_label);
+            // Lấy labels đã được sắp xếp 100% chuẩn
+            const labels = data.map(row => row.Thoi_gian);
 
             let chartConfigs = [];
             if (network === '3g') {
@@ -195,6 +184,7 @@
             }
 
             chartConfigs.forEach((cfg) => {
+                // Trích xuất data points (sẽ tương ứng 1-1 với labels)
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
                 const chartWrapper = document.createElement('div');
