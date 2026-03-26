@@ -45,48 +45,60 @@
     </div>
 </div>
 
-<!-- KỸ THUẬT NHÚNG AN TOÀN -->
+<!-- KỸ THUẬT NHÚNG AN TOÀN BẰNG NATIVE JS -->
 <script>
-    (function() {
-        var scriptTag = document.createElement('script');
-        var p1 = 'https://';
-        var p2 = 'cdn.jsdelivr.net';
-        var p3 = '/npm/chart.js';
-        scriptTag.src = p1 + p2 + p3;
-        document.head.appendChild(scriptTag);
-    })();
+    const scriptTag = document.createElement('script');
+    scriptTag.src = '[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)';
+    document.head.appendChild(scriptTag);
 </script>
 
 <script>
     // =========================================================================
-    // BỘ MÁY GIẢI MÃ THỜI GIAN FRONTEND - CHỐNG MỌI LỖI TỪ DATABASE
+    // BỘ MÁY ÉP KIỂU NGÀY THÁNG - MÔ PHỎNG PYTHON STRPTIME
     // =========================================================================
-    function extractDateInfo(val) {
-        if (!val) return null;
-        let str = String(val);
+    
+    function strictParseDateToNumber(val) {
+        if (!val) return 0;
         
-        let matchVN = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-        if (matchVN) return { d: parseInt(matchVN[1], 10), m: parseInt(matchVN[2], 10), y: parseInt(matchVN[3], 10) };
+        if (val instanceof Date && !isNaN(val)) {
+            return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
+        }
 
-        let matchISO = str.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-        if (matchISO) return { d: parseInt(matchISO[3], 10), m: parseInt(matchISO[2], 10), y: parseInt(matchISO[1], 10) };
-
-        let dObj = new Date(val);
-        if (!isNaN(dObj.getTime())) return { d: dObj.getDate(), m: dObj.getMonth() + 1, y: dObj.getFullYear() };
-        return null;
-    }
-
-    function getSortableYYYYMMDD(val) {
-        let info = extractDateInfo(val);
-        if (info) return (info.y * 10000) + (info.m * 100) + info.d;
+        let str = String(val).replace(/["']/g, '').trim().split(' ')[0]; 
+        
+        if (str.includes('/')) {
+            let parts = str.split('/');
+            if (parts.length === 3) {
+                let y = parseInt(parts[2], 10);
+                if (y < 100) y += 2000;
+                let m = parseInt(parts[1], 10);
+                let d = parseInt(parts[0], 10);
+                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
+            }
+        }
+        
+        if (str.includes('-')) {
+            let parts = str.split('T')[0].split('-');
+            if (parts.length === 3 && parts[0].length === 4) {
+                let y = parseInt(parts[0], 10);
+                let m = parseInt(parts[1], 10);
+                let d = parseInt(parts[2], 10);
+                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
+            }
+        }
+        
         return 0;
     }
 
-    function getStandardDDMMYYYY(val) {
-        let info = extractDateInfo(val);
-        if (info) return `${String(info.d).padStart(2, '0')}/${String(info.m).padStart(2, '0')}/${info.y}`;
-        return String(val);
+    function formatNumberToDDMMYYYY(num) {
+        if (!num || num === 0) return 'N/A';
+        let s = String(num);
+        let y = s.substring(0, 4);
+        let m = s.substring(4, 6);
+        let d = s.substring(6, 8);
+        return `${d}/${m}/${y}`;
     }
+
     // =========================================================================
 
     // Đóng Popup
@@ -119,7 +131,7 @@
                 statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
                 await new Promise(r => setTimeout(r, 1500)); 
                 if (typeof Chart === 'undefined') {
-                    throw new Error("Không thể tải thư viện Chart.js. Vui lòng kiểm tra kết nối internet.");
+                    throw new Error("Không thể tải thư viện Chart.js. Vui lòng tải lại trang.");
                 }
             }
 
@@ -138,26 +150,26 @@
                 return;
             }
 
-            // --- BƯỚC 1: XÓA TRÙNG LẶP DỰA TRÊN SỐ YYYYMMDD ---
+            // --- BƯỚC 1: GẮN SỐ NGUYÊN VÀ LỌC TRÙNG LẶP ---
             let uniqueDataMap = new Map();
             rawData.forEach(row => {
-                let sortNum = getSortableYYYYMMDD(row.Thoi_gian);
+                let sortNum = strictParseDateToNumber(row.Thoi_gian);
                 if(sortNum > 0) {
-                    row.sortNum = sortNum;
-                    row.Thoi_gian = getStandardDDMMYYYY(row.Thoi_gian); // Ép hiển thị chuẩn
+                    row.sort_value = sortNum;
+                    row.display_label = formatNumberToDDMMYYYY(sortNum); 
                     uniqueDataMap.set(sortNum, row); 
                 }
             });
 
             let data = Array.from(uniqueDataMap.values());
 
-            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN ---
-            data.sort((a, b) => a.sortNum - b.sortNum);
+            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN (Trị số thời gian bé xếp trước, lớn xếp sau) ---
+            data.sort((a, b) => a.sort_value - b.sort_value);
 
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} ngày dữ liệu duy nhất cho Cell: ${cellName}.`;
 
-            const labels = data.map(row => row.Thoi_gian);
+            const labels = data.map(row => row.display_label);
 
             let chartConfigs = [];
             if (network === '3g') {
