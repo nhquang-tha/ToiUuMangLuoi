@@ -1,0 +1,162 @@
+<%- include('partials/head') %>
+
+<!-- NATIVE LEAFLET CSS CHO BẢN ĐỒ -->
+<link rel="stylesheet" href="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+    #map { width: 100%; height: calc(100vh - 100px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
+    .rf-popup table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;}
+    .rf-popup th, .rf-popup td { border: 1px solid #ddd; padding: 6px; text-align: left;}
+    .rf-popup th { background-color: #f4f6f8; color: #2c3e50;}
+    .rf-popup h3 { margin: 0 0 5px 0; color: #2980b9; font-size: 16px; border-bottom: 2px solid #3498db; padding-bottom: 5px;}
+    
+    .map-legend { position: absolute; bottom: 30px; right: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2);}
+    .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
+    .legend-color { width: 15px; height: 15px; margin-right: 8px; border-radius: 50%; }
+</style>
+
+<div class="layout">
+    <%- include('partials/sidebar') %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1><%= page %></h1>
+        </header>
+        <div class="content-body" style="padding-bottom: 0;">
+            <div style="position: relative;">
+                <div id="map"></div>
+                <!-- Bảng Chú Thích Màu Sắc -->
+                <div class="map-legend">
+                    <strong style="display:block; margin-bottom: 5px; font-size:13px;">Công nghệ:</strong>
+                    <div class="legend-item"><div class="legend-color" style="background: #3498db; border: 1px solid #2980b9;"></div><span style="font-size: 12px;">3G Cell</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #9b59b6; border: 1px solid #8e44ad;"></div><span style="font-size: 12px;">4G Cell</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #2ecc71; border: 1px solid #27ae60;"></div><span style="font-size: 12px;">5G Cell</span></div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- LEAFLET JS -->
+<script src="[https://unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    // KHỞI TẠO BẢN ĐỒ VÀ SET TỌA ĐỘ MẶC ĐỊNH (THANH HÓA)
+    var map = L.map('map').setView([19.806692, 105.77611], 12);
+
+    // CÁC LỚP BẢN ĐỒ (Base Maps)
+    var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    });
+
+    var googleSat = L.tileLayer('http://{s}[.google.com/vt/lyrs=s&x=](https://.google.com/vt/lyrs=s&x=){x}&y={y}&z={z}',{
+        maxZoom: 20,
+        subdomains:['mt0','mt1','mt2','mt3'],
+        attribution: '© Google Satellite'
+    });
+
+    var googleStreets = L.tileLayer('http://{s}[.google.com/vt/lyrs=m&x=](https://.google.com/vt/lyrs=m&x=){x}&y={y}&z={z}',{
+        maxZoom: 20,
+        subdomains:['mt0','mt1','mt2','mt3'],
+        attribution: '© Google Map'
+    });
+
+    // Mặc định dùng Bản đồ đường phố Google
+    googleStreets.addTo(map);
+
+    // Tích hợp Menu chọn Lớp bản đồ ở góc phải
+    var baseMaps = {
+        "Google Streets (Cơ bản)": googleStreets,
+        "Google Satellite (Vệ tinh)": googleSat,
+        "OpenStreetMap": osmLayer
+    };
+    L.control.layers(baseMaps).addTo(map);
+
+    // =====================================================================
+    // THUẬT TOÁN VẼ CÁNH QUẠT (SECTOR/PIE SLICE) CHO CELL
+    // =====================================================================
+    function createSectorPolygon(lat, lng, azimuth, radiusMeters, beamwidth) {
+        var R = 6378137; // Bán kính trái đất tính bằng mét
+        var center = [lat, lng];
+        var points = [center];
+        
+        // Góc mở của cánh quạt
+        var startAngle = azimuth - beamwidth / 2;
+        var endAngle = azimuth + beamwidth / 2;
+
+        // Tính các điểm đường cong viền quạt
+        for (var i = startAngle; i <= endAngle; i += 3) {
+            var angleRad = i * Math.PI / 180;
+            // Tính độ lệch dx, dy bằng mét (Azimuth 0 là hướng Bắc nên sin=dx, cos=dy)
+            var dx = radiusMeters * Math.sin(angleRad);
+            var dy = radiusMeters * Math.cos(angleRad);
+            
+            // Chuyển mét sang độ Kinh/Vĩ
+            var dLat = dy / R * (180 / Math.PI);
+            var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+            
+            points.push([lat + dLat, lng + dLng]);
+        }
+        points.push(center); // Đóng đa giác về tâm
+        return points;
+    }
+
+    // =====================================================================
+    // LẤY DỮ LIỆU TỪ API VÀ VẼ LÊN BẢN ĐỒ
+    // =====================================================================
+    fetch('/api/gis-data')
+        .then(res => res.json())
+        .then(data => {
+            data.forEach(cell => {
+                var lat = parseFloat(cell.Latitude);
+                var lon = parseFloat(cell.Longitude);
+                var azi = parseFloat(cell.Azimuth) || 0;
+                
+                if(isNaN(lat) || isNaN(lon)) return;
+
+                // Cài đặt màu sắc và Bán kính (Độ vươn xa của cánh quạt) theo mạng
+                var color, fillColor, radius;
+                if (cell.network === '3G') {
+                    color = '#2980b9'; fillColor = '#3498db'; radius = 250;
+                } else if (cell.network === '4G') {
+                    color = '#8e44ad'; fillColor = '#9b59b6'; radius = 200;
+                } else {
+                    color = '#27ae60'; fillColor = '#2ecc71'; radius = 150;
+                }
+
+                // Góc mở (Beamwidth) mặc định thường là 65 độ cho an-ten Panel
+                var beamwidth = 65; 
+                
+                // Tạo Polygon dạng cánh quạt
+                var sectorPoints = createSectorPolygon(lat, lon, azi, radius, beamwidth);
+                var sector = L.polygon(sectorPoints, {
+                    color: color,
+                    weight: 1,
+                    fillColor: fillColor,
+                    fillOpacity: 0.6
+                }).addTo(map);
+
+                // THIẾT KẾ POPUP BẢNG THÔNG TIN DATABASE RF KHI CLICK
+                var popupHtml = `
+                    <div class="rf-popup">
+                        <h3>Trạm ${cell.Site_code} - Mạng ${cell.network}</h3>
+                        <table>
+                            <tr><th>Tên Cell</th><td>${cell.cell_name}</td></tr>
+                            <tr><th>Azimuth (Góc)</th><td>${cell.Azimuth}°</td></tr>
+                            <tr><th>Độ cao Anten</th><td>${cell.Anten_height || 'N/A'} m</td></tr>
+                            <tr><th>Total Tilt</th><td>${cell.Total_tilt || 'N/A'}</td></tr>
+                            <tr><th>Equipment</th><td>${cell.Equipment || 'N/A'}</td></tr>
+                            <tr><th>Tọa độ</th><td>${lat.toFixed(5)}, ${lon.toFixed(5)}</td></tr>
+                        </table>
+                    </div>
+                `;
+                sector.bindPopup(popupHtml);
+                
+                // Hiệu ứng khi rê chuột
+                sector.on('mouseover', function (e) { this.setStyle({fillOpacity: 0.9, weight: 2}); });
+                sector.on('mouseout', function (e) { this.setStyle({fillOpacity: 0.6, weight: 1}); });
+            });
+        })
+        .catch(err => console.error("Lỗi vẽ bản đồ: ", err));
+</script>
+</body>
+</html>
