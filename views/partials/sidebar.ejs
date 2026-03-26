@@ -7,6 +7,8 @@
         <li class="nav-group">Báo Cáo & Phân Tích</li>
         <li><a href="/" class="<%= page === 'Dashboard' ? 'active' : '' %>">Dashboard</a></li>
         <li><a href="/kpi-analytics" class="<%= page === 'KPI Analytics' ? 'active' : '' %>">KPI Analytics</a></li>
+        <!-- THÊM MENU BẢN ĐỒ GIS VÀO ĐÂY -->
+        <li><a href="/gis-map" class="<%= page === 'GIS Map' ? 'active' : '' %>">Bản đồ GIS (Map)</a></li>
         <li><a href="/poi-report" class="<%= page === 'POI Report' ? 'active' : '' %>">POI Report</a></li>
         <li><a href="/worst-cells" class="<%= page === 'Worst Cells' ? 'active' : '' %>">Worst Cells</a></li>
         <li><a href="/congestion-3g" class="<%= page === 'Congestion 3G' ? 'active' : '' %>">Congestion 3G</a></li>
@@ -16,18 +18,14 @@
         <li><a href="/rf-database" class="<%= page === 'RF Database' ? 'active' : '' %>">RF Database</a></li>
         <li><a href="/scrip" class="<%= page === 'Scrip' ? 'active' : '' %>">Scrip</a></li>
         
-        <!-- Chỉ Admin mới thấy menu Import Data -->
         <% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
             <li><a href="/import-data" class="<%= page === 'Import Data' ? 'active' : '' %>">Import Data (Admin)</a></li>
         <% } %>
 
         <li class="nav-group" style="margin-top: 15px;">Hệ Thống (System)</li>
-        
-        <!-- Chỉ Admin mới có quyền Quản lý User -->
         <% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
             <li><a href="/system/users" class="<%= page === 'User Manager' ? 'active' : '' %>">User Manager</a></li>
         <% } %>
-        
         <li><a href="/system/profile" class="<%= page === 'Profile' ? 'active' : '' %>">Profile (Đổi Mật Khẩu)</a></li>
         <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
     </ul>
