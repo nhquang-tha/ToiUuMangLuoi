@@ -14,7 +14,6 @@
                 <div class="alert alert-danger"><%= error %></div>
             <% } %>
 
-            <!-- KHU VỰC DÀNH RIÊNG CHO ADMIN: RESET DATABASE KPI -->
             <% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
                 <div class="card" style="margin-bottom: 20px; border-left: 4px solid #e74c3c;">
                     <h4 style="color: #c0392b; margin-top: 0; margin-bottom: 5px;">Khu Vực Admin: Làm Sạch Dữ Liệu KPI</h4>
@@ -34,10 +33,10 @@
             <% } %>
 
             <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                <!-- CỘT TRÁI: FORM UPLOAD -->
+                <!-- CỘT TRÁI: FORM UPLOAD NHIỀU FILE -->
                 <div class="card" style="flex: 1; min-width: 400px; max-width: 500px; height: fit-content;">
                     <h3>Upload Dữ Liệu Tần Số & Hiệu Năng</h3>
-                    <p style="margin-bottom: 20px; color: #666;">Chấp nhận file định dạng .xlsx, .xls, .csv</p>
+                    <p style="margin-bottom: 20px; color: #666;">Chấp nhận file định dạng .xlsx, .xls, .csv. <br><strong>Có thể bôi đen chọn nhiều file cùng lúc để Import.</strong></p>
                     
                     <form action="/import-data" method="POST" enctype="multipart/form-data">
                         <div class="form-group">
@@ -57,23 +56,23 @@
                         </div>
 
                         <div class="form-group" style="margin-top: 15px;">
-                            <label>Chọn File:</label>
+                            <label>Chọn 1 hoặc NHIỀU File:</label>
                             <div style="border: 2px dashed #3498db; padding: 30px 10px; text-align: center; border-radius: 6px; background: #f0f8ff;">
-                                <input type="file" name="dataFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" required>
+                                <!-- Đã thêm thuộc tính MULTIPLE để chọn nhiều file -->
+                                <input type="file" name="dataFiles" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" required multiple>
                             </div>
                         </div>
 
-                        <button type="submit" class="btn-primary" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 15px;">Bắt đầu Import</button>
+                        <button type="submit" class="btn-primary" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 15px;">Bắt đầu Import Dữ Liệu</button>
                     </form>
                 </div>
 
                 <!-- CỘT PHẢI: LỊCH SỬ DỮ LIỆU KPI -->
                 <div class="card" style="flex: 2; min-width: 400px;">
                     <h3>Data History (Lịch sử dữ liệu KPI đã Import)</h3>
-                    <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Hệ thống hiển thị danh sách các ngày hiện đang có dữ liệu trong Database. Nếu Import trùng ngày, hệ thống sẽ tự động xóa bản ghi cũ của ngày đó để ghi đè dữ liệu mới.</p>
+                    <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Hệ thống hiển thị danh sách các ngày hiện đang có dữ liệu trong Database. Được tự động sắp xếp chuẩn tăng dần từ cũ nhất tới mới nhất.</p>
                     
                     <div style="display: flex; flex-direction: column; gap: 15px;">
-                        
                         <!-- Block 3G -->
                         <div style="border: 1px solid #ecf0f1; padding: 15px; border-radius: 6px; background: #fff;">
                             <h4 style="margin-top: 0; color: #2980b9; margin-bottom: 10px; border-bottom: 1px solid #ecf0f1; padding-bottom: 5px;">Dữ Liệu KPI 3G</h4>
@@ -115,7 +114,6 @@
                                 <% } %>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -131,14 +129,9 @@
     .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 13px;}
     .btn-danger:hover { background: #e74c3c; }
     
-    /* Style cho các Tag Lịch sử ngày tháng */
     .date-badge { 
-        padding: 5px 12px; 
-        border-radius: 15px; 
-        font-size: 12px; 
-        font-weight: 600; 
-        display: inline-block;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; 
+        display: inline-block; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .date-3g { background: #e3f2fd; color: #2980b9; border: 1px solid #bce0fd; }
     .date-4g { background: #f4ecf8; color: #8e44ad; border: 1px solid #e1cbed; }
