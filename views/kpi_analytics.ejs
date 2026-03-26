@@ -58,26 +58,25 @@
 </script>
 
 <script>
-    // Hàm Parse ngày: Xóa sạch rác, chỉ giữ số và gạch chéo
-    function convertToTimestamp(dateStr) {
+    // Hàm biến ngày DD/MM/YYYY thành số nguyên YYYYMMDD để so sánh tuyệt đối (18/01/2026 -> 20260118)
+    function getSortableNum(dateStr) {
         if (!dateStr) return 0;
         let str = String(dateStr).replace(/[^0-9\/]/g, '');
-        let parts = str.split('/');
-        if (parts.length === 3) {
-            // Định dạng là DD/MM/YYYY
-            return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+        let p = str.split('/');
+        if (p.length === 3) {
+            let y = p[2];
+            if (y.length === 2) y = "20" + y;
+            return parseInt(y + p[1].padStart(2,'0') + p[0].padStart(2,'0'), 10);
         }
         return 0;
     }
 
-    // Hàm trả về chuỗi hiển thị gọn gàng
+    // Hàm trả về chuỗi hiển thị gọn gàng DD/MM/YYYY
     function formatPrettyDate(dateStr) {
         if (!dateStr) return 'N/A';
         let str = String(dateStr).replace(/[^0-9\/]/g, '');
-        let parts = str.split('/');
-        if (parts.length === 3) {
-            return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[2]}`;
-        }
+        let p = str.split('/');
+        if (p.length === 3) return `${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}/${p[2]}`;
         return str;
     }
 
@@ -131,26 +130,26 @@
                 return;
             }
 
-            // --- BƯỚC 1: LỌC TRÙNG LẶP DỮ LIỆU BẰNG MAP (1 ngày chỉ được lấy 1 bản ghi) ---
+            // --- BƯỚC 1: LỌC TRÙNG LẶP BẰNG MAP ĐỂ CHỐNG LỖI VẼ VÒNG LẶP ---
             let uniqueDataMap = new Map();
             rawData.forEach(row => {
-                let ts = convertToTimestamp(row.Thoi_gian);
-                if(ts > 0) {
+                let sortNum = getSortableNum(row.Thoi_gian);
+                if(sortNum > 0) {
                     let prettyDate = formatPrettyDate(row.Thoi_gian);
-                    uniqueDataMap.set(prettyDate, row); // Ghi đè nếu ngày bị lặp
+                    uniqueDataMap.set(prettyDate, row); 
                 }
             });
 
             // Chuyển Map trở lại thành mảng
             let data = Array.from(uniqueDataMap.values());
 
-            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN THEO TIMESTAMP ---
-            data.sort((a, b) => convertToTimestamp(a.Thoi_gian) - convertToTimestamp(b.Thoi_gian));
+            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN THEO SỐ NGUYÊN ---
+            data.sort((a, b) => getSortableNum(a.Thoi_gian) - getSortableNum(b.Thoi_gian));
 
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} ngày dữ liệu duy nhất cho Cell: ${cellName}.`;
 
-            // Map nhãn trục X (Chắc chắn 100% là unique và tăng dần)
+            // Map nhãn trục X
             const labels = data.map(row => formatPrettyDate(row.Thoi_gian));
 
             let chartConfigs = [];
@@ -177,7 +176,6 @@
             }
 
             chartConfigs.forEach((cfg) => {
-                // Trích xuất các chỉ số tương ứng trục thời gian
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
                 const chartWrapper = document.createElement('div');
@@ -187,7 +185,6 @@
                 chartWrapper.style.transition = 'transform 0.2s, box-shadow 0.2s';
                 chartWrapper.title = "Click để phóng to biểu đồ này";
                 
-                // Hiệu ứng Hover khi trỏ chuột
                 chartWrapper.onmouseover = function() {
                     this.style.transform = 'scale(1.02)';
                     this.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
@@ -209,7 +206,6 @@
                 chartWrapper.appendChild(canvas);
                 chartsContainer.appendChild(chartWrapper);
 
-                // Khởi tạo Chart dạng nhỏ
                 new Chart(canvas, {
                     type: 'line',
                     data: {
@@ -233,7 +229,6 @@
                     }
                 });
 
-                // LOGIC PHÓNG TO POPUP KHI CLICK VÀO BIỂU ĐỒ NÀY
                 chartWrapper.onclick = function() {
                     document.getElementById('chartModal').style.display = 'block';
                     document.getElementById('modalTitle').textContent = cfg.title + " (" + cellName + ")";
