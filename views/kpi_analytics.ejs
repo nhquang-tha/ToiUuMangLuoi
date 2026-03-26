@@ -58,26 +58,54 @@
 </script>
 
 <script>
-    // Hàm biến ngày DD/MM/YYYY thành số nguyên YYYYMMDD để so sánh tuyệt đối (18/01/2026 -> 20260118)
-    function getSortableNum(dateStr) {
-        if (!dateStr) return 0;
-        let str = String(dateStr).replace(/[^0-9\/]/g, '');
-        let p = str.split('/');
-        if (p.length === 3) {
-            let y = p[2];
-            if (y.length === 2) y = "20" + y;
-            return parseInt(y + p[1].padStart(2,'0') + p[0].padStart(2,'0'), 10);
+    // Hàm bóc tách ngày chuẩn nhất, chống lại mọi loại dị bản từ Database (Object Date, ISO String, MM/DD/YYYY, DD/MM/YYYY)
+    function normalizeDate(rawDate) {
+        if (!rawDate) return null;
+        let str = String(rawDate).trim();
+        
+        // 1. Nếu là dạng ISO từ CSDL (2026-01-05T00:00:00)
+        if (str.includes('-')) {
+            let parts = str.split('T')[0].split(' ')[0].split('-');
+            if (parts.length === 3) {
+                return { d: parseInt(parts[2], 10), m: parseInt(parts[1], 10), y: parseInt(parts[0], 10) };
+            }
+        }
+        
+        // 2. Nếu là dạng DD/MM/YYYY chuẩn VN
+        if (str.includes('/')) {
+            let parts = str.split(' ')[0].split('/');
+            if (parts.length === 3) {
+                return { d: parseInt(parts[0], 10), m: parseInt(parts[1], 10), y: parseInt(parts[2], 10) };
+            }
+        }
+        
+        // 3. Fallback dùng hàm Date gốc của trình duyệt
+        let fallback = new Date(str);
+        if (!isNaN(fallback.getTime())) {
+            return { d: fallback.getDate(), m: fallback.getMonth() + 1, y: fallback.getFullYear() };
+        }
+        
+        return null;
+    }
+
+    // Biến thành số nguyên YYYYMMDD để sort cực chính xác
+    function getSortableNum(rawDate) {
+        let p = normalizeDate(rawDate);
+        if (p) {
+            let y = p.y < 100 ? 2000 + p.y : p.y;
+            return (y * 10000) + (p.m * 100) + p.d;
         }
         return 0;
     }
 
-    // Hàm trả về chuỗi hiển thị gọn gàng DD/MM/YYYY
-    function formatPrettyDate(dateStr) {
-        if (!dateStr) return 'N/A';
-        let str = String(dateStr).replace(/[^0-9\/]/g, '');
-        let p = str.split('/');
-        if (p.length === 3) return `${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}/${p[2]}`;
-        return str;
+    // Biến thành chuỗi DD/MM/YYYY để hiển thị
+    function formatPrettyDate(rawDate) {
+        let p = normalizeDate(rawDate);
+        if (p) {
+            let y = p.y < 100 ? 2000 + p.y : p.y;
+            return `${String(p.d).padStart(2,'0')}/${String(p.m).padStart(2,'0')}/${y}`;
+        }
+        return String(rawDate);
     }
 
     // Đóng Popup khi ấn X hoặc click ra bên ngoài
@@ -143,7 +171,7 @@
             // Chuyển Map trở lại thành mảng
             let data = Array.from(uniqueDataMap.values());
 
-            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN THEO SỐ NGUYÊN ---
+            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN THEO SỐ NGUYÊN (VD: 20260105 < 20260118) ---
             data.sort((a, b) => getSortableNum(a.Thoi_gian) - getSortableNum(b.Thoi_gian));
 
             statusMsg.style.color = 'green';
