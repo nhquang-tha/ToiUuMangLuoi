@@ -27,7 +27,7 @@ router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage)
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
 router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
 
-// --- ROUTES CHO IMPORT DATA (Đã sửa thành upload.array hỗ trợ up nhiều file) ---
+// --- ROUTES CHO IMPORT DATA (Hỗ trợ up nhiều file) ---
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
 router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), dashboardController.handleImportData);
 
