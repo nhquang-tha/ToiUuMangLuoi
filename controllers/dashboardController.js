@@ -1,65 +1,85 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// 1. Ép mọi định dạng ngày tháng (Object, ISO, String) thành TIMESTAMP (Miliseconds)
-function parseToTimestamp(rawDate) {
-    if (!rawDate) return 0;
+// 1. CHUYỂN CHUỖI "DD/MM/YYYY" THÀNH SỐ NGUYÊN YYYYMMDD (VD: 20260118) ĐỂ SORT CHUẨN
+function dateToNumber(dateStr) {
+    if (!dateStr) return 0;
+    let str = String(dateStr).trim().replace(/["']/g, ''); // Cắt sạch ngoặc kép
+    if (str.includes(' ')) str = str.split(' ')[0]; // Cắt bỏ giờ phút
     
-    // Nếu là Object Date do TiDB/mysql2 tự parse
-    if (rawDate instanceof Date && !isNaN(rawDate)) {
-        return rawDate.getTime();
+    let parts = str.split('/');
+    if (parts.length === 3) {
+        let d = parseInt(parts[0], 10);
+        let m = parseInt(parts[1], 10);
+        let y = parseInt(parts[2], 10);
+        if (y < 100) y += 2000;
+        // Trả về số nguyên toán học để sort: 2026 * 10000 + 1 * 100 + 18 = 20260118
+        if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
     }
     
-    let str = String(rawDate).trim();
-
-    // Nếu là ISO Format (VD: 2026-01-05T17:00:00.000Z)
-    if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
-        const datePart = str.split('T')[0].split(' ')[0]; // Lấy phần YYYY-MM-DD
-        const [y, m, d] = datePart.split('-');
-        return new Date(y, m - 1, d).getTime();
+    // Xử lý phụ: Nếu lỡ rơi vào ISO YYYY-MM-DD
+    if (str.includes('-')) {
+        let p = str.split('-');
+        if(p.length === 3 && p[0].length === 4) {
+            return (parseInt(p[0], 10) * 10000) + (parseInt(p[1], 10) * 100) + parseInt(p[2], 10);
+        }
     }
+    return 0;
+}
 
-    // Nếu là định dạng DD/MM/YYYY chuẩn Việt Nam
+// 2. CHUẨN HÓA MỌI ĐỊNH DẠNG THÀNH "DD/MM/YYYY" ĐỂ LƯU VÀO DB
+function normalizeToDDMMYYYY(val) {
+    if (val === undefined || val === null) return '';
+    
+    // Nếu là số do Excel trả ra (Serial Date)
+    if (typeof val === 'number' || (!isNaN(val) && Number(val) > 30000)) {
+        let dateObj = new Date(Math.round((Number(val) - 25569) * 86400 * 1000));
+        let d = String(dateObj.getDate()).padStart(2, '0');
+        let m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        let y = dateObj.getFullYear();
+        return `${d}/${m}/${y}`;
+    }
+    
+    // Nếu là chuỗi ký tự
+    let str = String(val).replace(/["']/g, '').trim();
+    if (str.includes(' ')) str = str.split(' ')[0];
+    
     if (str.includes('/')) {
-        const datePart = str.split(' ')[0]; // Cắt bỏ giờ phút
-        const [d, m, y] = datePart.split('/');
-        const fullYear = y.length === 2 ? `20${y}` : y;
-        return new Date(fullYear, m - 1, d).getTime();
+        let parts = str.split('/');
+        if (parts.length === 3) {
+            let d = String(parseInt(parts[0], 10)).padStart(2, '0');
+            let m = String(parseInt(parts[1], 10)).padStart(2, '0');
+            let y = parts[2];
+            if (y.length === 2) y = "20" + y;
+            return `${d}/${m}/${y}`;
+        }
     }
-
-    // Fallback cuối cùng
-    const fallback = new Date(str).getTime();
-    return isNaN(fallback) ? 0 : fallback;
+    
+    if (str.includes('-')) { // YYYY-MM-DD
+        let parts = str.split('-');
+        if(parts.length === 3 && parts[0].length === 4) {
+             return `${String(parseInt(parts[2], 10)).padStart(2,'0')}/${String(parseInt(parts[1], 10)).padStart(2,'0')}/${parts[0]}`;
+        }
+    }
+    return str;
 }
 
-// 2. Chuyển Timestamp chuẩn ngược lại thành chuỗi DD/MM/YYYY để hiển thị
-function formatToDDMMYYYY(timestamp) {
-    if (!timestamp || timestamp === 0) return '';
-    const d = new Date(timestamp);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
-}
-
+// Hàm lấy Lịch sử Date
 async function getKpiHistory() {
     try {
         const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
-        const processHistory = (rows) => {
-            // Bước 1: Biến tất cả thành Timestamp hợp lệ
-            let validTimestamps = rows.map(r => parseToTimestamp(r.Thoi_gian)).filter(ts => ts > 0);
-            // Bước 2: Loại bỏ trùng lặp (Deduplicate)
-            let uniqueTimestamps = [...new Set(validTimestamps)];
-            // Bước 3: Sắp xếp bằng số nguyên (Tăng dần - Ngày cũ xếp trước)
-            uniqueTimestamps.sort((a, b) => a - b);
-            // Bước 4: Chuyển về dạng DD/MM/YYYY để render HTML
-            return uniqueTimestamps.map(ts => formatToDDMMYYYY(ts));
+        const sortDates = (rows) => {
+            // Chuẩn hóa và lọc trùng lặp
+            let uniqueDates = [...new Set(rows.map(r => normalizeToDDMMYYYY(r.Thoi_gian)).filter(Boolean))];
+            // Sắp xếp tăng dần bằng số học
+            uniqueDates.sort((a, b) => dateToNumber(a) - dateToNumber(b));
+            return uniqueDates;
         };
 
-        return { kpi3g: processHistory(rows3g), kpi4g: processHistory(rows4g), kpi5g: processHistory(rows5g) };
+        return { kpi3g: sortDates(rows3g), kpi4g: sortDates(rows4g), kpi5g: sortDates(rows5g) };
     } catch (e) {
         console.error("Lỗi lấy lịch sử KPI:", e);
         return { kpi3g: [], kpi4g: [], kpi5g: [] };
@@ -109,18 +129,9 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // CHUẨN HÓA DỮ LIỆU THỜI GIAN THEO FORMAT DD/MM/YYYY TRƯỚC KHI LƯU
+            // ÉP KIỂU THỜI GIAN VỀ DD/MM/YYYY TRƯỚC KHI LƯU
             data.forEach(row => {
-                let t = row['Thời gian'];
-                if (t !== undefined && t !== null) {
-                    if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
-                        let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
-                        row['Thời gian'] = formatToDDMMYYYY(dateObj.getTime());
-                    } else {
-                        // Ép mọi loại chuỗi ngày tháng dị biệt về DD/MM/YYYY chuẩn
-                        row['Thời gian'] = formatToDDMMYYYY(parseToTimestamp(t));
-                    }
-                }
+                row['Thời gian'] = normalizeToDDMMYYYY(row['Thời gian']);
             });
 
             // LOGIC KIỂM TRA ĐÚNG CHỦNG LOẠI FILE
