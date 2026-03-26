@@ -58,54 +58,38 @@
 </script>
 
 <script>
-    // Hàm bóc tách ngày chuẩn nhất, chống lại mọi loại dị bản từ Database (Object Date, ISO String, MM/DD/YYYY, DD/MM/YYYY)
-    function normalizeDate(rawDate) {
-        if (!rawDate) return null;
+    // BỘ CÔNG CỤ XỬ LÝ THỜI GIAN TUYỆT ĐỐI CHUẨN XÁC
+    function parseToTimestamp(rawDate) {
+        if (!rawDate) return 0;
         let str = String(rawDate).trim();
-        
-        // 1. Nếu là dạng ISO từ CSDL (2026-01-05T00:00:00)
-        if (str.includes('-')) {
-            let parts = str.split('T')[0].split(' ')[0].split('-');
-            if (parts.length === 3) {
-                return { d: parseInt(parts[2], 10), m: parseInt(parts[1], 10), y: parseInt(parts[0], 10) };
-            }
+
+        // 1. ISO String (Từ CSDL: 2026-01-05T...)
+        if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+            let datePart = str.split('T')[0].split(' ')[0];
+            let [y, m, d] = datePart.split('-');
+            return new Date(y, m - 1, d).getTime();
         }
-        
-        // 2. Nếu là dạng DD/MM/YYYY chuẩn VN
+
+        // 2. Định dạng DD/MM/YYYY chuẩn
         if (str.includes('/')) {
-            let parts = str.split(' ')[0].split('/');
-            if (parts.length === 3) {
-                return { d: parseInt(parts[0], 10), m: parseInt(parts[1], 10), y: parseInt(parts[2], 10) };
-            }
+            let datePart = str.split(' ')[0];
+            let [d, m, y] = datePart.split('/');
+            let fullYear = y.length === 2 ? '20' + y : y;
+            return new Date(fullYear, m - 1, d).getTime();
         }
-        
-        // 3. Fallback dùng hàm Date gốc của trình duyệt
-        let fallback = new Date(str);
-        if (!isNaN(fallback.getTime())) {
-            return { d: fallback.getDate(), m: fallback.getMonth() + 1, y: fallback.getFullYear() };
-        }
-        
-        return null;
+
+        // 3. Fallback
+        let fallback = new Date(str).getTime();
+        return isNaN(fallback) ? 0 : fallback;
     }
 
-    // Biến thành số nguyên YYYYMMDD để sort cực chính xác
-    function getSortableNum(rawDate) {
-        let p = normalizeDate(rawDate);
-        if (p) {
-            let y = p.y < 100 ? 2000 + p.y : p.y;
-            return (y * 10000) + (p.m * 100) + p.d;
-        }
-        return 0;
-    }
-
-    // Biến thành chuỗi DD/MM/YYYY để hiển thị
-    function formatPrettyDate(rawDate) {
-        let p = normalizeDate(rawDate);
-        if (p) {
-            let y = p.y < 100 ? 2000 + p.y : p.y;
-            return `${String(p.d).padStart(2,'0')}/${String(p.m).padStart(2,'0')}/${y}`;
-        }
-        return String(rawDate);
+    function formatToDDMMYYYY(timestamp) {
+        if (!timestamp || timestamp === 0) return 'N/A';
+        const d = new Date(timestamp);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
     }
 
     // Đóng Popup khi ấn X hoặc click ra bên ngoài
@@ -133,7 +117,6 @@
         chartsContainer.innerHTML = '';
 
         try {
-            // Đảm bảo Chart.js đã được tải
             if (typeof Chart === 'undefined') {
                 statusMsg.style.color = 'orange';
                 statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
@@ -158,27 +141,27 @@
                 return;
             }
 
-            // --- BƯỚC 1: LỌC TRÙNG LẶP BẰNG MAP ĐỂ CHỐNG LỖI VẼ VÒNG LẶP ---
-            let uniqueDataMap = new Map();
+            // --- BƯỚC 1: LỌC TRÙNG LẶP & GÁN TIMESTAMP ---
+            let dataMap = new Map();
             rawData.forEach(row => {
-                let sortNum = getSortableNum(row.Thoi_gian);
-                if(sortNum > 0) {
-                    let prettyDate = formatPrettyDate(row.Thoi_gian);
-                    uniqueDataMap.set(prettyDate, row); 
+                let ts = parseToTimestamp(row.Thoi_gian);
+                if (ts > 0) {
+                    row.sortTs = ts; // Gắn timestamp chuẩn vào object
+                    dataMap.set(ts, row); // Dùng chính timestamp làm Key để gộp các ngày bị trùng
                 }
             });
 
-            // Chuyển Map trở lại thành mảng
-            let data = Array.from(uniqueDataMap.values());
+            // Chuyển Map thành mảng
+            let data = Array.from(dataMap.values());
 
-            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN THEO SỐ NGUYÊN (VD: 20260105 < 20260118) ---
-            data.sort((a, b) => getSortableNum(a.Thoi_gian) - getSortableNum(b.Thoi_gian));
+            // --- BƯỚC 2: SẮP XẾP TĂNG DẦN BẰNG TIMESTAMP ---
+            data.sort((a, b) => a.sortTs - b.sortTs);
 
             statusMsg.style.color = 'green';
             statusMsg.textContent = `Tìm thấy ${data.length} ngày dữ liệu duy nhất cho Cell: ${cellName}.`;
 
-            // Map nhãn trục X
-            const labels = data.map(row => formatPrettyDate(row.Thoi_gian));
+            // --- BƯỚC 3: XUẤT NHÃN TRỤC X (DD/MM/YYYY) TỪ MẢNG ĐÃ SẮP XẾP ---
+            const labels = data.map(row => formatToDDMMYYYY(row.sortTs));
 
             let chartConfigs = [];
             if (network === '3g') {
