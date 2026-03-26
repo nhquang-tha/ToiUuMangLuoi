@@ -1,9 +1,5 @@
 <%- include('partials/head') %>
 
-<!-- Sử dụng link dạng "//" để lách hệ thống tự động nhận dạng liên kết (Protocol-Relative URL) -->
-<link rel="stylesheet" href="//[unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)" />
-<script src="//[unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)"></script>
-
 <style>
     #map { width: 100%; height: calc(100vh - 100px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
     .rf-popup table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;}
@@ -26,7 +22,7 @@
         </header>
         <div class="content-body" style="padding-bottom: 0;">
             <div style="position: relative;">
-                <div id="map-loading">Đang tải dữ liệu trạm phát sóng...</div>
+                <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
                 <div id="map"></div>
                 <!-- Bảng Chú Thích Màu Sắc -->
                 <div class="map-legend">
@@ -42,13 +38,40 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // HÀM KHỞI TẠO BẢN ĐỒ CHÍNH (Set view mặc định ở Thanh Hóa)
+        
+        // 1. CHÈN CSS LEAFLET BẰNG BASE64
+        const cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        // Base64 của: [https://unpkg.com/leaflet@1.9.4/dist/leaflet.css](https://unpkg.com/leaflet@1.9.4/dist/leaflet.css)
+        cssLink.href = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuY3Nz');
+        document.head.appendChild(cssLink);
+
+        // 2. CHÈN JS LEAFLET BẰNG BASE64 VÀ CHỜ TẢI XONG MỚI CHẠY BẢN ĐỒ
+        const jsScript = document.createElement('script');
+        // Base64 của: [https://unpkg.com/leaflet@1.9.4/dist/leaflet.js](https://unpkg.com/leaflet@1.9.4/dist/leaflet.js)
+        jsScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuanM=');
+        
+        jsScript.onload = function() {
+            initGISMap(); // Chỉ vẽ bản đồ khi Leaflet đã được tải hoàn tất
+        };
+        
+        jsScript.onerror = function() {
+            document.getElementById('map-loading').textContent = "Không thể tải thư viện bản đồ. Vui lòng kiểm tra mạng!";
+            document.getElementById('map-loading').style.color = "red";
+        };
+
+        document.head.appendChild(jsScript);
+    });
+
+    // HÀM KHỞI TẠO BẢN ĐỒ CHÍNH
+    function initGISMap() {
+        // Set view mặc định ở Thanh Hóa
         var map = L.map('map').setView([19.806692, 105.77611], 12); 
 
-        // Khai báo Layers (Dùng Protocol-relative URL để miễn nhiễm với hệ thống chat)
-        var strGoogleSat = '//[mt1.google.com/vt/lyrs=s&x=](https://mt1.google.com/vt/lyrs=s&x=){x}&y={y}&z={z}';
-        var strGoogleMap = '//[mt1.google.com/vt/lyrs=m&x=](https://mt1.google.com/vt/lyrs=m&x=){x}&y={y}&z={z}';
-        var strOSM = '//a.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        // Giải mã link Google Maps từ Base64
+        var strGoogleSat = atob('aHR0cHM6Ly9tdDEuZ29vZ2xlLmNvbS92dC9seXJzPXMmeD17eH0meT17eX0mej17en0=');
+        var strGoogleMap = atob('aHR0cHM6Ly9tdDEuZ29vZ2xlLmNvbS92dC9seXJzPW0meD17eH0meT17eX0mej17en0=');
+        var strOSM = atob('aHR0cHM6Ly9hLnRpbGUub3BlbnN0cmVldG1hcC5vcmcve3p9L3t4fS9reX0ucG5n');
 
         // Tạo các Lớp bản đồ
         var osmLayer = L.tileLayer(strOSM, { maxZoom: 19, attribution: '© OpenStreetMap' });
@@ -77,17 +100,15 @@
 
             for (var i = startAngle; i <= endAngle; i += 3) {
                 var angleRad = i * Math.PI / 180;
-                // Tính độ lệch X(East), Y(North)
                 var dx = radiusMeters * Math.sin(angleRad);
                 var dy = radiusMeters * Math.cos(angleRad);
                 
-                // Quy đổi độ lệch (mét) sang độ Lat/Lng
                 var dLat = dy / R * (180 / Math.PI);
                 var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
                 
                 points.push([lat + dLat, lng + dLng]);
             }
-            points.push(center); // Đóng đa giác về điểm tâm trạm
+            points.push(center);
             return points;
         }
 
@@ -95,7 +116,10 @@
         // LẤY DỮ LIỆU RF TỪ BACKEND VÀ VẼ LÊN BẢN ĐỒ
         // =====================================================================
         fetch('/api/gis-data')
-            .then(res => res.json())
+            .then(res => {
+                if(!res.ok) throw new Error("Lỗi HTTP: " + res.status);
+                return res.json();
+            })
             .then(data => {
                 document.getElementById('map-loading').style.display = 'none'; // Ẩn thông báo loading
                 
@@ -153,8 +177,8 @@
             })
             .catch(err => {
                 console.error("Lỗi lấy dữ liệu GIS:", err);
-                document.getElementById('map-loading').textContent = "Lỗi tải dữ liệu!";
+                document.getElementById('map-loading').textContent = "Lỗi tải dữ liệu. Bạn hãy kiểm tra lại kết nối Database.";
                 document.getElementById('map-loading').style.color = "red";
             });
-    });
+    }
 </script>
