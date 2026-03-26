@@ -45,10 +45,11 @@
     </div>
 </div>
 
-<!-- KỸ THUẬT NHÚNG AN TOÀN -->
+<!-- KỸ THUẬT NHÚNG AN TOÀN TUYỆT ĐỐI BẰNG BASE64 - CHỐNG MỌI LỖI TỰ ĐỘNG LINK TỪ CHAT -->
 <script>
     const scriptTag = document.createElement('script');
-    scriptTag.src = '[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)';
+    // Đây là mã Base64 của url "[https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js](https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js)"
+    scriptTag.src = atob('aHR0cHM6Ly9jZG5qcy5jbG91ZGZsYXJlLmNvbS9hamF4L2xpYnMvQ2hhcnQuanMvMy45LjEvY2hhcnQubWluLmpz');
     document.head.appendChild(scriptTag);
 </script>
 
@@ -58,9 +59,15 @@
     // =========================================================================
     function dateToInteger(val) {
         if (!val) return 0;
+
+        // Bắt lỗi nếu API trả về dạng Object Date (Trường hợp siêu hiếm nhưng vẫn đề phòng)
+        if (val instanceof Date && !isNaN(val)) {
+            return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
+        }
+
         let str = String(val).trim();
         
-        // 1. Nếu CSDL bị lọt ISO YYYY-MM-DD
+        // 1. Nếu bị lọt định dạng ISO YYYY-MM-DD
         if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
             let parts = str.split('T')[0].split('-');
             return parseInt(parts[0], 10) * 10000 + parseInt(parts[1], 10) * 100 + parseInt(parts[2], 10);
@@ -75,7 +82,7 @@
                 if (y < 100) y += 2000;
                 let m = parseInt(parts[1], 10);
                 let d = parseInt(parts[0], 10);
-                return (y * 10000) + (m * 100) + d; // YYYYMMDD
+                return (y * 10000) + (m * 100) + d; // Tạo số YYYYMMDD
             }
         }
         return 0;
@@ -184,7 +191,6 @@
             }
 
             chartConfigs.forEach((cfg) => {
-                // Trích xuất data points (sẽ tương ứng 1-1 với labels)
                 const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
 
                 const chartWrapper = document.createElement('div');
