@@ -18,9 +18,6 @@
     .leaflet-control-custom { background: #fff; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); }
     .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
     .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
-    
-    /* Style cho dropdown filter gắn vào Map */
-    .custom-filter-select { padding: 4px 8px; font-size: 13px; font-weight: bold; border-radius: 4px; border: 2px solid rgba(0,0,0,0.2); box-shadow: 0 1px 5px rgba(0,0,0,0.65); outline: none; cursor: pointer; color: #2c3e50; }
 </style>
 
 <div class="layout">
@@ -86,7 +83,7 @@
         L.control.layers(baseMaps).addTo(map);
 
         // =========================================================
-        // THÊM CÁC NÚT ĐIỀU KHIỂN CUSTOM (FULLSCREEN & GPS & FILTER)
+        // THÊM CÁC NÚT ĐIỀU KHIỂN CUSTOM (FULLSCREEN & GPS & FILTER & SLIDER)
         // =========================================================
 
         // 1. Nút Full Screen
@@ -107,42 +104,84 @@
             }
         };
 
-        // 2. Nút GPS
+        // 2. Nút GPS (Biểu tượng ngắm chuẩn Google Maps)
         var gpsControl = L.control({position: 'topleft'});
         gpsControl.onAdd = function () {
             var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-            div.innerHTML = '<a href="#" title="Định vị trí của bạn" onclick="locateUser(); return false;">📍</a>';
+            div.innerHTML = `
+                <a href="#" title="Định vị trí của bạn" onclick="locateUser(); return false;" style="display: flex; justify-content: center; align-items: center;">
+                    <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="7"></circle>
+                        <line x1="12" y1="1" x2="12" y2="5"></line>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="1" y1="12" x2="5" y2="12"></line>
+                        <line x1="19" y1="12" x2="23" y2="12"></line>
+                    </svg>
+                </a>
+            `;
             return div;
         };
         gpsControl.addTo(map);
 
-        var userMarker;
+        // Code xử lý đánh dấu vị trí GPS (Kiểu chấm xanh Google Maps)
+        var userMarker, userCircle;
         window.locateUser = function() {
             map.locate({setView: true, maxZoom: 16});
         };
         map.on('locationfound', function(e) {
-            if (userMarker) { map.removeLayer(userMarker); }
-            userMarker = L.marker(e.latlng).addTo(map).bindPopup("Bạn đang ở đây!").openPopup();
+            if (userMarker) map.removeLayer(userMarker);
+            if (userCircle) map.removeLayer(userCircle);
+            
+            // Dấu chấm xanh lam
+            userMarker = L.circleMarker(e.latlng, {
+                radius: 7, fillColor: "#4285F4", color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 1
+            }).addTo(map).bindPopup("Vị trí của bạn").openPopup();
+
+            // Vòng tròn báo độ chính xác
+            userCircle = L.circle(e.latlng, {
+                radius: e.accuracy / 2, color: "#4285F4", fillColor: "#4285F4", weight: 1, fillOpacity: 0.15
+            }).addTo(map);
         });
         map.on('locationerror', function(e) {
             alert("Không thể lấy vị trí. Hãy chắc chắn bạn đã cấp quyền Location cho trình duyệt.");
         });
 
-        // 3. Dropdown Bộ Lọc Công Nghệ (Filter)
+        // 3. Dropdown Bộ Lọc Công Nghệ Gọn Nhẹ
         var filterControl = L.control({position: 'topright'});
         filterControl.onAdd = function () {
-            var div = L.DomUtil.create('div', 'leaflet-control');
+            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
             div.innerHTML = `
-                <select id="networkFilter" class="custom-filter-select" title="Chọn loại Cell để hiển thị">
-                    <option value="4G" selected>Hiển thị Cell 4G</option>
-                    <option value="3G">Hiển thị Cell 3G</option>
-                    <option value="5G">Hiển thị Cell 5G</option>
+                <select id="networkFilter" title="Chọn loại Cell" style="border:none; padding: 6px 10px; cursor: pointer; font-weight: bold; color: #2c3e50; border-radius: 4px; outline: none; background: white;">
+                    <option value="4G" selected>Mạng 4G</option>
+                    <option value="3G">Mạng 3G</option>
+                    <option value="5G">Mạng 5G</option>
                 </select>
             `;
-            L.DomEvent.disableClickPropagation(div); // Ngăn không cho thao tác chuột bấm xuyên xuống bản đồ
+            L.DomEvent.disableClickPropagation(div); 
             return div;
         };
         filterControl.addTo(map);
+
+        // 4. Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
+        var globalRadius = 200; // Giá trị mặc định
+        var radiusControl = L.control({position: 'bottomleft'});
+        radiusControl.onAdd = function() {
+            var div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
+            div.style.backgroundColor = 'white';
+            div.style.padding = '8px 12px';
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.gap = '10px';
+            div.innerHTML = `
+                <label for="radiusSlider" style="font-size: 13px; font-weight: bold; color: #2c3e50; margin:0;">
+                    Độ vươn Cell: <span id="radiusValue">200</span>m
+                </label>
+                <input type="range" id="radiusSlider" min="50" max="1500" step="50" value="200" style="width: 120px; cursor: pointer; accent-color: #3498db;">
+            `;
+            L.DomEvent.disableClickPropagation(div);
+            return div;
+        };
+        radiusControl.addTo(map);
 
         // =========================================================
         // THUẬT TOÁN VẼ CÁNH QUẠT LƯỢNG GIÁC
@@ -169,7 +208,7 @@
         }
 
         // =========================================================
-        // LẤY DỮ LIỆU & RENDER
+        // LẤY DỮ LIỆU & RENDER (TÙY BIẾN THEO SỰ KIỆN)
         // =========================================================
         var allMapData = [];
         var sectorLayerGroup = L.layerGroup().addTo(map);
@@ -186,23 +225,25 @@
                 
                 if(isNaN(lat) || isNaN(lon)) return; 
 
-                // YÊU CẦU MÀU SẮC MỚI: 4G = ĐỎ, 3G = VÀNG, 5G = XANH LÁ
-                var color, fillColor, radius;
+                // YÊU CẦU MÀU SẮC: 4G = ĐỎ, 3G = VÀNG, 5G = XANH DƯƠNG
+                var color, fillColor;
                 if (cell.network === '4G') {
-                    color = '#c0392b'; fillColor = '#e74c3c'; radius = 200; // ĐỎ
+                    color = '#c0392b'; fillColor = '#e74c3c'; // Đỏ
                 } else if (cell.network === '3G') {
-                    color = '#f39c12'; fillColor = '#f1c40f'; radius = 250; // VÀNG
+                    color = '#f39c12'; fillColor = '#f1c40f'; // Vàng
                 } else if (cell.network === '5G') {
-                    color = '#27ae60'; fillColor = '#2ecc71'; radius = 150; // XANH LÁ
+                    color = '#2980b9'; fillColor = '#3498db'; // Xanh Dương
                 }
 
                 var beamwidth = 65; 
-                var sectorPoints = createSectorPolygon(lat, lon, azi, radius, beamwidth);
+                // Bán kính giờ đây phụ thuộc vào thanh kéo Slider
+                var sectorPoints = createSectorPolygon(lat, lon, azi, globalRadius, beamwidth);
+                
                 var sector = L.polygon(sectorPoints, {
                     color: color, weight: 1, fillColor: fillColor, fillOpacity: 0.6
                 });
 
-                // BẢNG THÔNG TIN ĐỘNG: Duyệt qua tất cả Key của Cell
+                // BẢNG THÔNG TIN ĐỘNG: Lấy sạch key
                 var tableRows = '';
                 for (let key in cell) {
                     if (cell.hasOwnProperty(key) && key !== 'network') {
@@ -232,7 +273,19 @@
             });
         }
 
-        // FETCH DATA
+        // LẮNG NGHE SỰ KIỆN KÉO SLIDER ĐỂ THAY ĐỔI ĐỘ DÀI CELL
+        document.getElementById('radiusSlider').addEventListener('input', function(e) {
+            globalRadius = parseInt(e.target.value);
+            document.getElementById('radiusValue').innerText = globalRadius;
+            renderMap(document.getElementById('networkFilter').value);
+        });
+
+        // LẮNG NGHE SỰ KIỆN CHUYỂN MẠNG
+        document.getElementById('networkFilter').addEventListener('change', function(e) {
+            renderMap(e.target.value);
+        });
+
+        // FETCH DATA MỘT LẦN VÀ VẼ LÊN
         fetch('/api/gis-data')
             .then(res => {
                 if(!res.ok) throw new Error("Lỗi HTTP: " + res.status);
@@ -248,13 +301,8 @@
 
                 allMapData = data; 
                 
-                // MẶC ĐỊNH VẼ MÌNH CELL 4G (Vì value của select đang là 4G mặc định)
+                // MẶC ĐỊNH VẼ CELL 4G
                 renderMap('4G');
-
-                // Lắng nghe sự kiện lọc
-                document.getElementById('networkFilter').addEventListener('change', function(e) {
-                    renderMap(e.target.value);
-                });
             })
             .catch(err => {
                 console.error("Lỗi lấy dữ liệu GIS:", err);
