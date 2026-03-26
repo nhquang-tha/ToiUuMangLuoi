@@ -1,40 +1,52 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// =========================================================================
-// BỘ MÁY GIẢI MÃ THỜI GIAN (REGEX ENGINE) - KHÔNG SỢ LỖI DB
-// =========================================================================
-function extractDateInfo(val) {
-    if (!val) return null;
-    let str = String(val);
+// Hàm Parse Tuyệt Đối: Biến mọi định dạng thành số nguyên YYYYMMDD (VD: 20260118)
+function strictParseDateToNumber(val) {
+    if (!val) return 0;
     
-    // 1. Quét tìm định dạng Việt Nam (DD/MM/YYYY hoặc DD-MM-YYYY)
-    let matchVN = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-    if (matchVN) return { d: parseInt(matchVN[1], 10), m: parseInt(matchVN[2], 10), y: parseInt(matchVN[3], 10) };
+    // Nếu TiDB trả về Object Date gốc
+    if (val instanceof Date && !isNaN(val)) {
+        return (val.getFullYear() * 10000) + ((val.getMonth() + 1) * 100) + val.getDate();
+    }
 
-    // 2. Quét tìm định dạng ISO Database (YYYY-MM-DD)
-    let matchISO = str.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-    if (matchISO) return { d: parseInt(matchISO[3], 10), m: parseInt(matchISO[2], 10), y: parseInt(matchISO[1], 10) };
-
-    // 3. Quét Object Date nguyên thủy
-    let dObj = new Date(val);
-    if (!isNaN(dObj.getTime())) return { d: dObj.getDate(), m: dObj.getMonth() + 1, y: dObj.getFullYear() };
-
-    return null; // Trả về null nếu hoàn toàn là rác
+    let str = String(val).replace(/["']/g, '').trim().split(' ')[0]; // Xóa rác, lấy phần trước khoảng trắng
+    
+    // Nếu là định dạng DD/MM/YYYY của VN
+    if (str.includes('/')) {
+        let parts = str.split('/');
+        if (parts.length === 3) {
+            let y = parseInt(parts[2], 10);
+            if (y < 100) y += 2000;
+            let m = parseInt(parts[1], 10);
+            let d = parseInt(parts[0], 10);
+            if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
+        }
+    }
+    
+    // Nếu là định dạng ISO (YYYY-MM-DD) do DB trả về
+    if (str.includes('-')) {
+        let parts = str.split('T')[0].split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+            let y = parseInt(parts[0], 10);
+            let m = parseInt(parts[1], 10);
+            let d = parseInt(parts[2], 10);
+            if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
+        }
+    }
+    
+    return 0;
 }
 
-function getSortableYYYYMMDD(val) {
-    let info = extractDateInfo(val);
-    if (info) return (info.y * 10000) + (info.m * 100) + info.d; // VD: 20260118
-    return 0; 
+// Hàm render lại chuẩn DD/MM/YYYY từ số nguyên YYYYMMDD
+function formatNumberToDDMMYYYY(num) {
+    if (!num || num === 0) return 'N/A';
+    let s = String(num);
+    let y = s.substring(0, 4);
+    let m = s.substring(4, 6);
+    let d = s.substring(6, 8);
+    return `${d}/${m}/${y}`;
 }
-
-function getStandardDDMMYYYY(val) {
-    let info = extractDateInfo(val);
-    if (info) return `${String(info.d).padStart(2, '0')}/${String(info.m).padStart(2, '0')}/${info.y}`;
-    return String(val); // Fallback
-}
-// =========================================================================
 
 async function getKpiHistory() {
     try {
@@ -43,14 +55,18 @@ async function getKpiHistory() {
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
         const processHistory = (rows) => {
-            let maps = new Map();
+            // Dùng Set để lọc trùng lặp các con số YYYYMMDD
+            let numSet = new Set();
             rows.forEach(r => {
-                let num = getSortableYYYYMMDD(r.Thoi_gian);
-                if (num > 0) maps.set(num, getStandardDDMMYYYY(r.Thoi_gian));
+                let num = strictParseDateToNumber(r.Thoi_gian);
+                if (num > 0) numSet.add(num);
             });
-            // Sắp xếp các Keys (chính là YYYYMMDD) tăng dần
-            let sortedNums = Array.from(maps.keys()).sort((a, b) => a - b);
-            return sortedNums.map(num => maps.get(num));
+            
+            // Ép về mảng và Sort toán học (Bé xếp trước, lớn xếp sau)
+            let sortedArray = Array.from(numSet).sort((a, b) => a - b);
+            
+            // Map trở lại thành chữ để hiển thị ra HTML
+            return sortedArray.map(num => formatNumberToDDMMYYYY(num));
         };
 
         return { kpi3g: processHistory(rows3g), kpi4g: processHistory(rows4g), kpi5g: processHistory(rows5g) };
@@ -108,10 +124,16 @@ exports.handleImportData = async (req, res) => {
                 let t = row['Thời gian'];
                 if (t !== undefined && t !== null) {
                     if (typeof t === 'number' || (!isNaN(t) && Number(t) > 30000)) {
+                        // Số định dạng của Excel
                         let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
-                        row['Thời gian'] = getStandardDDMMYYYY(dateObj);
+                        let d = String(dateObj.getDate()).padStart(2, '0');
+                        let m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                        let y = dateObj.getFullYear();
+                        row['Thời gian'] = `${d}/${m}/${y}`;
                     } else {
-                        row['Thời gian'] = getStandardDDMMYYYY(t);
+                        // Chữ từ CSV, ép chuẩn qua bộ parse toán học
+                        let num = strictParseDateToNumber(t);
+                        row['Thời gian'] = (num > 0) ? formatNumberToDDMMYYYY(num) : String(t).trim();
                     }
                 }
             });
@@ -158,6 +180,7 @@ exports.handleImportData = async (req, res) => {
             let sql = '';
             let values = [];
 
+            // MAPPING DỮ LIỆU
             if (networkType === 'rf_3g') {
                 sql = `INSERT INTO rf_3g (CSHT_code, CELL_NAME, Cell_code, Site_code, Latitude, Longitude, Equipment, Frenquency, PSC, DL_UARFCN, BSC_LAC, CI, Anten_height, Azimuth, M_T, E_T, Total_tilt, Hang_SX, Antena, Swap, Start_day, Ghi_chu) VALUES ?`;
                 values = data.map(row => [row['CSHT_code'], row['CELL_NAME'], row['Cell_code'], row['Site_code'], row['Latitude'], row['Longitude'], row['Equipment'], row['Frenquency'], row['PSC'], row['DL_UARFCN'], row['BSC_LAC'], row['CI'], row['Anten_height'], row['Azimuth'], row['M_T'], row['E_T'], row['Total_tilt'], row['Hãng_SX'], row['Antena'], row['Swap'], row['Start_day'], row['Ghi_chú']]);
