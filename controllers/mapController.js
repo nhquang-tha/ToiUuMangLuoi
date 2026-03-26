@@ -6,10 +6,10 @@ exports.getMapPage = (req, res) => {
 
 exports.getMapData = async (req, res) => {
     try {
-        // Lấy tọa độ, Azimuth và các trường RF từ 3 mạng. Ép kiểu đảm bảo ko bị NULL
-        const q3g = `SELECT '3G' as network, CELL_NAME as cell_name, Site_code, Latitude, Longitude, Azimuth, Anten_height, Total_tilt, Equipment FROM rf_3g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL`;
-        const q4g = `SELECT '4G' as network, CELL_NAME as cell_name, Site_code, Latitude, Longitude, Azimuth, Anten_height, Total_tilt, Equipment FROM rf_4g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL`;
-        const q5g = `SELECT '5G' as network, SITE_NAME as cell_name, Site_code, Latitude, Longitude, Azimuth, Anten_height, Total_tilt, Equipment FROM rf_5g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL`;
+        // Sử dụng SELECT * để lấy sạch mọi thông tin RF theo chuẩn cấu trúc bảng
+        const q3g = `SELECT '3G' as network, * FROM rf_3g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL`;
+        const q4g = `SELECT '4G' as network, * FROM rf_4g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL`;
+        const q5g = `SELECT '5G' as network, * FROM rf_5g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL`;
 
         const [rows3g] = await db.query(q3g);
         const [rows4g] = await db.query(q4g);
