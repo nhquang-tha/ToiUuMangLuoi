@@ -6,6 +6,7 @@ const dashboardController = require('../controllers/dashboardController');
 const rfController = require('../controllers/rfController'); 
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
+const mapController = require('../controllers/mapController'); // IMPORT MAP CONTROLLER
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -22,12 +23,16 @@ pages.forEach(page => {
     router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
 });
 
+// --- BẢN ĐỒ GIS ---
+router.get('/gis-map', isAuthenticated, mapController.getMapPage);
+router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
+
 // --- ROUTES CHO KPI ANALYTICS ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
 router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
 
-// --- ROUTES CHO IMPORT DATA (Hỗ trợ up nhiều file) ---
+// --- ROUTES CHO IMPORT DATA ---
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
 router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), dashboardController.handleImportData);
 
