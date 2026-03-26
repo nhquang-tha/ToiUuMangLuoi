@@ -1,29 +1,46 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// Hàm Parse biến ngày DD/MM/YYYY thành số nguyên YYYYMMDD để so sánh tuyệt đối (VD: 20260115)
-function getSortableNum(dStr) {
-    if (!dStr) return 0;
-    let str = String(dStr).replace(/[^0-9\/]/g, '');
-    let p = str.split('/');
-    if (p.length === 3) {
-        let y = p[2];
-        if (y.length === 2) y = "20" + y; // Dự phòng năm 2 số
-        return parseInt(y + p[1].padStart(2, '0') + p[0].padStart(2, '0'), 10);
+// Bộ giải mã thần thánh: Xử lý chuỗi, ISO String, Object Date để bóc xuất chính xác Ngày/Tháng/Năm
+function normalizeDate(rawDate) {
+    if (!rawDate) return null;
+    if (rawDate instanceof Date && !isNaN(rawDate)) {
+        return { d: rawDate.getDate(), m: rawDate.getMonth() + 1, y: rawDate.getFullYear() };
+    }
+    let str = String(rawDate).trim();
+    // Xử lý ISO String (VD: 2026-01-05T00:00:00.000Z)
+    if (str.includes('-')) {
+        let parts = str.split('T')[0].split(' ')[0].split('-');
+        if (parts.length === 3) return { d: parseInt(parts[2], 10), m: parseInt(parts[1], 10), y: parseInt(parts[0], 10) };
+    }
+    // Xử lý DD/MM/YYYY truyền thống
+    if (str.includes('/')) {
+        let parts = str.split(' ')[0].split('/');
+        if (parts.length === 3) return { d: parseInt(parts[0], 10), m: parseInt(parts[1], 10), y: parseInt(parts[2], 10) };
+    }
+    return null;
+}
+
+// Hàm format ra chuỗi DD/MM/YYYY chuẩn đẹp
+function formatStandardDate(rawDate) {
+    let p = normalizeDate(rawDate);
+    if (p) {
+        let y = p.y < 100 ? 2000 + p.y : p.y;
+        return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${y}`;
+    }
+    return String(rawDate);
+}
+
+// Hàm biến ngày thành số nguyên YYYYMMDD để so sánh (VD: 20260105)
+function getSortableNum(rawDate) {
+    let p = normalizeDate(rawDate);
+    if (p) {
+        let y = p.y < 100 ? 2000 + p.y : p.y;
+        return (y * 10000) + (p.m * 100) + p.d;
     }
     return 0;
 }
 
-// Chuẩn hóa chuỗi hiển thị gọn gàng DD/MM/YYYY
-function formatStandardDate(dStr) {
-    if (!dStr) return '';
-    let str = String(dStr).replace(/[^0-9\/]/g, '');
-    let p = str.split('/');
-    if (p.length === 3) return `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${p[2]}`;
-    return str;
-}
-
-// Lấy lịch sử các ngày đã import KPI
 async function getKpiHistory() {
     try {
         const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
@@ -32,7 +49,7 @@ async function getKpiHistory() {
 
         const sortDates = (rows) => {
             let uniqueDates = [...new Set(rows.map(r => formatStandardDate(r.Thoi_gian)).filter(Boolean))];
-            // Sắp xếp TĂNG DẦN (ASC) bằng số nguyên
+            // Sắp xếp TĂNG DẦN
             return uniqueDates.sort((a, b) => getSortableNum(a) - getSortableNum(b));
         };
 
@@ -56,7 +73,6 @@ exports.getImportPage = async (req, res) => {
     res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole, history: history });
 };
 
-// VÒNG LẶP XỬ LÝ NHIỀU FILE
 exports.handleImportData = async (req, res) => {
     const userRole = req.session && req.session.user ? req.session.user.role : 'user';
     let history = await getKpiHistory(); 
@@ -69,7 +85,7 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
-    // Duyệt qua từng file được upload
+    // VÒNG LẶP XỬ LÝ NHIỀU FILE
     for (let file of req.files) {
         try {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
@@ -84,7 +100,7 @@ exports.handleImportData = async (req, res) => {
 
             if (data.length === 0) {
                 errorLogs.push(`File ${file.originalname} rỗng.`);
-                continue; // Bỏ qua file lỗi, chạy tiếp file khác
+                continue;
             }
 
             // CHUẨN HÓA DỮ LIỆU THỜI GIAN
@@ -97,7 +113,7 @@ exports.handleImportData = async (req, res) => {
                         let m = String(dateObj.getMonth() + 1).padStart(2, '0');
                         let y = dateObj.getFullYear();
                         row['Thời gian'] = `${d}/${m}/${y}`;
-                    } else if (typeof t === 'string') {
+                    } else {
                         row['Thời gian'] = formatStandardDate(t);
                     }
                 }
@@ -128,7 +144,7 @@ exports.handleImportData = async (req, res) => {
             const isValidFile = expectedHeaders.every(header => headersInFile.includes(header));
             
             if (!isValidFile) {
-                errorLogs.push(`File ${file.originalname} sai cấu trúc KPI.`);
+                errorLogs.push(`File ${file.originalname} sai cấu trúc.`);
                 continue;
             }
 
