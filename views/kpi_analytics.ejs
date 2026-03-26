@@ -58,49 +58,36 @@
 </script>
 
 <script>
-    // 1. ENGINE CỐT LÕI: ÉP MỌI ĐỊNH DẠNG VỀ SỐ YYYYMMDD ĐỂ SORT
-    function parseDateToNumber(val) {
-        if (!val) return 0;
-        let str = String(val).trim().replace(/["'\r\n]/g, '');
+    // =========================================================================
+    // BỘ MÁY GIẢI MÃ THỜI GIAN FRONTEND - CHỐNG MỌI LỖI TỪ DATABASE
+    // =========================================================================
+    function extractDateInfo(val) {
+        if (!val) return null;
+        let str = String(val);
+        
+        let matchVN = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+        if (matchVN) return { d: parseInt(matchVN[1], 10), m: parseInt(matchVN[2], 10), y: parseInt(matchVN[3], 10) };
 
-        if (str.includes('/')) {
-            let datePart = str.split(' ')[0]; 
-            let parts = datePart.split('/');
-            if (parts.length === 3) {
-                let d = parseInt(parts[0], 10);
-                let m = parseInt(parts[1], 10);
-                let y = parseInt(parts[2], 10);
-                if (y < 100) y += 2000;
-                if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
-            }
-        }
+        let matchISO = str.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+        if (matchISO) return { d: parseInt(matchISO[3], 10), m: parseInt(matchISO[2], 10), y: parseInt(matchISO[1], 10) };
 
-        if (str.includes('-')) {
-            let datePart = str.split('T')[0].split(' ')[0];
-            let parts = datePart.split('-');
-            if (parts.length === 3) {
-                let y = parseInt(parts[0], 10);
-                let m = parseInt(parts[1], 10);
-                let d = parseInt(parts[2], 10);
-                if (!isNaN(d) && !isNaN(m) && !isNaN(y)) return (y * 10000) + (m * 100) + d;
-            }
-        }
+        let dObj = new Date(val);
+        if (!isNaN(dObj.getTime())) return { d: dObj.getDate(), m: dObj.getMonth() + 1, y: dObj.getFullYear() };
+        return null;
+    }
 
-        let fb = new Date(str);
-        if (!isNaN(fb)) return (fb.getFullYear() * 10000) + ((fb.getMonth() + 1) * 100) + fb.getDate();
+    function getSortableYYYYMMDD(val) {
+        let info = extractDateInfo(val);
+        if (info) return (info.y * 10000) + (info.m * 100) + info.d;
         return 0;
     }
 
-    // 2. ENGINE HIỂN THỊ: TỪ SỐ YYYYMMDD TRẢ VỀ CHUỖI DD/MM/YYYY CHUẨN
-    function formatDateToDDMMYYYY(val) {
-        let num = parseDateToNumber(val);
-        if (num === 0) return String(val); 
-        let strNum = String(num);
-        let y = strNum.substring(0, 4);
-        let m = strNum.substring(4, 6);
-        let d = strNum.substring(6, 8);
-        return `${d}/${m}/${y}`;
+    function getStandardDDMMYYYY(val) {
+        let info = extractDateInfo(val);
+        if (info) return `${String(info.d).padStart(2, '0')}/${String(info.m).padStart(2, '0')}/${info.y}`;
+        return String(val);
     }
+    // =========================================================================
 
     // Đóng Popup
     document.getElementById('closeModal').onclick = function() {
@@ -154,17 +141,17 @@
             // --- BƯỚC 1: XÓA TRÙNG LẶP DỰA TRÊN SỐ YYYYMMDD ---
             let uniqueDataMap = new Map();
             rawData.forEach(row => {
-                let sortNum = parseDateToNumber(row.Thoi_gian);
+                let sortNum = getSortableYYYYMMDD(row.Thoi_gian);
                 if(sortNum > 0) {
                     row.sortNum = sortNum;
-                    row.Thoi_gian = formatDateToDDMMYYYY(row.Thoi_gian); // Ép hiển thị chuẩn ngay từ đây
+                    row.Thoi_gian = getStandardDDMMYYYY(row.Thoi_gian); // Ép hiển thị chuẩn
                     uniqueDataMap.set(sortNum, row); 
                 }
             });
 
             let data = Array.from(uniqueDataMap.values());
 
-            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN (Trị số thời gian bé xếp trước, lớn xếp sau) ---
+            // --- BƯỚC 2: SORT TOÁN HỌC TĂNG DẦN ---
             data.sort((a, b) => a.sortNum - b.sortNum);
 
             statusMsg.style.color = 'green';
