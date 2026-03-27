@@ -14,7 +14,7 @@
     
     #map-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-weight: bold; color: #2980b9;}
 
-    /* Custom Style cho các nút điều khiển mới (GPS, Fullscreen) */
+    /* Custom Style cho các nút điều khiển mới (GPS, Fullscreen, Search) */
     .leaflet-control-custom { background: #fff; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); }
     .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
     .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
@@ -83,7 +83,7 @@
         L.control.layers(baseMaps).addTo(map);
 
         // =========================================================
-        // THÊM CÁC NÚT ĐIỀU KHIỂN CUSTOM (FULLSCREEN & GPS & FILTER & SLIDER)
+        // THÊM CÁC NÚT ĐIỀU KHIỂN CUSTOM
         // =========================================================
 
         // 1. Nút Full Screen
@@ -123,7 +123,6 @@
         };
         gpsControl.addTo(map);
 
-        // Code xử lý đánh dấu vị trí GPS (Kiểu chấm xanh Google Maps)
         var userMarker, userCircle;
         window.locateUser = function() {
             map.locate({setView: true, maxZoom: 16});
@@ -131,13 +130,9 @@
         map.on('locationfound', function(e) {
             if (userMarker) map.removeLayer(userMarker);
             if (userCircle) map.removeLayer(userCircle);
-            
-            // Dấu chấm xanh lam
             userMarker = L.circleMarker(e.latlng, {
                 radius: 7, fillColor: "#4285F4", color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 1
             }).addTo(map).bindPopup("Vị trí của bạn").openPopup();
-
-            // Vòng tròn báo độ chính xác
             userCircle = L.circle(e.latlng, {
                 radius: e.accuracy / 2, color: "#4285F4", fillColor: "#4285F4", weight: 1, fillOpacity: 0.15
             }).addTo(map);
@@ -146,7 +141,46 @@
             alert("Không thể lấy vị trí. Hãy chắc chắn bạn đã cấp quyền Location cho trình duyệt.");
         });
 
-        // 3. Dropdown Bộ Lọc Công Nghệ Gọn Nhẹ
+        // 3. THANH TÌM KIẾM (SEARCH BOX) MỚI
+        var currentSearchQuery = "";
+        var searchControl = L.control({position: 'topleft'});
+        searchControl.onAdd = function () {
+            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+            div.style.display = 'flex';
+            div.style.padding = '4px';
+            div.style.gap = '4px';
+            div.style.backgroundColor = '#fff';
+            div.innerHTML = `
+                <input type="text" id="mapSearchInput" placeholder="Tìm Tên Cell, Cell/Site Code..." style="border: 1px solid #ddd; border-radius: 4px; padding: 6px 8px; width: 220px; outline: none; font-size: 13px;">
+                <button id="mapSearchBtn" title="Tìm Kiếm" style="background: #3498db; color: white; border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-weight: bold; font-size: 13px;">🔍</button>
+                <button id="mapClearBtn" title="Xóa Tìm Kiếm" style="background: #e74c3c; color: white; border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-weight: bold; font-size: 13px; display: none;">✖</button>
+            `;
+            L.DomEvent.disableClickPropagation(div);
+            return div;
+        };
+        searchControl.addTo(map);
+
+        document.getElementById('mapSearchBtn').addEventListener('click', function() {
+            var val = document.getElementById('mapSearchInput').value.trim();
+            if (val) {
+                currentSearchQuery = val;
+                document.getElementById('mapClearBtn').style.display = 'block';
+                renderMap(document.getElementById('networkFilter').value);
+            }
+        });
+
+        document.getElementById('mapSearchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('mapSearchBtn').click();
+        });
+
+        document.getElementById('mapClearBtn').addEventListener('click', function() {
+            document.getElementById('mapSearchInput').value = '';
+            currentSearchQuery = '';
+            this.style.display = 'none';
+            renderMap(document.getElementById('networkFilter').value);
+        });
+
+        // 4. Dropdown Bộ Lọc Công Nghệ
         var filterControl = L.control({position: 'topright'});
         filterControl.onAdd = function () {
             var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
@@ -162,8 +196,8 @@
         };
         filterControl.addTo(map);
 
-        // 4. Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
-        var globalRadius = 200; // Giá trị mặc định
+        // 5. Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
+        var globalRadius = 200; 
         var radiusControl = L.control({position: 'bottomleft'});
         radiusControl.onAdd = function() {
             var div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
@@ -174,7 +208,7 @@
             div.style.gap = '10px';
             div.innerHTML = `
                 <label for="radiusSlider" style="font-size: 13px; font-weight: bold; color: #2c3e50; margin:0;">
-                    Độ vươn Cell: <span id="radiusValue">200</span>m
+                    Độ vươn: <span id="radiusValue">200</span>m
                 </label>
                 <input type="range" id="radiusSlider" min="50" max="1500" step="50" value="200" style="width: 120px; cursor: pointer; accent-color: #3498db;">
             `;
@@ -208,7 +242,7 @@
         }
 
         // =========================================================
-        // LẤY DỮ LIỆU & RENDER (TÙY BIẾN THEO SỰ KIỆN)
+        // LẤY DỮ LIỆU & RENDER BẢN ĐỒ
         // =========================================================
         var allMapData = [];
         var sectorLayerGroup = L.layerGroup().addTo(map);
@@ -217,6 +251,7 @@
             sectorLayerGroup.clearLayers(); 
 
             var filteredData = allMapData.filter(cell => cell.network === filterType);
+            var searchBounds = [];
 
             filteredData.forEach(cell => {
                 var lat = parseFloat(cell.Latitude);
@@ -225,22 +260,55 @@
                 
                 if(isNaN(lat) || isNaN(lon)) return; 
 
-                // YÊU CẦU MÀU SẮC: 4G = ĐỎ, 3G = VÀNG, 5G = XANH DƯƠNG
-                var color, fillColor;
+                // YÊU CẦU MÀU SẮC GỐC
+                var baseColor, baseFillColor;
                 if (cell.network === '4G') {
-                    color = '#c0392b'; fillColor = '#e74c3c'; // Đỏ
+                    baseColor = '#c0392b'; baseFillColor = '#e74c3c'; // Đỏ
                 } else if (cell.network === '3G') {
-                    color = '#f39c12'; fillColor = '#f1c40f'; // Vàng
+                    baseColor = '#f39c12'; baseFillColor = '#f1c40f'; // Vàng
                 } else if (cell.network === '5G') {
-                    color = '#2980b9'; fillColor = '#3498db'; // Xanh Dương
+                    baseColor = '#2980b9'; baseFillColor = '#3498db'; // Xanh Dương
+                }
+
+                // THUẬT TOÁN TÌM KIẾM
+                var isMatch = false;
+                if (currentSearchQuery) {
+                    let q = currentSearchQuery.toUpperCase();
+                    let cName = String(cell.CELL_NAME || cell.SITE_NAME || cell.cell_name || '').toUpperCase();
+                    let cCode = String(cell.Cell_code || '').toUpperCase();
+                    let sCode = String(cell.Site_code || '').toUpperCase();
+                    
+                    if (cName.includes(q) || cCode.includes(q) || sCode.includes(q)) {
+                        isMatch = true;
+                    }
+                }
+
+                // ÁP DỤNG STYLE HIGHLIGHT (TÌM THẤY) / DIM (KHÔNG TÌM THẤY)
+                var finalColor = baseColor;
+                var finalFillColor = baseFillColor;
+                var finalWeight = 1;
+                var finalOpacity = 0.6;
+                var isDimmed = false;
+
+                if (currentSearchQuery) {
+                    if (isMatch) {
+                        finalWeight = 3;        // Viền đậm
+                        finalOpacity = 0.95;    // Độ đục cao
+                        finalColor = '#000';    // Khung màu đen nổi bật
+                        searchBounds.push([lat, lon]); // Đưa tọa độ vào mảng để Zoom
+                    } else {
+                        finalWeight = 0;        
+                        finalOpacity = 0.15;    // Làm mờ tịt
+                        finalFillColor = '#bdc3c7'; // Màu xám chìm
+                        isDimmed = true;
+                    }
                 }
 
                 var beamwidth = 65; 
-                // Bán kính giờ đây phụ thuộc vào thanh kéo Slider
                 var sectorPoints = createSectorPolygon(lat, lon, azi, globalRadius, beamwidth);
                 
                 var sector = L.polygon(sectorPoints, {
-                    color: color, weight: 1, fillColor: fillColor, fillOpacity: 0.6
+                    color: finalColor, weight: finalWeight, fillColor: finalFillColor, fillOpacity: finalOpacity
                 });
 
                 // BẢNG THÔNG TIN ĐỘNG: Lấy sạch key
@@ -266,11 +334,26 @@
                 
                 sector.bindPopup(popupHtml);
                 
-                sector.on('mouseover', function () { this.setStyle({fillOpacity: 0.9, weight: 2}); });
-                sector.on('mouseout', function () { this.setStyle({fillOpacity: 0.6, weight: 1}); });
+                sector.on('mouseover', function () { 
+                    if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); 
+                });
+                sector.on('mouseout', function () { 
+                    this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); 
+                });
 
                 sector.addTo(sectorLayerGroup);
             });
+
+            // LOGIC AUTO ZOOM IN KHI TÌM KIẾM XONG
+            if (currentSearchQuery) {
+                if (searchBounds.length > 0) {
+                    // Tạo một khung bao chứa tất cả các trạm khớp từ khóa, zoom vừa vặn
+                    var bounds = L.latLngBounds(searchBounds);
+                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+                } else {
+                    alert(`Không tìm thấy Cell/Site nào chứa từ khóa "${currentSearchQuery}" trong mạng ${filterType}!`);
+                }
+            }
         }
 
         // LẮNG NGHE SỰ KIỆN KÉO SLIDER ĐỂ THAY ĐỔI ĐỘ DÀI CELL
