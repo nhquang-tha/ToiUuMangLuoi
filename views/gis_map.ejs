@@ -5,9 +5,7 @@
     .map-top-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px; }
     
     .search-box { display: flex; gap: 5px; flex: 1; min-width: 200px; }
-    /* Ô input tìm kiếm gọn hơn */
     .search-box input { border: 1px solid #bdc3c7; border-radius: 4px; padding: 5px 10px; width: 100%; max-width: 250px; outline: none; font-size: 13px; }
-    /* Nút bấm nhỏ hơn */
     .search-box button { padding: 5px 10px; font-size: 12px; }
     
     .filter-box { display: flex; align-items: center; gap: 8px; border-left: 1px solid #ecf0f1; padding-left: 10px;}
@@ -37,7 +35,7 @@
     .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
     .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
 
-    /* Chú thích mức tín hiệu cập nhật màu */
+    /* Chú thích mức tín hiệu cập nhật màu chi tiết */
     .map-legend { position: absolute; bottom: 80px; right: 10px; background: rgba(255,255,255,0.95); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2); display: none; border: 1px solid #ccc;}
     .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
     .legend-color { width: 16px; height: 16px; margin-right: 8px; border-radius: 3px; border: 1px solid #555;}
@@ -80,13 +78,15 @@
                 <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
                 <div id="map"></div>
                 
-                <!-- Bảng Chú Thích Mức Tín Hiệu ITS (Cập nhật màu mới) -->
+                <!-- Bảng Chú Thích Mức Tín Hiệu ITS Chi Tiết (6 Mức độ) -->
                 <div id="logLegend" class="map-legend">
                     <strong style="display:block; margin-bottom: 5px; font-size:13px; color:#2c3e50;">Mức thu tín hiệu (dBm):</strong>
-                    <div class="legend-item"><div class="legend-color" style="background: #2ecc71;"></div><span style="font-size: 12px;">≥ -75 (Tốt)</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #3498db;"></div><span style="font-size: 12px;">-75 tới -85 (Khá)</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #f1c40f;"></div><span style="font-size: 12px;">-85 tới -95 (TB)</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div><span style="font-size: 12px;">&lt; -95 (Kém)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #0000FF;"></div><span style="font-size: 12px;">&ge; -75</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #00FFFF;"></div><span style="font-size: 12px;">-75 tới -85</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #00FF00;"></div><span style="font-size: 12px;">-85 tới -95</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFFF00;"></div><span style="font-size: 12px;">-95 tới -105</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFA500;"></div><span style="font-size: 12px;">-105 tới -115</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FF0000;"></div><span style="font-size: 12px;">&lt; -115</span></div>
                 </div>
             </div>
 
@@ -181,7 +181,7 @@
 
         // Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính) và Thanh Kéo Kích Thước Điểm Đo
         var globalRadius = 200; 
-        var globalDotRadius = 3.5; // Kích thước mặc định của điểm đo
+        var globalDotRadius = 3.5; 
 
         var slidersControl = L.control({position: 'bottomleft'});
         slidersControl.onAdd = function() {
@@ -246,12 +246,14 @@
             return points;
         }
 
-        // Quy ước màu Tín Hiệu Drive Test Mới (Tốt: Xanh lá, Khá: Xanh dương, TB: Vàng, Kém: Đỏ)
+        // Quy ước màu Tín Hiệu Drive Test (6 Mức chi tiết)
         function getColorByLevel(level) {
-            if (level >= -75) return '#2ecc71'; // Tốt (Xanh lá)
-            if (level >= -85) return '#3498db'; // Khá (Xanh dương)
-            if (level >= -95) return '#f1c40f'; // TB (Vàng)
-            return '#e74c3c';                   // Kém (Đỏ)
+            if (level >= -75) return '#0000FF';   // Xanh lam (Blue)
+            if (level >= -85) return '#00FFFF';   // Xanh lơ (Cyan)
+            if (level >= -95) return '#00FF00';   // Xanh lá (Green)
+            if (level >= -105) return '#FFFF00';  // Vàng (Yellow)
+            if (level >= -115) return '#FFA500';  // Cam (Orange)
+            return '#FF0000';                     // Đỏ (Red)
         }
 
         // =========================================================
@@ -330,9 +332,6 @@
                 
                 sector.on('mouseover', function () { if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); });
                 sector.on('mouseout', function () { this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); });
-
-                // Lưu lại thông tin vòm cung cho điểm đo bắn tia tới
-                cell._arcCenter = calculateSectorArcCenter(lat, lon, azi, globalRadius);
 
                 sector.addTo(sectorLayerGroup);
             });
@@ -441,24 +440,34 @@
                     radius: globalDotRadius, fillColor: pointColor, color: '#000', weight: 0.5, fillOpacity: 1
                 }).addTo(logLayerGroup).bindPopup(`<b>Tech:</b> ${p.tech}<br><b>Level:</b> ${p.level} dBm<br><b>Node:</b> ${p.node}<br><b>CellID:</b> ${p.cellId}`);
 
-                // 2. Khớp Trạm (Chỉ tìm trong mảng đã hiển thị)
+                // 2. Khớp Trạm (Tìm kiếm toàn cục trong allMapData để đảm bảo không bị sót nếu người dùng ẩn filter)
                 let matchedCell = null;
                 if (p.tech === '3G') {
-                    matchedCell = allMapData.find(c => c.network === '3G' && String(c.Cell_code) === p.cellId);
+                    // Logic 3G: CellID log khớp với CI (Cell Identity) trong DB
+                    matchedCell = allMapData.find(c => c.network === '3G' && (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId));
                 } else if (p.tech === '4G') {
+                    // Logic 4G: Node khớp ENodeBID/Site_code VÀ CellID khớp Cell_code/Lcrid
                     matchedCell = allMapData.find(c => 
                         c.network === '4G' && 
                         (String(c.ENodeBID) === p.node || String(c.Site_code) === p.node) &&
                         (String(c.Cell_code) === p.cellId || String(c.Lcrid) === p.cellId)
                     );
+                    // Fallback
                     if (!matchedCell) {
                         matchedCell = allMapData.find(c => c.network === '4G' && String(c.Cell_code) === p.cellId);
                     }
                 }
 
-                // 3. Vẽ tia nối đến TÂM CÁNH QUẠT (Arc Center) thay vì gốc trạm
-                if (matchedCell && matchedCell._arcCenter) {
-                    L.polyline([[p.lat, p.lon], [matchedCell._arcCenter.lat, matchedCell._arcCenter.lng]], {
+                // 3. Vẽ tia nối đến ĐIỂM GIỮA VÒM CUNG (Arc Center)
+                if (matchedCell) {
+                    let cellLat = parseFloat(matchedCell.Latitude);
+                    let cellLon = parseFloat(matchedCell.Longitude);
+                    let cellAzi = parseFloat(matchedCell.Azimuth) || 0;
+                    
+                    // Chủ động tính toán lại điểm vòm cung thay vì dựa vào biến cache (để tránh lỗi khi filter ẩn trạm)
+                    let arcCenter = calculateSectorArcCenter(cellLat, cellLon, cellAzi, globalRadius);
+
+                    L.polyline([[p.lat, p.lon], [arcCenter.lat, arcCenter.lng]], {
                         color: pointColor, weight: 1.5, opacity: 0.6, dashArray: '4, 5' 
                     }).addTo(logLayerGroup);
                 }
