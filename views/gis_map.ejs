@@ -1,8 +1,15 @@
 <%- include('partials/head') %>
 
 <style>
-    /* Chỉnh map chiếm full màn hình làm việc */
-    #map { width: 100%; height: calc(100vh - 80px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
+    /* Thanh công cụ phía trên bản đồ */
+    .map-top-panel { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 15px; }
+    .search-box { display: flex; gap: 10px; flex: 1; min-width: 300px; }
+    .search-box input { border: 1px solid #bdc3c7; border-radius: 4px; padding: 8px 12px; width: 100%; max-width: 400px; outline: none; font-size: 14px; }
+    .filter-box { display: flex; align-items: center; gap: 10px; }
+    .filter-box select { padding: 8px 12px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer; font-weight: bold; color: #34495e; font-size: 14px; }
+
+    /* Chỉnh map trừ đi phần header và top panel */
+    #map { width: 100%; height: calc(100vh - 165px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
     
     /* Style cho Popup chứa chi tiết RF */
     .rf-popup { max-width: 380px; min-width: 250px; }
@@ -14,7 +21,7 @@
     
     #map-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-weight: bold; color: #2980b9;}
 
-    /* Custom Style cho các nút điều khiển mới (GPS, Fullscreen, Search) */
+    /* Custom Style cho các nút điều khiển mới (GPS, Fullscreen) */
     .leaflet-control-custom { background: #fff; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); }
     .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
     .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
@@ -27,10 +34,31 @@
             <h1><%= page %></h1>
         </header>
         <div class="content-body" style="padding-bottom: 0; padding-top: 10px;">
+            
+            <!-- THANH CÔNG CỤ TÌM KIẾM VÀ BỘ LỌC BÊN NGOÀI BẢN ĐỒ -->
+            <div class="map-top-panel">
+                <div class="search-box">
+                    <input type="text" id="mapSearchInput" placeholder="Nhập Tên Cell, Cell Code hoặc Site Code để tìm kiếm...">
+                    <button id="mapSearchBtn" class="btn-primary" style="padding: 8px 15px; font-size: 14px;">🔍 Tìm kiếm</button>
+                    <button id="mapClearBtn" class="btn-danger" style="padding: 8px 15px; font-size: 14px; display: none;">✖ Hủy</button>
+                </div>
+                
+                <div class="filter-box">
+                    <label style="font-weight: bold; color: #2c3e50;">Công nghệ hiển thị:</label>
+                    <select id="networkFilter">
+                        <option value="4G" selected>Mạng 4G</option>
+                        <option value="3G">Mạng 3G</option>
+                        <option value="5G">Mạng 5G</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- KHUNG BẢN ĐỒ CHÍNH -->
             <div style="position: relative;" id="mapWrapper">
                 <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
                 <div id="map"></div>
             </div>
+
         </div>
     </main>
 </div>
@@ -83,7 +111,7 @@
         L.control.layers(baseMaps).addTo(map);
 
         // =========================================================
-        // THÊM CÁC NÚT ĐIỀU KHIỂN CUSTOM
+        // THÊM CÁC NÚT ĐIỀU KHIỂN BÊN TRONG BẢN ĐỒ
         // =========================================================
 
         // 1. Nút Full Screen
@@ -141,62 +169,7 @@
             alert("Không thể lấy vị trí. Hãy chắc chắn bạn đã cấp quyền Location cho trình duyệt.");
         });
 
-        // 3. THANH TÌM KIẾM (SEARCH BOX) MỚI
-        var currentSearchQuery = "";
-        var searchControl = L.control({position: 'topleft'});
-        searchControl.onAdd = function () {
-            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-            div.style.display = 'flex';
-            div.style.padding = '4px';
-            div.style.gap = '4px';
-            div.style.backgroundColor = '#fff';
-            div.innerHTML = `
-                <input type="text" id="mapSearchInput" placeholder="Tìm Tên Cell, Cell/Site Code..." style="border: 1px solid #ddd; border-radius: 4px; padding: 6px 8px; width: 220px; outline: none; font-size: 13px;">
-                <button id="mapSearchBtn" title="Tìm Kiếm" style="background: #3498db; color: white; border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-weight: bold; font-size: 13px;">🔍</button>
-                <button id="mapClearBtn" title="Xóa Tìm Kiếm" style="background: #e74c3c; color: white; border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-weight: bold; font-size: 13px; display: none;">✖</button>
-            `;
-            L.DomEvent.disableClickPropagation(div);
-            return div;
-        };
-        searchControl.addTo(map);
-
-        document.getElementById('mapSearchBtn').addEventListener('click', function() {
-            var val = document.getElementById('mapSearchInput').value.trim();
-            if (val) {
-                currentSearchQuery = val;
-                document.getElementById('mapClearBtn').style.display = 'block';
-                renderMap(document.getElementById('networkFilter').value);
-            }
-        });
-
-        document.getElementById('mapSearchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') document.getElementById('mapSearchBtn').click();
-        });
-
-        document.getElementById('mapClearBtn').addEventListener('click', function() {
-            document.getElementById('mapSearchInput').value = '';
-            currentSearchQuery = '';
-            this.style.display = 'none';
-            renderMap(document.getElementById('networkFilter').value);
-        });
-
-        // 4. Dropdown Bộ Lọc Công Nghệ
-        var filterControl = L.control({position: 'topright'});
-        filterControl.onAdd = function () {
-            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-            div.innerHTML = `
-                <select id="networkFilter" title="Chọn loại Cell" style="border:none; padding: 6px 10px; cursor: pointer; font-weight: bold; color: #2c3e50; border-radius: 4px; outline: none; background: white;">
-                    <option value="4G" selected>Mạng 4G</option>
-                    <option value="3G">Mạng 3G</option>
-                    <option value="5G">Mạng 5G</option>
-                </select>
-            `;
-            L.DomEvent.disableClickPropagation(div); 
-            return div;
-        };
-        filterControl.addTo(map);
-
-        // 5. Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
+        // 3. Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
         var globalRadius = 200; 
         var radiusControl = L.control({position: 'bottomleft'});
         radiusControl.onAdd = function() {
@@ -242,14 +215,16 @@
         }
 
         // =========================================================
-        // LẤY DỮ LIỆU & RENDER BẢN ĐỒ
+        // LẤY DỮ LIỆU & RENDER BẢN ĐỒ (CÓ XỬ LÝ SEARCH & DIM)
         // =========================================================
         var allMapData = [];
         var sectorLayerGroup = L.layerGroup().addTo(map);
+        var currentSearchQuery = "";
 
         function renderMap(filterType) {
             sectorLayerGroup.clearLayers(); 
 
+            // Chỉ lọc các cell thuộc mạng được chọn (VD: 4G)
             var filteredData = allMapData.filter(cell => cell.network === filterType);
             var searchBounds = [];
 
@@ -283,7 +258,7 @@
                     }
                 }
 
-                // ÁP DỤNG STYLE HIGHLIGHT (TÌM THẤY) / DIM (KHÔNG TÌM THẤY)
+                // ÁP DỤNG STYLE HIGHLIGHT VÀ DIM
                 var finalColor = baseColor;
                 var finalFillColor = baseFillColor;
                 var finalWeight = 1;
@@ -292,14 +267,15 @@
 
                 if (currentSearchQuery) {
                     if (isMatch) {
-                        finalWeight = 3;        // Viền đậm
-                        finalOpacity = 0.95;    // Độ đục cao
-                        finalColor = '#000';    // Khung màu đen nổi bật
-                        searchBounds.push([lat, lon]); // Đưa tọa độ vào mảng để Zoom
+                        // Cell tìm thấy sẽ Cực kỳ nổi bật
+                        finalWeight = 3;        // Viền đen đậm
+                        finalOpacity = 0.95;    // Opacity cao
+                        finalColor = '#000';    
+                        searchBounds.push([lat, lon]); // Lưu tọa độ để lát tự động Zoom
                     } else {
-                        finalWeight = 0;        
-                        finalOpacity = 0.15;    // Làm mờ tịt
-                        finalFillColor = '#bdc3c7'; // Màu xám chìm
+                        // Các cell không liên quan vẫn giữ màu nhưng bị làm mờ
+                        finalWeight = 1;        
+                        finalOpacity = 0.15;    
                         isDimmed = true;
                     }
                 }
@@ -311,7 +287,7 @@
                     color: finalColor, weight: finalWeight, fillColor: finalFillColor, fillOpacity: finalOpacity
                 });
 
-                // BẢNG THÔNG TIN ĐỘNG: Lấy sạch key
+                // BẢNG THÔNG TIN ĐỘNG
                 var tableRows = '';
                 for (let key in cell) {
                     if (cell.hasOwnProperty(key) && key !== 'network') {
@@ -344,10 +320,9 @@
                 sector.addTo(sectorLayerGroup);
             });
 
-            // LOGIC AUTO ZOOM IN KHI TÌM KIẾM XONG
+            // AUTO ZOOM IN VÀO TÂM KHI TÌM KIẾM
             if (currentSearchQuery) {
                 if (searchBounds.length > 0) {
-                    // Tạo một khung bao chứa tất cả các trạm khớp từ khóa, zoom vừa vặn
                     var bounds = L.latLngBounds(searchBounds);
                     map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
                 } else {
@@ -356,19 +331,46 @@
             }
         }
 
-        // LẮNG NGHE SỰ KIỆN KÉO SLIDER ĐỂ THAY ĐỔI ĐỘ DÀI CELL
+        // =========================================================
+        // GẮN SỰ KIỆN CHO CÁC CONTROL BÊN NGOÀI
+        // =========================================================
+
+        // Sự kiện Thanh Slider
         document.getElementById('radiusSlider').addEventListener('input', function(e) {
             globalRadius = parseInt(e.target.value);
             document.getElementById('radiusValue').innerText = globalRadius;
             renderMap(document.getElementById('networkFilter').value);
         });
 
-        // LẮNG NGHE SỰ KIỆN CHUYỂN MẠNG
+        // Sự kiện Menu thả xuống (Đổi mạng)
         document.getElementById('networkFilter').addEventListener('change', function(e) {
             renderMap(e.target.value);
         });
 
-        // FETCH DATA MỘT LẦN VÀ VẼ LÊN
+        // Sự kiện Nhấn nút Tìm kiếm
+        document.getElementById('mapSearchBtn').addEventListener('click', function() {
+            var val = document.getElementById('mapSearchInput').value.trim();
+            if (val) {
+                currentSearchQuery = val;
+                document.getElementById('mapClearBtn').style.display = 'block';
+                renderMap(document.getElementById('networkFilter').value);
+            }
+        });
+
+        // Enter để Tìm kiếm
+        document.getElementById('mapSearchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('mapSearchBtn').click();
+        });
+
+        // Nút Hủy Tìm Kiếm (Khôi phục bản đồ gốc)
+        document.getElementById('mapClearBtn').addEventListener('click', function() {
+            document.getElementById('mapSearchInput').value = '';
+            currentSearchQuery = '';
+            this.style.display = 'none';
+            renderMap(document.getElementById('networkFilter').value);
+        });
+
+        // FETCH DATA LẦN ĐẦU TIÊN
         fetch('/api/gis-data')
             .then(res => {
                 if(!res.ok) throw new Error("Lỗi HTTP: " + res.status);
@@ -383,9 +385,7 @@
                 }
 
                 allMapData = data; 
-                
-                // MẶC ĐỊNH VẼ CELL 4G
-                renderMap('4G');
+                renderMap('4G'); // Mặc định vẽ 4G
             })
             .catch(err => {
                 console.error("Lỗi lấy dữ liệu GIS:", err);
