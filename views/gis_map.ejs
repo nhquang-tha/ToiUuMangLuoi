@@ -3,15 +3,20 @@
 <style>
     /* Thanh công cụ phía trên bản đồ */
     .map-top-panel { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 15px; }
-    .search-box { display: flex; gap: 10px; flex: 1; min-width: 300px; }
-    .search-box input { border: 1px solid #bdc3c7; border-radius: 4px; padding: 8px 12px; width: 100%; max-width: 400px; outline: none; font-size: 14px; }
-    .filter-box { display: flex; align-items: center; gap: 10px; }
+    .search-box { display: flex; gap: 10px; flex: 1; min-width: 250px; }
+    .search-box input { border: 1px solid #bdc3c7; border-radius: 4px; padding: 8px 12px; width: 100%; max-width: 350px; outline: none; font-size: 14px; }
+    
+    .filter-box { display: flex; align-items: center; gap: 10px; border-left: 2px solid #ecf0f1; padding-left: 15px;}
     .filter-box select { padding: 8px 12px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer; font-weight: bold; color: #34495e; font-size: 14px; }
 
-    /* Chỉnh map trừ đi phần header và top panel */
+    /* Khu vực Import Log */
+    .log-box { display: flex; align-items: center; gap: 10px; border-left: 2px solid #ecf0f1; padding-left: 15px; }
+    .log-box input[type="file"] { font-size: 13px; max-width: 200px; color: #2c3e50; }
+
+    /* Chỉnh map */
     #map { width: 100%; height: calc(100vh - 165px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
     
-    /* Style cho Popup chứa chi tiết RF */
+    /* Style Popup */
     .rf-popup { max-width: 380px; min-width: 250px; }
     .rf-popup-content { max-height: 300px; overflow-y: auto; padding-right: 5px; }
     .rf-popup table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px;}
@@ -19,12 +24,18 @@
     .rf-popup th { background-color: #f4f6f8; color: #2c3e50; white-space: nowrap; width: 45%;}
     .rf-popup h3 { margin: 0 0 5px 0; color: #2980b9; font-size: 15px; border-bottom: 2px solid #3498db; padding-bottom: 5px;}
     
+    /* Loading */
     #map-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-weight: bold; color: #2980b9;}
 
-    /* Custom Style cho các nút điều khiển mới (GPS, Fullscreen) */
+    /* Controls Custom */
     .leaflet-control-custom { background: #fff; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); }
     .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
     .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
+
+    /* Chú thích mức tín hiệu (Chỉ hiện khi import log) */
+    .map-legend { position: absolute; bottom: 80px; right: 10px; background: rgba(255,255,255,0.95); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2); display: none; border: 1px solid #ccc;}
+    .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
+    .legend-color { width: 16px; height: 16px; margin-right: 8px; border-radius: 3px; border: 1px solid #555;}
 </style>
 
 <div class="layout">
@@ -35,21 +46,27 @@
         </header>
         <div class="content-body" style="padding-bottom: 0; padding-top: 10px;">
             
-            <!-- THANH CÔNG CỤ TÌM KIẾM VÀ BỘ LỌC BÊN NGOÀI BẢN ĐỒ -->
+            <!-- THANH CÔNG CỤ ĐA NĂNG LÊN PHÍA TRÊN BẢN ĐỒ -->
             <div class="map-top-panel">
                 <div class="search-box">
-                    <input type="text" id="mapSearchInput" placeholder="Nhập Tên Cell, Cell Code hoặc Site Code để tìm kiếm...">
-                    <button id="mapSearchBtn" class="btn-primary" style="padding: 8px 15px; font-size: 14px;">🔍 Tìm kiếm</button>
-                    <button id="mapClearBtn" class="btn-danger" style="padding: 8px 15px; font-size: 14px; display: none;">✖ Hủy</button>
+                    <input type="text" id="mapSearchInput" placeholder="Nhập Tên Cell, Cell Code hoặc Site Code...">
+                    <button id="mapSearchBtn" class="btn-primary" style="padding: 8px 15px; font-size: 13px;">🔍 Tìm</button>
+                    <button id="mapClearBtn" class="btn-danger" style="padding: 8px 15px; font-size: 13px; display: none;">✖ Hủy</button>
                 </div>
                 
                 <div class="filter-box">
-                    <label style="font-weight: bold; color: #2c3e50;">Công nghệ hiển thị:</label>
+                    <label style="font-weight: bold; color: #2c3e50; font-size: 13px;">Hiển thị:</label>
                     <select id="networkFilter">
                         <option value="4G" selected>Mạng 4G</option>
                         <option value="3G">Mạng 3G</option>
                         <option value="5G">Mạng 5G</option>
                     </select>
+                </div>
+
+                <div class="log-box">
+                    <label style="font-weight: bold; color: #e67e22; font-size: 13px;">📡 Import Log ITS:</label>
+                    <input type="file" id="logFileInput" accept=".txt,.csv" title="Chọn file Log để mô phỏng tuyến đường đo">
+                    <button id="clearLogBtn" class="btn-danger" style="padding: 4px 8px; font-size: 12px; display: none;">Xóa Log</button>
                 </div>
             </div>
 
@@ -57,6 +74,15 @@
             <div style="position: relative;" id="mapWrapper">
                 <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
                 <div id="map"></div>
+                
+                <!-- Bảng Chú Thích Mức Tín Hiệu ITS (Mặc định ẩn) -->
+                <div id="logLegend" class="map-legend">
+                    <strong style="display:block; margin-bottom: 5px; font-size:13px; color:#2c3e50;">Mức thu tín hiệu (dBm):</strong>
+                    <div class="legend-item"><div class="legend-color" style="background: #2ecc71;"></div><span style="font-size: 12px;">≥ -75 (Tốt)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #f1c40f;"></div><span style="font-size: 12px;">-75 tới -85 (Khá)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e67e22;"></div><span style="font-size: 12px;">-85 tới -95 (TB)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div><span style="font-size: 12px;">&lt; -95 (Kém)</span></div>
+                </div>
             </div>
 
         </div>
@@ -65,30 +91,23 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // 1. TẢI CSS LEAFLET AN TOÀN QUA BASE64
         const cssLink = document.createElement('link');
         cssLink.rel = 'stylesheet';
         cssLink.href = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuY3Nz');
         document.head.appendChild(cssLink);
 
-        // 2. TẢI JS LEAFLET VÀ CHẠY BẢN ĐỒ
         const jsScript = document.createElement('script');
         jsScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuanM=');
-        
-        jsScript.onload = function() {
-            initGISMap(); 
-        };
-        
+        jsScript.onload = function() { initGISMap(); };
         jsScript.onerror = function() {
             document.getElementById('map-loading').textContent = "Không thể tải thư viện bản đồ. Vui lòng kiểm tra mạng!";
             document.getElementById('map-loading').style.color = "red";
         };
-
         document.head.appendChild(jsScript);
     });
 
     // =====================================================================
-    // HÀM KHỞI TẠO BẢN ĐỒ VÀ CÁC THÀNH PHẦN (CHỈ GỌI KHI LEAFLET ĐÃ TẢI XONG)
+    // HÀM KHỞI TẠO BẢN ĐỒ VÀ CÁC THÀNH PHẦN
     // =====================================================================
     function initGISMap() {
         var map = L.map('map').setView([19.806692, 105.77611], 12); 
@@ -110,11 +129,7 @@
         };
         L.control.layers(baseMaps).addTo(map);
 
-        // =========================================================
-        // THÊM CÁC NÚT ĐIỀU KHIỂN BÊN TRONG BẢN ĐỒ
-        // =========================================================
-
-        // 1. Nút Full Screen
+        // Nút Full Screen
         var fullscreenControl = L.control({position: 'topleft'});
         fullscreenControl.onAdd = function () {
             var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
@@ -127,12 +142,10 @@
             var elem = document.getElementById('mapWrapper');
             if (!document.fullscreenElement) {
                 elem.requestFullscreen().catch(err => { alert(`Lỗi mở Fullscreen: ${err.message}`); });
-            } else {
-                document.exitFullscreen();
-            }
+            } else { document.exitFullscreen(); }
         };
 
-        // 2. Nút GPS (Biểu tượng ngắm chuẩn Google Maps)
+        // Nút GPS Định Vị
         var gpsControl = L.control({position: 'topleft'});
         gpsControl.onAdd = function () {
             var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
@@ -152,24 +165,16 @@
         gpsControl.addTo(map);
 
         var userMarker, userCircle;
-        window.locateUser = function() {
-            map.locate({setView: true, maxZoom: 16});
-        };
+        window.locateUser = function() { map.locate({setView: true, maxZoom: 16}); };
         map.on('locationfound', function(e) {
             if (userMarker) map.removeLayer(userMarker);
             if (userCircle) map.removeLayer(userCircle);
-            userMarker = L.circleMarker(e.latlng, {
-                radius: 7, fillColor: "#4285F4", color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 1
-            }).addTo(map).bindPopup("Vị trí của bạn").openPopup();
-            userCircle = L.circle(e.latlng, {
-                radius: e.accuracy / 2, color: "#4285F4", fillColor: "#4285F4", weight: 1, fillOpacity: 0.15
-            }).addTo(map);
+            userMarker = L.circleMarker(e.latlng, { radius: 7, fillColor: "#4285F4", color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 1 }).addTo(map).bindPopup("Vị trí của bạn").openPopup();
+            userCircle = L.circle(e.latlng, { radius: e.accuracy / 2, color: "#4285F4", fillColor: "#4285F4", weight: 1, fillOpacity: 0.15 }).addTo(map);
         });
-        map.on('locationerror', function(e) {
-            alert("Không thể lấy vị trí. Hãy chắc chắn bạn đã cấp quyền Location cho trình duyệt.");
-        });
+        map.on('locationerror', function(e) { alert("Không thể lấy vị trí. Hãy bật Location cho trình duyệt."); });
 
-        // 3. Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
+        // Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính)
         var globalRadius = 200; 
         var radiusControl = L.control({position: 'bottomleft'});
         radiusControl.onAdd = function() {
@@ -191,7 +196,7 @@
         radiusControl.addTo(map);
 
         // =========================================================
-        // THUẬT TOÁN VẼ CÁNH QUẠT LƯỢNG GIÁC
+        // CÁC HÀM TIỆN ÍCH RF
         // =========================================================
         function createSectorPolygon(lat, lng, azimuth, radiusMeters, beamwidth) {
             var R = 6378137; 
@@ -207,15 +212,22 @@
                 
                 var dLat = dy / R * (180 / Math.PI);
                 var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-                
                 points.push([lat + dLat, lng + dLng]);
             }
             points.push(center);
             return points;
         }
 
+        // Quy ước màu Tín Hiệu Drive Test
+        function getColorByLevel(level) {
+            if (level >= -75) return '#2ecc71'; // Tốt (Xanh lá)
+            if (level >= -85) return '#f1c40f'; // Khá (Vàng)
+            if (level >= -95) return '#e67e22'; // TB (Cam)
+            return '#e74c3c';                   // Kém (Đỏ)
+        }
+
         // =========================================================
-        // LẤY DỮ LIỆU & RENDER BẢN ĐỒ (CÓ XỬ LÝ SEARCH & DIM)
+        // LẤY DỮ LIỆU & RENDER BẢN ĐỒ CHÍNH (CELLS)
         // =========================================================
         var allMapData = [];
         var sectorLayerGroup = L.layerGroup().addTo(map);
@@ -224,7 +236,6 @@
         function renderMap(filterType) {
             sectorLayerGroup.clearLayers(); 
 
-            // Chỉ lọc các cell thuộc mạng được chọn (VD: 4G)
             var filteredData = allMapData.filter(cell => cell.network === filterType);
             var searchBounds = [];
 
@@ -235,7 +246,6 @@
                 
                 if(isNaN(lat) || isNaN(lon)) return; 
 
-                // YÊU CẦU MÀU SẮC GỐC
                 var baseColor, baseFillColor;
                 if (cell.network === '4G') {
                     baseColor = '#c0392b'; baseFillColor = '#e74c3c'; // Đỏ
@@ -245,7 +255,6 @@
                     baseColor = '#2980b9'; baseFillColor = '#3498db'; // Xanh Dương
                 }
 
-                // THUẬT TOÁN TÌM KIẾM
                 var isMatch = false;
                 if (currentSearchQuery) {
                     let q = currentSearchQuery.toUpperCase();
@@ -253,12 +262,9 @@
                     let cCode = String(cell.Cell_code || '').toUpperCase();
                     let sCode = String(cell.Site_code || '').toUpperCase();
                     
-                    if (cName.includes(q) || cCode.includes(q) || sCode.includes(q)) {
-                        isMatch = true;
-                    }
+                    if (cName.includes(q) || cCode.includes(q) || sCode.includes(q)) isMatch = true;
                 }
 
-                // ÁP DỤNG STYLE HIGHLIGHT VÀ DIM
                 var finalColor = baseColor;
                 var finalFillColor = baseFillColor;
                 var finalWeight = 1;
@@ -267,27 +273,18 @@
 
                 if (currentSearchQuery) {
                     if (isMatch) {
-                        // Cell tìm thấy sẽ Cực kỳ nổi bật
-                        finalWeight = 3;        // Viền đen đậm
-                        finalOpacity = 0.95;    // Opacity cao
-                        finalColor = '#000';    
-                        searchBounds.push([lat, lon]); // Lưu tọa độ để lát tự động Zoom
+                        finalWeight = 3; finalOpacity = 0.95; finalColor = '#000';    
+                        searchBounds.push([lat, lon]); 
                     } else {
-                        // Các cell không liên quan vẫn giữ màu nhưng bị làm mờ
-                        finalWeight = 1;        
-                        finalOpacity = 0.15;    
-                        isDimmed = true;
+                        finalWeight = 1; finalOpacity = 0.15; isDimmed = true;
                     }
                 }
 
-                var beamwidth = 65; 
-                var sectorPoints = createSectorPolygon(lat, lon, azi, globalRadius, beamwidth);
-                
+                var sectorPoints = createSectorPolygon(lat, lon, azi, globalRadius, 65);
                 var sector = L.polygon(sectorPoints, {
                     color: finalColor, weight: finalWeight, fillColor: finalFillColor, fillOpacity: finalOpacity
                 });
 
-                // BẢNG THÔNG TIN ĐỘNG
                 var tableRows = '';
                 for (let key in cell) {
                     if (cell.hasOwnProperty(key) && key !== 'network') {
@@ -297,34 +294,18 @@
                     }
                 }
 
-                var popupHtml = `
-                    <div class="rf-popup">
-                        <h3>Trạm ${cell.Site_code || ''} - Mạng ${cell.network}</h3>
-                        <div class="rf-popup-content">
-                            <table>
-                                ${tableRows}
-                            </table>
-                        </div>
-                    </div>
-                `;
-                
+                var popupHtml = `<div class="rf-popup"><h3>Trạm ${cell.Site_code || ''} - Mạng ${cell.network}</h3><div class="rf-popup-content"><table>${tableRows}</table></div></div>`;
                 sector.bindPopup(popupHtml);
                 
-                sector.on('mouseover', function () { 
-                    if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); 
-                });
-                sector.on('mouseout', function () { 
-                    this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); 
-                });
+                sector.on('mouseover', function () { if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); });
+                sector.on('mouseout', function () { this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); });
 
                 sector.addTo(sectorLayerGroup);
             });
 
-            // AUTO ZOOM IN VÀO TÂM KHI TÌM KIẾM
             if (currentSearchQuery) {
                 if (searchBounds.length > 0) {
-                    var bounds = L.latLngBounds(searchBounds);
-                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+                    map.fitBounds(L.latLngBounds(searchBounds), { padding: [50, 50], maxZoom: 16 });
                 } else {
                     alert(`Không tìm thấy Cell/Site nào chứa từ khóa "${currentSearchQuery}" trong mạng ${filterType}!`);
                 }
@@ -332,37 +313,146 @@
         }
 
         // =========================================================
+        // MÔ ĐUN XỬ LÝ IMPORT LOG ITS (MÔ PHỎNG DRIVE TEST)
+        // =========================================================
+        var logLayerGroup = L.layerGroup().addTo(map);
+
+        document.getElementById('logFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            document.getElementById('map-loading').textContent = "Đang xử lý Log và vẽ tia...";
+            document.getElementById('map-loading').style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                processLogData(event.target.result);
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('clearLogBtn').addEventListener('click', function() {
+            logLayerGroup.clearLayers();
+            document.getElementById('logLegend').style.display = 'none';
+            document.getElementById('logFileInput').value = '';
+            this.style.display = 'none';
+        });
+
+        function processLogData(csvText) {
+            logLayerGroup.clearLayers();
+            document.getElementById('logLegend').style.display = 'block';
+            document.getElementById('clearLogBtn').style.display = 'inline-block';
+
+            // Xử lý tách dòng (Hỗ trợ \r\n hoặc \n)
+            const lines = csvText.split(/\r?\n/);
+            if (lines.length < 2) {
+                alert("File log rỗng hoặc không đúng định dạng!");
+                document.getElementById('map-loading').style.display = 'none';
+                return;
+            }
+
+            // Lấy Header dựa vào dấu Pipe (|)
+            const headers = lines[0].split('|').map(h => h.trim());
+            const latIdx = headers.indexOf('Latitude');
+            const lonIdx = headers.indexOf('Longitude');
+            const levelIdx = headers.indexOf('Level');
+            const techIdx = headers.indexOf('NetworkTech');
+            const nodeIdx = headers.indexOf('Node');
+            const cellIdIdx = headers.indexOf('CellID');
+
+            if (latIdx === -1 || lonIdx === -1) {
+                alert("File log ITS không hợp lệ. Không tìm thấy cột Latitude/Longitude phân cách bằng dấu '|'.");
+                document.getElementById('map-loading').style.display = 'none';
+                return;
+            }
+
+            let logBounds = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const parts = lines[i].split('|');
+                if (parts.length < Math.max(latIdx, lonIdx, levelIdx)) continue;
+
+                const lat = parseFloat(parts[latIdx]);
+                const lon = parseFloat(parts[lonIdx]);
+                if (isNaN(lat) || isNaN(lon)) continue;
+
+                const level = parseFloat(parts[levelIdx]);
+                const tech = parts[techIdx] ? parts[techIdx].trim() : '';
+                const node = parts[nodeIdx] ? parts[nodeIdx].trim() : '';
+                const cellId = parts[cellIdIdx] ? parts[cellIdIdx].trim() : '';
+
+                logBounds.push([lat, lon]);
+
+                // 1. Vẽ Điểm đo (Dot)
+                const pointColor = getColorByLevel(level);
+                L.circleMarker([lat, lon], {
+                    radius: 3.5, fillColor: pointColor, color: '#000', weight: 0.5, fillOpacity: 1
+                }).addTo(logLayerGroup).bindPopup(`<b>Tech:</b> ${tech}<br><b>Level:</b> ${level} dBm<br><b>Node:</b> ${node}<br><b>CellID:</b> ${cellId}`);
+
+                // 2. Tìm trạm phục vụ và bắn tia (Line)
+                let matchedCell = null;
+                
+                if (tech === '3G') {
+                    // Logic 3G: CellID log khớp với Cell_code DB
+                    matchedCell = allMapData.find(c => c.network === '3G' && String(c.Cell_code) === cellId);
+                } else if (tech === '4G') {
+                    // Logic 4G: Node log khớp ENodeBID/Site_code DB VÀ CellID log khớp Cell_code/Lcrid DB
+                    matchedCell = allMapData.find(c => 
+                        c.network === '4G' && 
+                        (String(c.ENodeBID) === node || String(c.Site_code) === node) &&
+                        (String(c.Cell_code) === cellId || String(c.Lcrid) === cellId)
+                    );
+                    // Dự phòng nếu DB chỉ lưu mỗi CellID
+                    if (!matchedCell) {
+                        matchedCell = allMapData.find(c => c.network === '4G' && String(c.Cell_code) === cellId);
+                    }
+                }
+
+                // Vẽ tia
+                if (matchedCell && !isNaN(parseFloat(matchedCell.Latitude)) && !isNaN(parseFloat(matchedCell.Longitude))) {
+                    const cellLat = parseFloat(matchedCell.Latitude);
+                    const cellLon = parseFloat(matchedCell.Longitude);
+                    
+                    L.polyline([[lat, lon], [cellLat, cellLon]], {
+                        color: pointColor, weight: 1.5, opacity: 0.6, dashArray: '4, 5' // Nét đứt mô phỏng sóng
+                    }).addTo(logLayerGroup);
+                }
+            }
+            
+            // Tự động Zoom bao phủ toàn bộ vùng đo Drive Test
+            if (logBounds.length > 0) {
+                 map.fitBounds(L.latLngBounds(logBounds), { padding: [30, 30] });
+            }
+            
+            document.getElementById('map-loading').style.display = 'none';
+        }
+
+        // =========================================================
         // GẮN SỰ KIỆN CHO CÁC CONTROL BÊN NGOÀI
         // =========================================================
-
-        // Sự kiện Thanh Slider
         document.getElementById('radiusSlider').addEventListener('input', function(e) {
             globalRadius = parseInt(e.target.value);
             document.getElementById('radiusValue').innerText = globalRadius;
             renderMap(document.getElementById('networkFilter').value);
         });
 
-        // Sự kiện Menu thả xuống (Đổi mạng)
         document.getElementById('networkFilter').addEventListener('change', function(e) {
             renderMap(e.target.value);
         });
 
-        // Sự kiện Nhấn nút Tìm kiếm
         document.getElementById('mapSearchBtn').addEventListener('click', function() {
             var val = document.getElementById('mapSearchInput').value.trim();
             if (val) {
                 currentSearchQuery = val;
-                document.getElementById('mapClearBtn').style.display = 'block';
+                document.getElementById('mapClearBtn').style.display = 'inline-block';
                 renderMap(document.getElementById('networkFilter').value);
             }
         });
 
-        // Enter để Tìm kiếm
         document.getElementById('mapSearchInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') document.getElementById('mapSearchBtn').click();
         });
 
-        // Nút Hủy Tìm Kiếm (Khôi phục bản đồ gốc)
         document.getElementById('mapClearBtn').addEventListener('click', function() {
             document.getElementById('mapSearchInput').value = '';
             currentSearchQuery = '';
@@ -370,7 +460,7 @@
             renderMap(document.getElementById('networkFilter').value);
         });
 
-        // FETCH DATA LẦN ĐẦU TIÊN
+        // TẢI DỮ LIỆU RF MỘT LẦN VÀ BẬT BỘ LỌC
         fetch('/api/gis-data')
             .then(res => {
                 if(!res.ok) throw new Error("Lỗi HTTP: " + res.status);
@@ -385,7 +475,7 @@
                 }
 
                 allMapData = data; 
-                renderMap('4G'); // Mặc định vẽ 4G
+                renderMap('4G'); 
             })
             .catch(err => {
                 console.error("Lỗi lấy dữ liệu GIS:", err);
