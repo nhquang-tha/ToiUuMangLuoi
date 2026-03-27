@@ -26,6 +26,7 @@ pages.forEach(page => {
 // --- BẢN ĐỒ GIS ---
 router.get('/gis-map', isAuthenticated, mapController.getMapPage);
 router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
+router.get('/api/ta-data', isAuthenticated, mapController.getTAData); // ROUTES CHO MAP TA
 
 // --- ROUTES CHO KPI ANALYTICS ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
