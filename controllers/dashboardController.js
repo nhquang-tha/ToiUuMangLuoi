@@ -15,7 +15,6 @@ function parseDateToSortableInteger(val) {
             let m = parseInt(parts[1], 10);
             let y = parseInt(parts[2], 10);
             
-            // Khắc phục rác nếu file bị lộn format Mỹ (Tháng/Ngày/Năm)
             if (m > 12 && d <= 12) { let temp = m; m = d; d = temp; }
             if (y < 100) y += 2000;
             
@@ -51,13 +50,8 @@ async function getKpiHistory() {
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
 
         const processHistory = (rows) => {
-            // Lọc ra các số YYYYMMDD hợp lệ và xóa trùng lặp
             let uniqueNums = [...new Set(rows.map(r => parseDateToSortableInteger(r.Thoi_gian)).filter(n => n > 0))];
-            
-            // Sắp xếp TOÁN HỌC từ bé đến lớn
             uniqueNums.sort((a, b) => a - b);
-            
-            // Trả về dạng String
             return uniqueNums.map(n => integerToDDMMYYYY(n));
         };
 
@@ -99,7 +93,6 @@ exports.handleImportData = async (req, res) => {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             
-            // QUAN TRỌNG: raw: false ÉP BUỘC thư viện trả về dạng CHỮ chuẩn nguyên gốc, ko cho tự đoán ngày tháng
             let parseOptions = { raw: false, defval: "" };
             if (networkType === 'kpi_4g') parseOptions.range = 1;
             let data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], parseOptions);
@@ -109,27 +102,28 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // CHUẨN HÓA THỜI GIAN THEO DD/MM/YYYY TRƯỚC KHI LƯU VÀO DB
-            data.forEach(row => {
-                let t = row['Thời gian'];
-                if (t !== undefined && t !== null) {
-                    if (!isNaN(t) && Number(t) > 30000 && typeof t === 'number') { // Serial Number Excel
-                        let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
-                        let d = String(dateObj.getDate()).padStart(2, '0');
-                        let m = String(dateObj.getMonth() + 1).padStart(2, '0');
-                        let y = dateObj.getFullYear();
-                        row['Thời gian'] = `${d}/${m}/${y}`;
-                    } else {
-                        // Ép chuỗi text thành định dạng chuẩn nhất bằng Engine Toán học
-                        let num = parseDateToSortableInteger(t);
-                        if (num > 0) {
-                            row['Thời gian'] = integerToDDMMYYYY(num);
+            // CHUẨN HÓA THỜI GIAN THEO DD/MM/YYYY TRƯỚC KHI LƯU VÀO DB (Chỉ áp dụng cho KPI và RF)
+            if (networkType !== 'ta_query') {
+                data.forEach(row => {
+                    let t = row['Thời gian'];
+                    if (t !== undefined && t !== null) {
+                        if (!isNaN(t) && Number(t) > 30000 && typeof t === 'number') { 
+                            let dateObj = new Date(Math.round((Number(t) - 25569) * 86400 * 1000));
+                            let d = String(dateObj.getDate()).padStart(2, '0');
+                            let m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                            let y = dateObj.getFullYear();
+                            row['Thời gian'] = `${d}/${m}/${y}`;
                         } else {
-                            row['Thời gian'] = String(t).trim();
+                            let num = parseDateToSortableInteger(t);
+                            if (num > 0) {
+                                row['Thời gian'] = integerToDDMMYYYY(num);
+                            } else {
+                                row['Thời gian'] = String(t).trim();
+                            }
                         }
                     }
-                }
-            });
+                });
+            }
 
             // LOGIC KIỂM TRA ĐÚNG CHỦNG LOẠI FILE
             const requiredHeaders = {
@@ -138,7 +132,8 @@ exports.handleImportData = async (req, res) => {
                 'rf_5g': ['CSHT_code', 'gNodeB ID', 'nrarfcn'],
                 'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
                 'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'],
-                'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT']
+                'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT'],
+                'ta_query': ['Date', 'eNodeB Name', 'Cell Code', 'L.RA.TA.UE.Index0'] // Validate file TA
             };
 
             const headersInFile = Object.keys(data[0]);
@@ -160,7 +155,7 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // XÓA DỮ LIỆU CŨ CỦA CÁC NGÀY CÓ TRONG FILE NÀY ĐỂ GHI ĐÈ
+            // XÓA DỮ LIỆU CŨ CỦA CÁC NGÀY CÓ TRONG FILE NÀY ĐỂ GHI ĐÈ (Dành cho KPI)
             if (networkType.startsWith('kpi_')) {
                 const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
                 if (uniqueDates.length > 0) {
@@ -191,6 +186,30 @@ exports.handleImportData = async (req, res) => {
             } else if (networkType === 'kpi_5g') {
                 sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
                 values = data.map(row => [row['Nhà cung cấp'], row['Tỉnh'], row['Tên GNODEB'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['GNODEB_ID'] || row['GNODEB ID'], row['CELL_ID'] || row['CELL ID'], row['Thời gian'], row['A User Uplink Average Throughput'] || row['USER_UL_AVG_THROUGHPUT'], row['CQI_5G'], row['Intra-SgNB PScell Change'] || row['INTRA_SGNB_PS_CHANGE'], row['Average User Number'] || row['USER_AVG_NUMBER'], row['Downlink Resource Block Ultilization'] || row['DLINK_RES_BLK_ULT'], row['Uplink Resource Block Ultilization'] || row['ULINK_RES_BLK_ULT'], row['Cell avaibility rate'] || row['CELL_AVAIBILITY_RATE'], row['Maximum User Number'] || row['USER_MAX_NUMBER'], row['UL Traffic Volume (GB)'] || row['UL_TRAFFIC_VOLUME'], row['DL Traffic Volume (GB)'] || row['DL_TRAFFIC_VOLUME'], row['Cell Uplink Average Throughput'] || row['CELL_UL_AVG_THROUGHPUT'], row['Cell Downlink Average Throughput'] || row['CELL_DL_AVG_THROUGHPUT'], row['SgNB Abnormal Release Rate'] || row['SGNB_ABN_RELEASE_RATE'], row['SgNB Addition Success Rate'] || row['SGNB_ADD_SUCCESS_RATE'], row['A User Downlink Average Throughput'] || row['USER_DL_AVG_THROUGHPUT'], row['Total Data Traffic Volume (GB)'] || row['TRAFFIC'], row['Inter-SgNB PScell Change'] || row['INTER_SGNB_PS_CHANGE']]);
+            } else if (networkType === 'ta_query') {
+                // XỬ LÝ INSERT CHO BẢNG TA_QUERY
+                sql = `INSERT INTO TA_Query (Date, eNodeB_Name, Cell_FDD_TDD_Indication, Cell_Code, LocalCell_Id, eNodeB_Function_Name, Integrity, Index0, Index1, Index2, Index3, Index4, Index5, Index6, Index7, Index8, Index9, Index10, Index11) VALUES ?`;
+                values = data.map(row => [
+                    row['Date'], 
+                    row['eNodeB Name'], 
+                    row['Cell FDD TDD Indication'], 
+                    row['Cell Code'], 
+                    row['LocalCell Id'], 
+                    row['eNodeB Function Name'], 
+                    row['Integrity'],
+                    row['L.RA.TA.UE.Index0'], 
+                    row['L.RA.TA.UE.Index1'], 
+                    row['L.RA.TA.UE.Index2'], 
+                    row['L.RA.TA.UE.Index3'],
+                    row['L.RA.TA.UE.Index4'], 
+                    row['L.RA.TA.UE.Index5'], 
+                    row['L.RA.TA.UE.Index6'], 
+                    row['L.RA.TA.UE.Index7'],
+                    row['L.RA.TA.UE.Index8'], 
+                    row['L.RA.TA.UE.Index9'], 
+                    row['L.RA.TA.UE.Index10'], 
+                    row['L.RA.TA.UE.Index11']
+                ]);
             }
 
             await db.query(sql, [values]);
