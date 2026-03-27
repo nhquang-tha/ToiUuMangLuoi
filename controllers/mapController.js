@@ -24,11 +24,11 @@ exports.getMapData = async (req, res) => {
     }
 };
 
-// API Lấy dữ liệu TA_Query join với RF_4G để lấy tọa độ và hướng Azimuth
+// API Lấy dữ liệu TA_Query join với RF_4G (Bổ sung CELL_NAME, Site_code để hỗ trợ Tìm kiếm)
 exports.getTAData = async (req, res) => {
     try {
         const q = `
-            SELECT t.*, r.Latitude, r.Longitude, r.Azimuth 
+            SELECT t.*, r.Latitude, r.Longitude, r.Azimuth, r.CELL_NAME, r.Site_code 
             FROM TA_Query t 
             JOIN rf_4g r ON t.Cell_Code = r.Cell_code 
             WHERE r.Latitude IS NOT NULL AND r.Longitude IS NOT NULL AND r.Latitude != '' AND r.Longitude != ''
