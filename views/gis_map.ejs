@@ -1,7 +1,7 @@
 <%- include('partials/head') %>
 
 <style>
-    /* Thanh công cụ phía trên bản đồ (Được làm gọn lại) */
+    /* Thanh công cụ phía trên bản đồ */
     .map-top-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px; }
     
     .search-box { display: flex; gap: 5px; flex: 1; min-width: 200px; }
@@ -64,6 +64,8 @@
                         <option value="3G">Mạng 3G</option>
                         <option value="5G">Mạng 5G</option>
                     </select>
+                    <!-- NÚT KÍCH HOẠT MÔ PHỎNG TA HEATMAP -->
+                    <button id="btnToggleTA" class="btn-primary" style="background-color: #8e44ad; padding: 6px 12px; font-size: 12px; border: none; margin-left: 5px;">📍 Mô phỏng TA 4G</button>
                 </div>
 
                 <div class="log-box">
@@ -87,6 +89,15 @@
                     <div class="legend-item"><div class="legend-color" style="background: #FFFF00;"></div><span style="font-size: 12px;">-95 tới -105</span></div>
                     <div class="legend-item"><div class="legend-color" style="background: #FFA500;"></div><span style="font-size: 12px;">-105 tới -115</span></div>
                     <div class="legend-item"><div class="legend-color" style="background: #FF0000;"></div><span style="font-size: 12px;">&lt; -115</span></div>
+                </div>
+
+                <!-- Bảng Chú Thích Cường Độ TA UE -->
+                <div id="taLegend" class="map-legend">
+                    <strong style="display:block; margin-bottom: 5px; font-size:13px; color:#2c3e50;">Mật độ UE (TA Heatmap):</strong>
+                    <div class="legend-item"><div class="legend-color" style="background: #c0392b;"></div><span style="font-size: 12px;">Rất Cao (Mở rộng búp sóng)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div><span style="font-size: 12px;">Cao</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e67e22;"></div><span style="font-size: 12px;">Trung Bình</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #f1c40f;"></div><span style="font-size: 12px;">Thấp (Co hẹp búp sóng)</span></div>
                 </div>
             </div>
 
@@ -179,7 +190,7 @@
         });
         map.on('locationerror', function(e) { alert("Không thể lấy vị trí. Hãy bật Location cho trình duyệt."); });
 
-        // Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính) và Thanh Kéo Kích Thước Điểm Đo
+        // Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính) và Kích Thước Điểm Đo
         var globalRadius = 200; 
         var globalDotRadius = 3.5; 
 
@@ -211,7 +222,7 @@
         slidersControl.addTo(map);
 
         // =========================================================
-        // CÁC HÀM TIỆN ÍCH RF VÀ TỌA ĐỘ
+        // CÁC HÀM TOÁN HỌC VẼ RF: SECTOR (CÁNH QUẠT GỐC) VÀ DONUT SLICE (LÁT CẮT TA)
         // =========================================================
         
         function calculateSectorArcCenter(lat, lng, azimuth, radiusMeters) {
@@ -219,13 +230,12 @@
             var angleRad = azimuth * Math.PI / 180;
             var dx = radiusMeters * Math.sin(angleRad);
             var dy = radiusMeters * Math.cos(angleRad);
-            
             var dLat = dy / R * (180 / Math.PI);
             var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-            
             return { lat: lat + dLat, lng: lng + dLng };
         }
 
+        // Vẽ cánh quạt thông thường
         function createSectorPolygon(lat, lng, azimuth, radiusMeters, beamwidth) {
             var R = 6378137; 
             var center = [lat, lng];
@@ -237,12 +247,44 @@
                 var angleRad = i * Math.PI / 180;
                 var dx = radiusMeters * Math.sin(angleRad);
                 var dy = radiusMeters * Math.cos(angleRad);
-                
                 var dLat = dy / R * (180 / Math.PI);
                 var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
                 points.push([lat + dLat, lng + dLng]);
             }
             points.push(center);
+            return points;
+        }
+
+        // Vẽ Lát cắt hình Vành Khăn Đồng Tâm (Donut Slice) cho chức năng TA Heatmap
+        function createDonutSlice(lat, lng, azimuth, innerRadius, outerRadius, beamwidth) {
+            var R = 6378137;
+            var points = [];
+            var startAngle = azimuth - beamwidth / 2;
+            var endAngle = azimuth + beamwidth / 2;
+
+            // Vẽ viền cung ngoài (Outer arc)
+            for (var i = startAngle; i <= endAngle; i += 2) {
+                var angleRad = i * Math.PI / 180;
+                var dx = outerRadius * Math.sin(angleRad);
+                var dy = outerRadius * Math.cos(angleRad);
+                var dLat = dy / R * (180 / Math.PI);
+                var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+                points.push([lat + dLat, lng + dLng]);
+            }
+
+            // Vẽ viền cung trong ngược chiều (Inner arc)
+            if (innerRadius > 0) {
+                for (var i = endAngle; i >= startAngle; i -= 2) {
+                    var angleRad = i * Math.PI / 180;
+                    var dx = innerRadius * Math.sin(angleRad);
+                    var dy = innerRadius * Math.cos(angleRad);
+                    var dLat = dy / R * (180 / Math.PI);
+                    var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+                    points.push([lat + dLat, lng + dLng]);
+                }
+            } else {
+                points.push([lat, lng]); // Trạm gốc nếu innerRadius = 0
+            }
             return points;
         }
 
@@ -257,15 +299,19 @@
         }
 
         // =========================================================
-        // LẤY DỮ LIỆU & RENDER BẢN ĐỒ CHÍNH (CELLS)
+        // KHAI BÁO CÁC LAYER GROUPS VÀ BIẾN STATE
         // =========================================================
         var allMapData = [];
+        var allTAData = [];
         var sectorLayerGroup = L.layerGroup().addTo(map);
+        var taLayerGroup = L.layerGroup().addTo(map); // Lớp riêng cho tính năng TA Heatmap
         var currentSearchQuery = "";
-        
-        // Lưu trữ dữ liệu log đã parse để dễ dàng vẽ lại khi đổi kích thước điểm
         var cachedLogPoints = []; 
+        var isTAMode = false; // Trạng thái tính năng TA
 
+        // =========================================================
+        // TÍNH NĂNG 1: RENDER BẢN ĐỒ CELL GỐC
+        // =========================================================
         function renderMap(filterType) {
             sectorLayerGroup.clearLayers(); 
 
@@ -333,7 +379,6 @@
                 sector.on('mouseover', function () { if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); });
                 sector.on('mouseout', function () { this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); });
 
-                // Lưu lại thông tin vòm cung cho điểm đo bắn tia tới (Luôn tính toán để tránh lỗi nếu đang lọc ẩn trạm)
                 cell._arcCenter = calculateSectorArcCenter(lat, lon, azi, globalRadius);
 
                 sector.addTo(sectorLayerGroup);
@@ -347,14 +392,133 @@
                 }
             }
 
-            // Nếu đang có Log ITS, cập nhật lại tia line bắn về cung vòm (vì radius có thể đổi)
             if(cachedLogPoints.length > 0) {
                 renderLogPoints();
             }
         }
 
         // =========================================================
-        // MÔ ĐUN XỬ LÝ IMPORT LOG ITS (MÔ PHỎNG DRIVE TEST)
+        // TÍNH NĂNG 2: MÔ PHỎNG TA HEATMAP (TIMING ADVANCE)
+        // =========================================================
+        document.getElementById('btnToggleTA').addEventListener('click', function() {
+            isTAMode = !isTAMode;
+            if (isTAMode) {
+                // Bật chế độ TA: Đổi màu nút, tắt Cell gốc, bật dữ liệu TA
+                this.style.backgroundColor = '#e74c3c';
+                this.innerHTML = '✖ Thoát TA 4G';
+                sectorLayerGroup.clearLayers(); 
+                logLayerGroup.clearLayers(); 
+                document.getElementById('taLegend').style.display = 'block';
+                loadAndRenderTA();
+            } else {
+                // Thoát chế độ TA: Trở về bình thường
+                this.style.backgroundColor = '#8e44ad';
+                this.innerHTML = '📍 Mô phỏng TA 4G';
+                taLayerGroup.clearLayers();
+                document.getElementById('taLegend').style.display = 'none';
+                renderMap(document.getElementById('networkFilter').value); 
+            }
+        });
+
+        function loadAndRenderTA() {
+            if (allTAData.length > 0) {
+                renderTAHeatmap();
+                return;
+            }
+            document.getElementById('map-loading').textContent = "Đang tải dữ liệu Timing Advance...";
+            document.getElementById('map-loading').style.display = 'block';
+
+            fetch('/api/ta-data')
+                .then(res => res.json())
+                .then(data => {
+                    allTAData = data;
+                    document.getElementById('map-loading').style.display = 'none';
+                    
+                    if (allTAData.length === 0) {
+                        alert("Không có dữ liệu TA trong Database. Vui lòng vào Import Data để tải lên file TA_Query.");
+                        document.getElementById('btnToggleTA').click(); // Auto thoát
+                        return;
+                    }
+                    renderTAHeatmap();
+                }).catch(err => {
+                    console.error(err);
+                    document.getElementById('map-loading').textContent = "Lỗi tải TA. Kiểm tra kết nối.";
+                });
+        }
+
+        function renderTAHeatmap() {
+            taLayerGroup.clearLayers();
+            let taStepRadius = 150; // Giả định mỗi Index TA cách nhau 150 mét
+
+            allTAData.forEach(cell => {
+                let lat = parseFloat(cell.Latitude);
+                let lon = parseFloat(cell.Longitude);
+                let azi = parseFloat(cell.Azimuth) || 0;
+
+                if(isNaN(lat) || isNaN(lon)) return;
+
+                // Tìm Max UE của cell này để làm thang tham chiếu chia tỷ lệ Màu và Độ rộng (Beamwidth)
+                let maxUE = 0;
+                for(let i = 0; i <= 11; i++) {
+                    let val = parseInt(cell['Index' + i]) || 0;
+                    if(val > maxUE) maxUE = val;
+                }
+                if (maxUE === 0) return; // Nếu cell chết (0 UE), bỏ qua vẽ
+
+                // Lọc Search
+                if (currentSearchQuery) {
+                    let q = currentSearchQuery.toUpperCase();
+                    let cCode = String(cell.Cell_Code || '').toUpperCase();
+                    if (!cCode.includes(q)) return; // Ẩn hoàn toàn nếu không khớp
+                }
+
+                // Vẽ các dải phân đoạn đồng tâm (Concentric Segments)
+                for(let i = 0; i <= 11; i++) {
+                    let ueCount = parseInt(cell['Index' + i]) || 0;
+                    if (ueCount === 0) continue; // Phân đoạn trống => Không vẽ
+
+                    let ratio = ueCount / maxUE; // Tỷ lệ từ 0 đến 1
+
+                    // Ánh xạ Heatmap Color
+                    let color = '#f1c40f'; // Ít UE: Vàng
+                    if (ratio >= 0.8) color = '#c0392b'; // Rất nhiều: Đỏ đậm
+                    else if (ratio >= 0.5) color = '#e74c3c'; // Nhiều: Đỏ nhạt
+                    else if (ratio >= 0.2) color = '#e67e22'; // Trung bình: Cam
+
+                    // Tính bán kính vòm trong và vòm ngoài
+                    let innerRadius = i * taStepRadius;
+                    let outerRadius = (i + 1) * taStepRadius;
+
+                    // Ánh xạ Beamwidth: Điểm nào càng ít người, búp sóng tự động co hẹp lại nhọn hoắt
+                    // Base width là 5 độ, vươn rộng tối đa theo ratio lên tới 65 độ
+                    let dynamicBeamwidth = 5 + (60 * ratio);
+
+                    // Sử dụng thuật toán cắt hình Vành khăn
+                    let points = createDonutSlice(lat, lon, azi, innerRadius, outerRadius, dynamicBeamwidth);
+
+                    let poly = L.polygon(points, {
+                        color: '#333', weight: 0.5, fillColor: color, fillOpacity: 0.85
+                    });
+
+                    poly.bindPopup(`
+                        <div style="font-family: Arial;">
+                            <strong style="color:#2980b9;font-size:14px;">Cell: ${cell.Cell_Code}</strong><br/>
+                            <b>Chỉ số TA:</b> Index ${i}<br/>
+                            <b>Khoảng cách giả định:</b> ${innerRadius}m - ${outerRadius}m<br/>
+                            <b style="color:red;">Lượng thiết bị (UE):</b> ${ueCount} (Max: ${maxUE})
+                        </div>
+                    `);
+                    
+                    poly.on('mouseover', function () { this.setStyle({weight: 2}); });
+                    poly.on('mouseout', function () { this.setStyle({weight: 0.5}); });
+
+                    poly.addTo(taLayerGroup);
+                }
+            });
+        }
+
+        // =========================================================
+        // TÍNH NĂNG 3: MÔ PHỎNG DRIVE TEST ITS LOG
         // =========================================================
         var logLayerGroup = L.layerGroup().addTo(map);
 
@@ -376,13 +540,12 @@
             logLayerGroup.clearLayers();
             document.getElementById('logLegend').style.display = 'none';
             document.getElementById('logFileInput').value = '';
-            cachedLogPoints = []; // Xóa cache
+            cachedLogPoints = []; 
             this.style.display = 'none';
         });
 
         function processLogData(csvText) {
-            cachedLogPoints = []; // Reset cache
-            
+            cachedLogPoints = []; 
             const lines = csvText.split(/\r?\n/);
             if (lines.length < 2) {
                 alert("File log rỗng hoặc không đúng định dạng!");
@@ -397,7 +560,7 @@
             const techIdx = headers.indexOf('NetworkTech');
             const nodeIdx = headers.indexOf('Node');
             const cellIdIdx = headers.indexOf('CellID');
-            const lacIdx = headers.indexOf('LAC'); // Cột LAC rất quan trọng cho 3G
+            const lacIdx = headers.indexOf('LAC'); 
 
             if (latIdx === -1 || lonIdx === -1) {
                 alert("File log ITS không hợp lệ. Không tìm thấy cột Latitude/Longitude phân cách bằng dấu '|'.");
@@ -422,11 +585,10 @@
                 cachedLogPoints.push({ lat, lon, level, tech, node, cellId, lac });
             }
             
-            renderLogPoints(true); // Tham số true để báo là cần zoom fitbounds
+            renderLogPoints(true); 
             document.getElementById('map-loading').style.display = 'none';
         }
 
-        // Hàm render lại điểm đo và tia (được gọi lại khi thanh trượt thay đổi)
         function renderLogPoints(shouldZoom = false) {
             logLayerGroup.clearLayers();
             if(cachedLogPoints.length === 0) return;
@@ -440,45 +602,37 @@
                 logBounds.push([p.lat, p.lon]);
                 const pointColor = getColorByLevel(p.level);
 
-                // 1. Vẽ Điểm đo (Kích thước tùy thuộc Slider)
                 L.circleMarker([p.lat, p.lon], {
                     radius: globalDotRadius, fillColor: pointColor, color: '#000', weight: 0.5, fillOpacity: 1
                 }).addTo(logLayerGroup).bindPopup(`<b>Tech:</b> ${p.tech}<br><b>Level:</b> ${p.level} dBm<br><b>LAC/Node:</b> ${p.tech === '3G' ? p.lac : p.node}<br><b>CellID:</b> ${p.cellId}`);
 
-                // 2. Khớp Trạm (Tìm kiếm toàn cục trong allMapData để đảm bảo không bị sót nếu người dùng đang dùng filter)
                 let matchedCell = null;
                 
                 if (p.tech === '3G') {
-                    // Logic 3G: CellID log khớp CI (hoặc Cell_code) VÀ LAC log khớp với BSC_LAC DB
                     matchedCell = allMapData.find(c => 
                         c.network === '3G' && 
                         (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId) && 
                         String(c.BSC_LAC) === p.lac
                     );
-                    // Fallback đề phòng CSDL không có BSC_LAC, thử tìm riêng CellID/CI
                     if (!matchedCell) {
                         matchedCell = allMapData.find(c => c.network === '3G' && (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId));
                     }
                 } else if (p.tech === '4G') {
-                    // Logic 4G: Node khớp ENodeBID/Site_code VÀ CellID khớp Cell_code/Lcrid
                     matchedCell = allMapData.find(c => 
                         c.network === '4G' && 
                         (String(c.ENodeBID) === p.node || String(c.Site_code) === p.node) &&
                         (String(c.Cell_code) === p.cellId || String(c.Lcrid) === p.cellId)
                     );
-                    // Fallback
                     if (!matchedCell) {
                         matchedCell = allMapData.find(c => c.network === '4G' && String(c.Cell_code) === p.cellId);
                     }
                 }
 
-                // 3. Vẽ tia nối đến ĐIỂM GIỮA VÒM CUNG (Arc Center)
                 if (matchedCell) {
                     let cellLat = parseFloat(matchedCell.Latitude);
                     let cellLon = parseFloat(matchedCell.Longitude);
                     let cellAzi = parseFloat(matchedCell.Azimuth) || 0;
                     
-                    // Chủ động tính toán lại điểm vòm cung thay vì dựa vào biến cache (để tránh lỗi khi filter ẩn trạm)
                     let arcCenter = calculateSectorArcCenter(cellLat, cellLon, cellAzi, globalRadius);
 
                     L.polyline([[p.lat, p.lon], [arcCenter.lat, arcCenter.lng]], {
@@ -496,22 +650,20 @@
         // GẮN SỰ KIỆN CHO CÁC CONTROL BÊN NGOÀI
         // =========================================================
         
-        // Slider độ vươn cánh quạt
         document.getElementById('radiusSlider').addEventListener('input', function(e) {
             globalRadius = parseInt(e.target.value);
             document.getElementById('radiusValue').innerText = globalRadius;
-            renderMap(document.getElementById('networkFilter').value); // Gọi renderMap sẽ tự update lại tia Log
+            if(isTAMode) renderTAHeatmap(); else renderMap(document.getElementById('networkFilter').value); 
         });
 
-        // Slider kích thước điểm đo
         document.getElementById('dotSlider').addEventListener('input', function(e) {
             globalDotRadius = parseFloat(e.target.value);
             document.getElementById('dotValue').innerText = globalDotRadius;
-            renderLogPoints(false); // Chỉ cần vẽ lại Log, không cần vẽ lại cả Cell
+            renderLogPoints(false); 
         });
 
         document.getElementById('networkFilter').addEventListener('change', function(e) {
-            renderMap(e.target.value);
+            if(!isTAMode) renderMap(e.target.value);
         });
 
         document.getElementById('mapSearchBtn').addEventListener('click', function() {
@@ -519,7 +671,7 @@
             if (val) {
                 currentSearchQuery = val;
                 document.getElementById('mapClearBtn').style.display = 'inline-block';
-                renderMap(document.getElementById('networkFilter').value);
+                if(isTAMode) renderTAHeatmap(); else renderMap(document.getElementById('networkFilter').value);
             }
         });
 
@@ -531,7 +683,7 @@
             document.getElementById('mapSearchInput').value = '';
             currentSearchQuery = '';
             this.style.display = 'none';
-            renderMap(document.getElementById('networkFilter').value);
+            if(isTAMode) renderTAHeatmap(); else renderMap(document.getElementById('networkFilter').value);
         });
 
         // TẢI DỮ LIỆU RF MỘT LẦN VÀ BẬT BỘ LỌC
@@ -542,12 +694,7 @@
             })
             .then(data => {
                 document.getElementById('map-loading').style.display = 'none'; 
-                
-                if (!data || data.length === 0) {
-                    alert("Chưa có dữ liệu trạm RF trong Database.");
-                    return;
-                }
-
+                if (!data || data.length === 0) return;
                 allMapData = data; 
                 renderMap('4G'); 
             })
