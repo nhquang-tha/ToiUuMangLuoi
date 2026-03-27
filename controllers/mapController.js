@@ -4,6 +4,7 @@ exports.getMapPage = (req, res) => {
     res.render('gis_map', { title: 'Bản Đồ GIS', page: 'GIS Map' });
 };
 
+// API Lấy dữ liệu Cell RF gốc
 exports.getMapData = async (req, res) => {
     try {
         const q3g = `SELECT '3G' as network, rf_3g.* FROM rf_3g WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL AND Latitude != '' AND Longitude != ''`;
@@ -20,5 +21,22 @@ exports.getMapData = async (req, res) => {
     } catch (error) {
         console.error("Lỗi lấy dữ liệu MAP:", error);
         res.status(500).json({ error: 'Lỗi máy chủ lấy dữ liệu bản đồ' });
+    }
+};
+
+// API Lấy dữ liệu TA_Query join với RF_4G để lấy tọa độ và hướng Azimuth
+exports.getTAData = async (req, res) => {
+    try {
+        const q = `
+            SELECT t.*, r.Latitude, r.Longitude, r.Azimuth 
+            FROM TA_Query t 
+            JOIN rf_4g r ON t.Cell_Code = r.Cell_code 
+            WHERE r.Latitude IS NOT NULL AND r.Longitude IS NOT NULL AND r.Latitude != '' AND r.Longitude != ''
+        `;
+        const [rows] = await db.query(q);
+        res.json(rows);
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu TA:", error);
+        res.status(500).json({ error: 'Lỗi máy chủ lấy dữ liệu TA' });
     }
 };
