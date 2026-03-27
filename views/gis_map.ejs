@@ -144,6 +144,10 @@
             "OpenStreetMap": osmLayer
         };
         L.control.layers(baseMaps).addTo(map);
+        
+        // TẠO PANE ĐỂ LỚP MÔ PHỎNG TA LUÔN NẰM TRÊN CÙNG
+        map.createPane('taPane');
+        map.getPane('taPane').style.zIndex = 450; 
 
         // Nút Full Screen
         var fullscreenControl = L.control({position: 'topleft'});
@@ -304,10 +308,10 @@
         var allMapData = [];
         var allTAData = [];
         var sectorLayerGroup = L.layerGroup().addTo(map);
-        var taLayerGroup = L.layerGroup().addTo(map); // Lớp riêng cho tính năng TA Heatmap
+        var taLayerGroup = L.layerGroup().addTo(map); 
         var currentSearchQuery = "";
         var cachedLogPoints = []; 
-        var isTAMode = false; // Trạng thái tính năng TA
+        var isTAMode = false; 
 
         // =========================================================
         // TÍNH NĂNG 1: RENDER BẢN ĐỒ CELL GỐC
@@ -384,7 +388,7 @@
                 sector.addTo(sectorLayerGroup);
             });
 
-            if (currentSearchQuery) {
+            if (currentSearchQuery && !isTAMode) {
                 if (searchBounds.length > 0) {
                     map.fitBounds(L.latLngBounds(searchBounds), { padding: [50, 50], maxZoom: 16 });
                 } else {
@@ -398,25 +402,22 @@
         }
 
         // =========================================================
-        // TÍNH NĂNG 2: MÔ PHỎNG TA HEATMAP (TIMING ADVANCE)
+        // TÍNH NĂNG 2: MÔ PHỎNG TA HEATMAP (TIMING ADVANCE) NẰM ĐÈ LÊN TRÊN CELL
         // =========================================================
         document.getElementById('btnToggleTA').addEventListener('click', function() {
             isTAMode = !isTAMode;
             if (isTAMode) {
-                // Bật chế độ TA: Đổi màu nút, tắt Cell gốc, bật dữ liệu TA
+                // Bật chế độ TA: Đổi màu nút, BẬT LAYER TA LÊN TRÊN CELL
                 this.style.backgroundColor = '#e74c3c';
                 this.innerHTML = '✖ Thoát TA 4G';
-                sectorLayerGroup.clearLayers(); 
-                logLayerGroup.clearLayers(); 
                 document.getElementById('taLegend').style.display = 'block';
                 loadAndRenderTA();
             } else {
-                // Thoát chế độ TA: Trở về bình thường
+                // Thoát chế độ TA: Xóa Layer TA, giữ nguyên Cell Gốc
                 this.style.backgroundColor = '#8e44ad';
                 this.innerHTML = '📍 Mô phỏng TA 4G';
                 taLayerGroup.clearLayers();
                 document.getElementById('taLegend').style.display = 'none';
-                renderMap(document.getElementById('networkFilter').value); 
             }
         });
 
@@ -436,7 +437,7 @@
                     
                     if (allTAData.length === 0) {
                         alert("Không có dữ liệu TA trong Database. Vui lòng vào Import Data để tải lên file TA_Query.");
-                        document.getElementById('btnToggleTA').click(); // Auto thoát
+                        document.getElementById('btnToggleTA').click(); 
                         return;
                     }
                     renderTAHeatmap();
@@ -449,6 +450,7 @@
         function renderTAHeatmap() {
             taLayerGroup.clearLayers();
             let taStepRadius = 150; // Giả định mỗi Index TA cách nhau 150 mét
+            let searchBounds = [];
 
             allTAData.forEach(cell => {
                 let lat = parseFloat(cell.Latitude);
@@ -457,27 +459,34 @@
 
                 if(isNaN(lat) || isNaN(lon)) return;
 
-                // Tìm Max UE của cell này để làm thang tham chiếu chia tỷ lệ Màu và Độ rộng (Beamwidth)
+                // Tìm Max UE
                 let maxUE = 0;
                 for(let i = 0; i <= 11; i++) {
                     let val = parseInt(cell['Index' + i]) || 0;
                     if(val > maxUE) maxUE = val;
                 }
-                if (maxUE === 0) return; // Nếu cell chết (0 UE), bỏ qua vẽ
+                if (maxUE === 0) return; 
 
-                // Lọc Search
+                // TÍNH NĂNG TÌM KIẾM THEO TÊN TRÊN LỚP TA
                 if (currentSearchQuery) {
                     let q = currentSearchQuery.toUpperCase();
                     let cCode = String(cell.Cell_Code || '').toUpperCase();
-                    if (!cCode.includes(q)) return; // Ẩn hoàn toàn nếu không khớp
+                    let cName = String(cell.CELL_NAME || cell.eNodeB_Name || '').toUpperCase();
+                    let sCode = String(cell.Site_code || '').toUpperCase();
+                    
+                    // Nếu người dùng đang tìm kiếm thì LỚP TA chỉ vẽ những trạm khớp kết quả tìm kiếm
+                    if (!(cCode.includes(q) || cName.includes(q) || sCode.includes(q))) {
+                        return; 
+                    }
+                    searchBounds.push([lat, lon]);
                 }
 
-                // Vẽ các dải phân đoạn đồng tâm (Concentric Segments)
+                // Vẽ các dải phân đoạn đồng tâm
                 for(let i = 0; i <= 11; i++) {
                     let ueCount = parseInt(cell['Index' + i]) || 0;
-                    if (ueCount === 0) continue; // Phân đoạn trống => Không vẽ
+                    if (ueCount === 0) continue; 
 
-                    let ratio = ueCount / maxUE; // Tỷ lệ từ 0 đến 1
+                    let ratio = ueCount / maxUE; 
 
                     // Ánh xạ Heatmap Color
                     let color = '#f1c40f'; // Ít UE: Vàng
@@ -485,19 +494,17 @@
                     else if (ratio >= 0.5) color = '#e74c3c'; // Nhiều: Đỏ nhạt
                     else if (ratio >= 0.2) color = '#e67e22'; // Trung bình: Cam
 
-                    // Tính bán kính vòm trong và vòm ngoài
                     let innerRadius = i * taStepRadius;
                     let outerRadius = (i + 1) * taStepRadius;
 
-                    // Ánh xạ Beamwidth: Điểm nào càng ít người, búp sóng tự động co hẹp lại nhọn hoắt
-                    // Base width là 5 độ, vươn rộng tối đa theo ratio lên tới 65 độ
+                    // Phân đoạn ít người, góc thu hẹp
                     let dynamicBeamwidth = 5 + (60 * ratio);
 
-                    // Sử dụng thuật toán cắt hình Vành khăn
                     let points = createDonutSlice(lat, lon, azi, innerRadius, outerRadius, dynamicBeamwidth);
 
+                    // Sử dụng Pane đặc biệt "taPane" để Lớp TA luôn đè lên Cell Gốc
                     let poly = L.polygon(points, {
-                        color: '#333', weight: 0.5, fillColor: color, fillOpacity: 0.85
+                        color: '#333', weight: 0.5, fillColor: color, fillOpacity: 0.85, pane: 'taPane'
                     });
 
                     poly.bindPopup(`
@@ -515,6 +522,11 @@
                     poly.addTo(taLayerGroup);
                 }
             });
+
+            // Tự động thu phóng (Zoom) nếu đang ở chế độ tìm kiếm
+            if (currentSearchQuery && searchBounds.length > 0) {
+                map.fitBounds(L.latLngBounds(searchBounds), { padding: [50, 50], maxZoom: 16 });
+            }
         }
 
         // =========================================================
@@ -653,7 +665,10 @@
         document.getElementById('radiusSlider').addEventListener('input', function(e) {
             globalRadius = parseInt(e.target.value);
             document.getElementById('radiusValue').innerText = globalRadius;
-            if(isTAMode) renderTAHeatmap(); else renderMap(document.getElementById('networkFilter').value); 
+            
+            // Cập nhật lại bản đồ Cell và cập nhật Lớp TA (nếu đang bật)
+            renderMap(document.getElementById('networkFilter').value); 
+            if(isTAMode) renderTAHeatmap();
         });
 
         document.getElementById('dotSlider').addEventListener('input', function(e) {
@@ -663,7 +678,7 @@
         });
 
         document.getElementById('networkFilter').addEventListener('change', function(e) {
-            if(!isTAMode) renderMap(e.target.value);
+            renderMap(e.target.value);
         });
 
         document.getElementById('mapSearchBtn').addEventListener('click', function() {
@@ -671,7 +686,10 @@
             if (val) {
                 currentSearchQuery = val;
                 document.getElementById('mapClearBtn').style.display = 'inline-block';
-                if(isTAMode) renderTAHeatmap(); else renderMap(document.getElementById('networkFilter').value);
+                
+                // Đồng bộ tìm kiếm cho cả 2 lớp Cell gốc và TA
+                renderMap(document.getElementById('networkFilter').value);
+                if(isTAMode) renderTAHeatmap(); 
             }
         });
 
@@ -683,7 +701,8 @@
             document.getElementById('mapSearchInput').value = '';
             currentSearchQuery = '';
             this.style.display = 'none';
-            if(isTAMode) renderTAHeatmap(); else renderMap(document.getElementById('networkFilter').value);
+            renderMap(document.getElementById('networkFilter').value);
+            if(isTAMode) renderTAHeatmap();
         });
 
         // TẢI DỮ LIỆU RF MỘT LẦN VÀ BẬT BỘ LỌC
