@@ -7,7 +7,6 @@ function parseDateToSortableInteger(val) {
     
     let str = String(val).replace(/["'\r\n]/g, '').trim().split(' ')[0];
 
-    // Xử lý chuỗi VN (DD/MM/YYYY)
     if (str.includes('/')) {
         let parts = str.split('/');
         if (parts.length === 3) {
@@ -22,7 +21,6 @@ function parseDateToSortableInteger(val) {
         }
     }
     
-    // Xử lý ISO DB (YYYY-MM-DD)
     if (str.includes('-')) {
         let parts = str.split('T')[0].split('-');
         if (parts.length === 3 && parts[0].length === 4) {
@@ -155,12 +153,19 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // XÓA DỮ LIỆU CŨ CỦA CÁC NGÀY CÓ TRONG FILE NÀY ĐỂ GHI ĐÈ (Dành cho KPI)
+            // XÓA DỮ LIỆU CŨ CỦA CÁC NGÀY CÓ TRONG FILE NÀY ĐỂ GHI ĐÈ 
             if (networkType.startsWith('kpi_')) {
                 const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
                     const deleteSql = `DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`;
+                    await db.query(deleteSql, uniqueDates);
+                }
+            } else if (networkType === 'ta_query') {
+                const uniqueDates = [...new Set(data.map(row => row['Date']).filter(Boolean))];
+                if (uniqueDates.length > 0) {
+                    const placeholders = uniqueDates.map(() => '?').join(',');
+                    const deleteSql = `DELETE FROM TA_Query WHERE \`Date\` IN (${placeholders})`;
                     await db.query(deleteSql, uniqueDates);
                 }
             }
@@ -187,28 +192,40 @@ exports.handleImportData = async (req, res) => {
                 sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
                 values = data.map(row => [row['Nhà cung cấp'], row['Tỉnh'], row['Tên GNODEB'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['GNODEB_ID'] || row['GNODEB ID'], row['CELL_ID'] || row['CELL ID'], row['Thời gian'], row['A User Uplink Average Throughput'] || row['USER_UL_AVG_THROUGHPUT'], row['CQI_5G'], row['Intra-SgNB PScell Change'] || row['INTRA_SGNB_PS_CHANGE'], row['Average User Number'] || row['USER_AVG_NUMBER'], row['Downlink Resource Block Ultilization'] || row['DLINK_RES_BLK_ULT'], row['Uplink Resource Block Ultilization'] || row['ULINK_RES_BLK_ULT'], row['Cell avaibility rate'] || row['CELL_AVAIBILITY_RATE'], row['Maximum User Number'] || row['USER_MAX_NUMBER'], row['UL Traffic Volume (GB)'] || row['UL_TRAFFIC_VOLUME'], row['DL Traffic Volume (GB)'] || row['DL_TRAFFIC_VOLUME'], row['Cell Uplink Average Throughput'] || row['CELL_UL_AVG_THROUGHPUT'], row['Cell Downlink Average Throughput'] || row['CELL_DL_AVG_THROUGHPUT'], row['SgNB Abnormal Release Rate'] || row['SGNB_ABN_RELEASE_RATE'], row['SgNB Addition Success Rate'] || row['SGNB_ADD_SUCCESS_RATE'], row['A User Downlink Average Throughput'] || row['USER_DL_AVG_THROUGHPUT'], row['Total Data Traffic Volume (GB)'] || row['TRAFFIC'], row['Inter-SgNB PScell Change'] || row['INTER_SGNB_PS_CHANGE']]);
             } else if (networkType === 'ta_query') {
-                // XỬ LÝ INSERT CHO BẢNG TA_QUERY
-                sql = `INSERT INTO TA_Query (Date, eNodeB_Name, Cell_FDD_TDD_Indication, Cell_Code, LocalCell_Id, eNodeB_Function_Name, Integrity, Index0, Index1, Index2, Index3, Index4, Index5, Index6, Index7, Index8, Index9, Index10, Index11) VALUES ?`;
+                // XỬ LÝ INSERT CHO BẢNG TA_QUERY (BỌC BACKTICK CỘT DATE VÀ ÉP KIỂU SỐ HỌC AN TOÀN)
+                const getInt = val => {
+                    if (val === undefined || val === null || val === "") return 0;
+                    let n = Number(String(val).replace(/,/g, '').trim());
+                    return isNaN(n) ? 0 : n;
+                };
+                const getFloat = val => {
+                    if (val === undefined || val === null || val === "") return null;
+                    let n = Number(String(val).replace(/,/g, '.').trim());
+                    return isNaN(n) ? null : n;
+                };
+
+                sql = `INSERT INTO TA_Query (\`Date\`, \`eNodeB_Name\`, \`Cell_FDD_TDD_Indication\`, \`Cell_Code\`, \`LocalCell_Id\`, \`eNodeB_Function_Name\`, \`Integrity\`, \`Index0\`, \`Index1\`, \`Index2\`, \`Index3\`, \`Index4\`, \`Index5\`, \`Index6\`, \`Index7\`, \`Index8\`, \`Index9\`, \`Index10\`, \`Index11\`) VALUES ?`;
+                
                 values = data.map(row => [
-                    row['Date'], 
-                    row['eNodeB Name'], 
-                    row['Cell FDD TDD Indication'], 
-                    row['Cell Code'], 
-                    row['LocalCell Id'], 
-                    row['eNodeB Function Name'], 
-                    row['Integrity'],
-                    row['L.RA.TA.UE.Index0'], 
-                    row['L.RA.TA.UE.Index1'], 
-                    row['L.RA.TA.UE.Index2'], 
-                    row['L.RA.TA.UE.Index3'],
-                    row['L.RA.TA.UE.Index4'], 
-                    row['L.RA.TA.UE.Index5'], 
-                    row['L.RA.TA.UE.Index6'], 
-                    row['L.RA.TA.UE.Index7'],
-                    row['L.RA.TA.UE.Index8'], 
-                    row['L.RA.TA.UE.Index9'], 
-                    row['L.RA.TA.UE.Index10'], 
-                    row['L.RA.TA.UE.Index11']
+                    row['Date'] || '', 
+                    row['eNodeB Name'] || '', 
+                    row['Cell FDD TDD Indication'] || '', 
+                    row['Cell Code'] || '', 
+                    row['LocalCell Id'] || '', 
+                    row['eNodeB Function Name'] || '', 
+                    getFloat(row['Integrity']),
+                    getInt(row['L.RA.TA.UE.Index0']), 
+                    getInt(row['L.RA.TA.UE.Index1']), 
+                    getInt(row['L.RA.TA.UE.Index2']), 
+                    getInt(row['L.RA.TA.UE.Index3']),
+                    getInt(row['L.RA.TA.UE.Index4']), 
+                    getInt(row['L.RA.TA.UE.Index5']), 
+                    getInt(row['L.RA.TA.UE.Index6']), 
+                    getInt(row['L.RA.TA.UE.Index7']),
+                    getInt(row['L.RA.TA.UE.Index8']), 
+                    getInt(row['L.RA.TA.UE.Index9']), 
+                    getInt(row['L.RA.TA.UE.Index10']), 
+                    getInt(row['L.RA.TA.UE.Index11'])
                 ]);
             }
 
@@ -217,7 +234,8 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error("Lỗi khi xử lý file:", error);
-            errorLogs.push(`File ${file.originalname} bị lỗi.`);
+            // In rõ lỗi của MySQL ra màn hình UI để người dùng thấy
+            errorLogs.push(`File ${file.originalname} bị lỗi: ${error.message}`);
         }
     } // End For loop
 
