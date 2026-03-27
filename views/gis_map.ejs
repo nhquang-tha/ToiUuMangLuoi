@@ -333,6 +333,9 @@
                 sector.on('mouseover', function () { if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); });
                 sector.on('mouseout', function () { this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); });
 
+                // Lưu lại thông tin vòm cung cho điểm đo bắn tia tới (Luôn tính toán để tránh lỗi nếu đang lọc ẩn trạm)
+                cell._arcCenter = calculateSectorArcCenter(lat, lon, azi, globalRadius);
+
                 sector.addTo(sectorLayerGroup);
             });
 
@@ -394,6 +397,7 @@
             const techIdx = headers.indexOf('NetworkTech');
             const nodeIdx = headers.indexOf('Node');
             const cellIdIdx = headers.indexOf('CellID');
+            const lacIdx = headers.indexOf('LAC'); // Cột LAC rất quan trọng cho 3G
 
             if (latIdx === -1 || lonIdx === -1) {
                 alert("File log ITS không hợp lệ. Không tìm thấy cột Latitude/Longitude phân cách bằng dấu '|'.");
@@ -413,8 +417,9 @@
                 const tech = parts[techIdx] ? parts[techIdx].trim() : '';
                 const node = parts[nodeIdx] ? parts[nodeIdx].trim() : '';
                 const cellId = parts[cellIdIdx] ? parts[cellIdIdx].trim() : '';
+                const lac = (lacIdx !== -1 && parts[lacIdx]) ? parts[lacIdx].trim() : '';
 
-                cachedLogPoints.push({ lat, lon, level, tech, node, cellId });
+                cachedLogPoints.push({ lat, lon, level, tech, node, cellId, lac });
             }
             
             renderLogPoints(true); // Tham số true để báo là cần zoom fitbounds
@@ -438,13 +443,22 @@
                 // 1. Vẽ Điểm đo (Kích thước tùy thuộc Slider)
                 L.circleMarker([p.lat, p.lon], {
                     radius: globalDotRadius, fillColor: pointColor, color: '#000', weight: 0.5, fillOpacity: 1
-                }).addTo(logLayerGroup).bindPopup(`<b>Tech:</b> ${p.tech}<br><b>Level:</b> ${p.level} dBm<br><b>Node:</b> ${p.node}<br><b>CellID:</b> ${p.cellId}`);
+                }).addTo(logLayerGroup).bindPopup(`<b>Tech:</b> ${p.tech}<br><b>Level:</b> ${p.level} dBm<br><b>LAC/Node:</b> ${p.tech === '3G' ? p.lac : p.node}<br><b>CellID:</b> ${p.cellId}`);
 
-                // 2. Khớp Trạm (Tìm kiếm toàn cục trong allMapData để đảm bảo không bị sót nếu người dùng ẩn filter)
+                // 2. Khớp Trạm (Tìm kiếm toàn cục trong allMapData để đảm bảo không bị sót nếu người dùng đang dùng filter)
                 let matchedCell = null;
+                
                 if (p.tech === '3G') {
-                    // Logic 3G: CellID log khớp với CI (Cell Identity) trong DB
-                    matchedCell = allMapData.find(c => c.network === '3G' && (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId));
+                    // Logic 3G: CellID log khớp CI (hoặc Cell_code) VÀ LAC log khớp với BSC_LAC DB
+                    matchedCell = allMapData.find(c => 
+                        c.network === '3G' && 
+                        (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId) && 
+                        String(c.BSC_LAC) === p.lac
+                    );
+                    // Fallback đề phòng CSDL không có BSC_LAC, thử tìm riêng CellID/CI
+                    if (!matchedCell) {
+                        matchedCell = allMapData.find(c => c.network === '3G' && (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId));
+                    }
                 } else if (p.tech === '4G') {
                     // Logic 4G: Node khớp ENodeBID/Site_code VÀ CellID khớp Cell_code/Lcrid
                     matchedCell = allMapData.find(c => 
