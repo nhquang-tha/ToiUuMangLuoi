@@ -19,6 +19,12 @@
     /* Chỉnh map */
     #map { width: 100%; height: calc(100vh - 140px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
     
+    /* FIX LỖI DẢI ĐEN KHI BẬT FULLSCREEN */
+    #mapWrapper:fullscreen #map { height: 100vh !important; border-radius: 0 !important; }
+    #mapWrapper:-webkit-full-screen #map { height: 100vh !important; border-radius: 0 !important; }
+    #mapWrapper:-moz-full-screen #map { height: 100vh !important; border-radius: 0 !important; }
+    #mapWrapper:-ms-fullscreen #map { height: 100vh !important; border-radius: 0 !important; }
+    
     /* Style Popup */
     .rf-popup { max-width: 380px; min-width: 250px; }
     .rf-popup-content { max-height: 300px; overflow-y: auto; padding-right: 5px; }
@@ -149,6 +155,16 @@
         map.createPane('taPane');
         map.getPane('taPane').style.zIndex = 450; 
 
+        // =========================================================
+        // ĐẢM BẢO LEAFLET TÍNH TOÁN LẠI SIZE KHI ĐÓNG/MỞ FULLSCREEN
+        // =========================================================
+        document.addEventListener('fullscreenchange', function() {
+            setTimeout(function() { map.invalidateSize(); }, 200);
+        });
+        document.addEventListener('webkitfullscreenchange', function() {
+            setTimeout(function() { map.invalidateSize(); }, 200);
+        });
+
         // Nút Full Screen
         var fullscreenControl = L.control({position: 'topleft'});
         fullscreenControl.onAdd = function () {
@@ -160,9 +176,19 @@
 
         window.toggleFullScreen = function() {
             var elem = document.getElementById('mapWrapper');
-            if (!document.fullscreenElement) {
-                elem.requestFullscreen().catch(err => { alert(`Lỗi mở Fullscreen: ${err.message}`); });
-            } else { document.exitFullscreen(); }
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if(elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => { console.log(err); });
+                } else if(elem.webkitRequestFullscreen) { /* Safari */
+                    elem.webkitRequestFullscreen();
+                }
+            } else { 
+                if(document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if(document.webkitExitFullscreen) { /* Safari */
+                    document.webkitExitFullscreen();
+                }
+            }
         };
 
         // Nút GPS Định Vị
