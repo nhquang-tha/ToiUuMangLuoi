@@ -1,94 +1,25 @@
-<%- include('partials/head') %>
-<div class="layout">
-    <%- include('partials/sidebar') %>
-    <main class="main-content">
-        <header class="topbar">
-            <h1><%= page %> - Quản Lý Trạm</h1>
-        </header>
-        <div class="content-body">
-            
-            <!-- Tabs chọn mạng -->
-            <div class="network-tabs card" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; padding: 15px 25px;">
-                <div class="tabs">
-                    <a href="/rf-database?network=3g" class="btn-sm <%= network === '3g' ? 'btn-primary' : 'btn-outline-dark' %>">Mạng 3G</a>
-                    <a href="/rf-database?network=4g" class="btn-sm <%= network === '4g' ? 'btn-primary' : 'btn-outline-dark' %>">Mạng 4G</a>
-                    <a href="/rf-database?network=5g" class="btn-sm <%= network === '5g' ? 'btn-primary' : 'btn-outline-dark' %>">Mạng 5G</a>
-                </div>
-                
-                <!-- Khu vực nút hành động -->
-                <div>
-                    <!-- CHỈ ADMIN mới nhìn thấy nút Reset Database -->
-                    <% if(currentUser.role === 'admin') { %>
-                        <form action="/rf-database/reset/<%= network %>" method="POST" style="display:inline;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Hành động này sẽ xóa SẠCH TOÀN BỘ dữ liệu của bảng <%= network.toUpperCase() %>. Bạn có CHẮC CHẮN muốn tiếp tục?');">
-                            <button type="submit" class="btn-sm btn-danger" style="margin-right: 10px;">⚠ Reset Database <%= network.toUpperCase() %></button>
-                        </form>
-                    <% } %>
-                    <a href="/rf-database/add/<%= network %>" class="btn-sm btn-success">+ Thêm Mới Trạm <%= network.toUpperCase() %></a>
-                </div>
-            </div>
+<!-- Bọc nút Thêm Mới góc trên cùng -->
+<% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
+    <a href="/rf-database/add/<%= currentNetwork %>" class="btn-primary" style="margin-left: 15px; background: #27ae60; border: none; text-decoration: none;">+ Thêm Trạm Mới</a>
+<% } %>
 
-            <div class="card" style="overflow-x: auto;">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Mã CSHT</th>
-                            <th>Tên Trạm (CELL/SITE)</th>
-                            <th>Mã Cell</th>
-                            <th>Thiết bị</th>
-                            <th>Tần số</th>
-                            <th>Ngày phát sóng</th>
-                            <th style="width: 200px; text-align: center;">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <% if(data.length === 0) { %>
-                            <tr><td colspan="8" style="text-align: center; padding: 30px;">Chưa có dữ liệu trong Database <%= network.toUpperCase() %></td></tr>
-                        <% } else { %>
-                            <% data.forEach(function(row) { %>
-                                <tr>
-                                    <td><%= row.id %></td>
-                                    <td><%= row.CSHT_code %></td>
-                                    <td><%= network === '5g' ? row.SITE_NAME : row.CELL_NAME %></td>
-                                    <td><%= row.Cell_code %></td>
-                                    <td><%= row.Equipment %></td>
-                                    <td><%= row.Frenquency %></td>
-                                    <td><%= row.Start_day %></td>
-                                    <td class="actions-col">
-                                        <a href="/rf-database/detail/<%= network %>/<%= row.id %>" class="btn-action btn-view">Chi tiết</a>
-                                        <a href="/rf-database/edit/<%= network %>/<%= row.id %>" class="btn-action btn-edit">Sửa</a>
-                                        <form action="/rf-database/delete/<%= network %>/<%= row.id %>" method="POST" style="display:inline;" onsubmit="return confirm('Bạn có chắc chắn muốn xóa trạm này?');">
-                                            <button type="submit" class="btn-action btn-delete">Xóa</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        <% } %>
-                    </tbody>
-                </table>
-                <p style="margin-top: 15px; font-size: 13px; color: #7f8c8d;">* Đang hiển thị tối đa 100 bản ghi mới nhất.</p>
-            </div>
+<!-- ------------------------------------------------ -->
+<!-- Trong vòng lặp <table ...> hiển thị dữ liệu -->
+<!-- ------------------------------------------------ -->
+
+<!-- Cột Tiêu đề thao tác -->
+<% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
+    <th style="width: 120px; text-align: center; position: sticky; right: 0; background-color: #f4f6f8; z-index: 2;">Thao Tác</th>
+<% } %>
+
+<!-- Các nút Sửa/Xóa của từng hàng -->
+<% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
+    <td style="text-align: center; position: sticky; right: 0; background-color: #fff; z-index: 1; border-left: 2px solid #ddd;">
+        <div style="display: flex; gap: 5px; justify-content: center;">
+            <a href="/rf-database/edit/<%= currentNetwork %>/<%= row.id %>" class="btn-sm btn-primary" style="background: #f39c12; border: none; text-decoration: none;">Sửa</a>
+            <form action="/rf-database/delete/<%= currentNetwork %>/<%= row.id %>" method="POST" style="margin:0;" onsubmit="return confirm('Chắc chắn xóa trạm này?');">
+                <button type="submit" class="btn-sm btn-danger" style="background: #c0392b; border: none;">Xóa</button>
+            </form>
         </div>
-    </main>
-</div>
-
-<style>
-    .btn-outline-dark { border: 1px solid #bdc3c7; color: #2c3e50; text-decoration: none; }
-    .btn-outline-dark:hover { background: #ecf0f1; }
-    .btn-success { background: #27ae60; color: white; text-decoration: none; border: none; }
-    .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; }
-    .btn-danger:hover { background: #e74c3c; }
-    
-    .data-table { width: 100%; border-collapse: collapse; min-width: 900px; }
-    .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; font-size: 14px; }
-    .data-table th { background-color: #f8f9fa; color: #34495e; font-weight: 600; }
-    .data-table tbody tr:hover { background-color: #f9fbfc; }
-    
-    .actions-col { display: flex; gap: 8px; justify-content: center; }
-    .btn-action { padding: 5px 10px; border-radius: 4px; font-size: 12px; text-decoration: none; cursor: pointer; border: none; }
-    .btn-view { background: #3498db; color: white; }
-    .btn-edit { background: #f39c12; color: white; }
-    .btn-delete { background: #e74c3c; color: white; }
-</style>
-</body>
-</html>
+    </td>
+<% } %>
