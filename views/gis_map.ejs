@@ -48,6 +48,13 @@
 
     /* Tooltip cho công cụ Azimuth */
     .azi-tooltip { background: rgba(255,255,255,0.9); border: 1px solid #e74c3c; color: #c0392b; font-weight: bold; font-size: 11px; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 3px;}
+    
+    /* Toolbar chức năng cho Azimuth */
+    .azimuth-toolbar { position: absolute; top: 60px; left: 50px; background: rgba(255,255,255,0.95); padding: 10px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 1000; display: none; flex-direction: column; gap: 8px; border: 1px solid #ccc; }
+    .azimuth-toolbar h4 { margin: 0 0 5px 0; font-size: 13px; color: #c0392b; border-bottom: 1px solid #ccc; padding-bottom: 5px;}
+    .azi-btn { background: #2980b9; color: white; border: none; padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold;}
+    .azi-btn:hover { opacity: 0.9; }
+    .azi-btn-green { background: #27ae60; }
 </style>
 
 <div class="layout">
@@ -87,6 +94,17 @@
             <!-- KHUNG BẢN ĐỒ CHÍNH -->
             <div style="position: relative;" id="mapWrapper">
                 <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
+                
+                <!-- Bảng chức năng Azimuth (Hiện khi bật tool) -->
+                <div id="azimuthToolbar" class="azimuth-toolbar">
+                    <h4>Công cụ quy hoạch (Azimuth)</h4>
+                    <button id="btnAziGPS" class="azi-btn">📍 Lấy vị trí GPS cho điểm gốc</button>
+                    <button id="btnAziAddDir" class="azi-btn azi-btn-green">➕ Add Direction (Tạo tia hướng)</button>
+                    <div style="font-size: 11px; color: #555; max-width: 220px; line-height: 1.4; margin-top: 5px;">
+                        <i>* Điểm gốc đã được tạo ở giữa bản đồ. Bạn có thể Click để nhập tọa độ hoặc Kéo thả điểm ngọn để đổi hướng.</i>
+                    </div>
+                </div>
+
                 <div id="map"></div>
                 
                 <!-- Bảng Chú Thích Mức Tín Hiệu ITS Chi Tiết (6 Mức độ) -->
@@ -226,7 +244,7 @@
         azimuthControl.onAdd = function () {
             var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
             div.innerHTML = `
-                <a href="#" id="btnAzimuthTool" title="Azimuth" style="display: flex; justify-content: center; align-items: center;">
+                <a href="#" id="btnAzimuthTool" title="Công cụ Azimuth" style="display: flex; justify-content: center; align-items: center;">
                     <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21.03 8.28l-8.75 8.75a2.83 2.83 0 0 1-4 0l-5-5a2.83 2.83 0 0 1 0-4l8.75-8.75a2.83 2.83 0 0 1 4 0l5 5a2.83 2.83 0 0 1 0 4z"></path>
                         <path d="M12 18l-2 2"></path>
@@ -244,21 +262,15 @@
             isAzimuthMode = !isAzimuthMode;
             
             if (isAzimuthMode) {
-                // BẬT CHẾ ĐỘ: Lấy GPS và Tạo điểm
+                // BẬT CHẾ ĐỘ AZIMUTH
                 this.style.backgroundColor = '#e74c3c';
                 this.innerHTML = '<span style="color:white; font-size:14px; font-weight:bold;">✖</span>';
                 
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(pos) {
-                        var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-                        createAzimuthOrigin(latlng);
-                        map.setView(latlng, 16);
-                    }, function() {
-                        createAzimuthOrigin(map.getCenter());
-                    });
-                } else {
-                    createAzimuthOrigin(map.getCenter());
-                }
+                // Hiện thanh công cụ nhỏ
+                document.getElementById('azimuthToolbar').style.display = 'flex';
+                
+                // Tự động tạo điểm gốc ở giữa bản đồ hiện tại
+                createAzimuthOrigin(map.getCenter());
             } else {
                 // TẮT CHẾ ĐỘ
                 this.style.backgroundColor = '#fff';
@@ -270,10 +282,39 @@
                         <path d="M8 10l-2 2"></path>
                     </svg>
                 `;
+                document.getElementById('azimuthToolbar').style.display = 'none';
                 azimuthControlLayer.clearLayers();
                 originPointMarker = null;
                 window.directionLines = [];
             }
+        });
+
+        // Xử lý nút Lấy GPS trên Toolbar Azimuth
+        document.getElementById('btnAziGPS').addEventListener('click', function() {
+            var btn = this;
+            if (navigator.geolocation) {
+                btn.innerText = "Đang tìm tín hiệu GPS...";
+                navigator.geolocation.getCurrentPosition(function(pos) {
+                    var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                    if (originPointMarker) {
+                        originPointMarker.setLatLng(latlng);
+                        map.setView(latlng, 16);
+                        updateAllDirectionLines(latlng);
+                        originPointMarker.setPopupContent(getOriginPopupHtml(latlng, window.currentOriginName));
+                    }
+                    btn.innerText = "📍 Lấy vị trí GPS cho điểm gốc";
+                }, function() {
+                    alert("Lỗi: Không thể lấy vị trí GPS. Hãy kiểm tra quyền truy cập vị trí của trình duyệt.");
+                    btn.innerText = "📍 Lấy vị trí GPS cho điểm gốc";
+                }, {timeout: 10000});
+            } else {
+                alert("Trình duyệt không hỗ trợ tính năng định vị.");
+            }
+        });
+
+        // Xử lý nút Add Direction trên Toolbar
+        document.getElementById('btnAziAddDir').addEventListener('click', function() {
+            window.addAzimuthDirection();
         });
 
         // Hàm tạo điểm gốc
@@ -294,10 +335,10 @@
             });
         }
 
-        // HTML Popup Điểm Gốc
+        // HTML Popup Điểm Gốc (Đã bỏ nút Add Direction vì đã mang ra ngoài Toolbar)
         function getOriginPopupHtml(latlng, name) {
             return `
-                <div style="width: 200px;">
+                <div style="width: 180px;">
                     <h4 style="margin:0 0 10px 0; color:#c0392b; border-bottom:1px solid #ccc; padding-bottom:5px;">Cấu hình Điểm Gốc</h4>
                     <label style="font-weight:bold; font-size:12px;">Tên điểm:</label>
                     <input type="text" id="aziOrigName" value="${name}" style="width:100%; margin-bottom:5px; padding:3px; border:1px solid #bdc3c7;">
@@ -305,8 +346,7 @@
                     <input type="number" id="aziOrigLat" value="${latlng.lat.toFixed(6)}" style="width:100%; margin-bottom:5px; padding:3px; border:1px solid #bdc3c7;">
                     <label style="font-weight:bold; font-size:12px;">Kinh độ (Longitude):</label>
                     <input type="number" id="aziOrigLng" value="${latlng.lng.toFixed(6)}" style="width:100%; margin-bottom:10px; padding:3px; border:1px solid #bdc3c7;">
-                    <button onclick="saveAzimuthOrigin()" style="background:#2980b9; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer;">Cập nhật</button>
-                    <button onclick="addAzimuthDirection()" style="background:#27ae60; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer; float:right;">+ Add Direction</button>
+                    <button onclick="saveAzimuthOrigin()" style="background:#2980b9; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer; width:100%;">Cập nhật tọa độ</button>
                 </div>
             `;
         }
@@ -324,10 +364,11 @@
                 map.setView(newLatLng); // Dịch map về điểm vừa nhập
                 updateAllDirectionLines(newLatLng);
                 originPointMarker.setPopupContent(getOriginPopupHtml(newLatLng, name));
+                originPointMarker.closePopup();
             } else { alert("Tọa độ không hợp lệ!"); }
         };
 
-        // Hàm được gọi khi bấm "Add Direction"
+        // Hàm Add Direction
         window.addAzimuthDirection = function() {
             if (!originPointMarker) return;
             var startLatLng = originPointMarker.getLatLng();
