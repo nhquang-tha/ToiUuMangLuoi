@@ -6,7 +6,7 @@ const dashboardController = require('../controllers/dashboardController');
 const rfController = require('../controllers/rfController'); 
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
-const mapController = require('../controllers/mapController'); // IMPORT MAP CONTROLLER
+const mapController = require('../controllers/mapController'); 
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -26,7 +26,7 @@ pages.forEach(page => {
 // --- BẢN ĐỒ GIS ---
 router.get('/gis-map', isAuthenticated, mapController.getMapPage);
 router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
-router.get('/api/ta-data', isAuthenticated, mapController.getTAData); // ROUTES CHO MAP TA
+router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
 
 // --- ROUTES CHO KPI ANALYTICS ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
@@ -40,8 +40,9 @@ router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 
 // --- ROUTES CHO RF DATABASE (CRUD) ---
 router.get('/rf-database', isAuthenticated, rfController.getList);
 router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
-router.post('/rf-database/:action/:network/:id?', isAuthenticated, rfController.saveData);
-router.post('/rf-database/delete/:network/:id', isAuthenticated, rfController.deleteData);
+// CHẶN QUYỀN: Bổ sung isAdmin vào các phương thức POST của RF
+router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, rfController.saveData);
+router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
 router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
 
 // --- ROUTES CHO SYSTEM ---
