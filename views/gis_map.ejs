@@ -45,6 +45,9 @@
     .map-legend { position: absolute; bottom: 80px; right: 10px; background: rgba(255,255,255,0.95); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2); display: none; border: 1px solid #ccc;}
     .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
     .legend-color { width: 16px; height: 16px; margin-right: 8px; border-radius: 3px; border: 1px solid #555;}
+
+    /* Tooltip cho công cụ Azimuth */
+    .azi-tooltip { background: rgba(255,255,255,0.9); border: 1px solid #e74c3c; color: #c0392b; font-weight: bold; font-size: 11px; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 3px;}
 </style>
 
 <div class="layout">
@@ -158,12 +161,8 @@
         // =========================================================
         // ĐẢM BẢO LEAFLET TÍNH TOÁN LẠI SIZE KHI ĐÓNG/MỞ FULLSCREEN
         // =========================================================
-        document.addEventListener('fullscreenchange', function() {
-            setTimeout(function() { map.invalidateSize(); }, 200);
-        });
-        document.addEventListener('webkitfullscreenchange', function() {
-            setTimeout(function() { map.invalidateSize(); }, 200);
-        });
+        document.addEventListener('fullscreenchange', function() { setTimeout(function() { map.invalidateSize(); }, 200); });
+        document.addEventListener('webkitfullscreenchange', function() { setTimeout(function() { map.invalidateSize(); }, 200); });
 
         // Nút Full Screen
         var fullscreenControl = L.control({position: 'topleft'});
@@ -177,17 +176,11 @@
         window.toggleFullScreen = function() {
             var elem = document.getElementById('mapWrapper');
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                if(elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(err => { console.log(err); });
-                } else if(elem.webkitRequestFullscreen) { /* Safari */
-                    elem.webkitRequestFullscreen();
-                }
+                if(elem.requestFullscreen) elem.requestFullscreen().catch(err => { console.log(err); });
+                else if(elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
             } else { 
-                if(document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if(document.webkitExitFullscreen) { /* Safari */
-                    document.webkitExitFullscreen();
-                }
+                if(document.exitFullscreen) document.exitFullscreen();
+                else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
             }
         };
 
@@ -221,13 +214,19 @@
         map.on('locationerror', function(e) { alert("Không thể lấy vị trí. Hãy bật Location cho trình duyệt."); });
 
         // =========================================================
-        // NÚT CÔNG CỤ AZIMUTH (ĐO KHOẢNG CÁCH & GÓC)
+        // NÚT CÔNG CỤ AZIMUTH (QUY HOẠCH CELL PLANNING)
         // =========================================================
+        var azimuthControlLayer = L.featureGroup().addTo(map);
+        var originPointMarker = null;
+        window.directionLines = []; // Lưu trữ mảng các tia hướng
+        window.currentOriginName = "Điểm Gốc";
+        var isAzimuthMode = false;
+
         var azimuthControl = L.control({position: 'topleft'});
         azimuthControl.onAdd = function () {
             var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
             div.innerHTML = `
-                <a href="#" id="btnAzimuthTool" title="Công cụ Đo khoảng cách & Góc Azimuth" style="display: flex; justify-content: center; align-items: center;">
+                <a href="#" id="btnAzimuthTool" title="Azimuth" style="display: flex; justify-content: center; align-items: center;">
                     <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21.03 8.28l-8.75 8.75a2.83 2.83 0 0 1-4 0l-5-5a2.83 2.83 0 0 1 0-4l8.75-8.75a2.83 2.83 0 0 1 4 0l5 5a2.83 2.83 0 0 1 0 4z"></path>
                         <path d="M12 18l-2 2"></path>
@@ -240,20 +239,28 @@
         };
         azimuthControl.addTo(map);
 
-        var isAzimuthMode = false;
-        var azimuthPoints = [];
-        var azimuthLayer = L.featureGroup().addTo(map);
-
         document.getElementById('btnAzimuthTool').addEventListener('click', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             isAzimuthMode = !isAzimuthMode;
             
             if (isAzimuthMode) {
+                // BẬT CHẾ ĐỘ: Lấy GPS và Tạo điểm
                 this.style.backgroundColor = '#e74c3c';
                 this.innerHTML = '<span style="color:white; font-size:14px; font-weight:bold;">✖</span>';
-                document.getElementById('mapWrapper').style.cursor = 'crosshair';
+                
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function(pos) {
+                        var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                        createAzimuthOrigin(latlng);
+                        map.setView(latlng, 16);
+                    }, function() {
+                        createAzimuthOrigin(map.getCenter());
+                    });
+                } else {
+                    createAzimuthOrigin(map.getCenter());
+                }
             } else {
+                // TẮT CHẾ ĐỘ
                 this.style.backgroundColor = '#fff';
                 this.innerHTML = `
                     <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -263,52 +270,191 @@
                         <path d="M8 10l-2 2"></path>
                     </svg>
                 `;
-                document.getElementById('mapWrapper').style.cursor = '';
-                azimuthPoints = [];
-                azimuthLayer.clearLayers();
+                azimuthControlLayer.clearLayers();
+                originPointMarker = null;
+                window.directionLines = [];
             }
         });
 
-        map.on('click', function(e) {
-            if (!isAzimuthMode) return;
+        // Hàm tạo điểm gốc
+        function createAzimuthOrigin(latlng) {
+            if (originPointMarker) azimuthControlLayer.removeLayer(originPointMarker);
             
-            azimuthPoints.push(e.latlng);
-            L.circleMarker(e.latlng, {radius: 4, color: '#e74c3c', fillColor: '#fff', fillOpacity: 1, weight: 2}).addTo(azimuthLayer);
+            originPointMarker = L.marker(latlng, {
+                draggable: true,
+                icon: L.divIcon({className: 'custom-origin-icon', html: '<div style="font-size:24px; text-shadow: 0 2px 2px rgba(0,0,0,0.5);">📍</div>', iconSize: [24, 24], iconAnchor: [12, 24]})
+            }).addTo(azimuthControlLayer);
 
-            if (azimuthPoints.length === 2) {
-                var p1 = azimuthPoints[0];
-                var p2 = azimuthPoints[1];
+            originPointMarker.bindPopup(getOriginPopupHtml(latlng, window.currentOriginName)).openPopup();
 
-                // Vẽ tia nối 2 điểm
-                L.polyline([p1, p2], {color: '#e74c3c', weight: 2, dashArray: '5, 5'}).addTo(azimuthLayer);
+            originPointMarker.on('drag', function(e) {
+                var newLatLng = e.target.getLatLng();
+                updateAllDirectionLines(newLatLng);
+                originPointMarker.setPopupContent(getOriginPopupHtml(newLatLng, window.currentOriginName));
+            });
+        }
 
-                // Tính Khoảng cách
-                var distance = p1.distanceTo(p2);
+        // HTML Popup Điểm Gốc
+        function getOriginPopupHtml(latlng, name) {
+            return `
+                <div style="width: 200px;">
+                    <h4 style="margin:0 0 10px 0; color:#c0392b; border-bottom:1px solid #ccc; padding-bottom:5px;">Cấu hình Điểm Gốc</h4>
+                    <label style="font-weight:bold; font-size:12px;">Tên điểm:</label>
+                    <input type="text" id="aziOrigName" value="${name}" style="width:100%; margin-bottom:5px; padding:3px; border:1px solid #bdc3c7;">
+                    <label style="font-weight:bold; font-size:12px;">Vĩ độ (Latitude):</label>
+                    <input type="number" id="aziOrigLat" value="${latlng.lat.toFixed(6)}" style="width:100%; margin-bottom:5px; padding:3px; border:1px solid #bdc3c7;">
+                    <label style="font-weight:bold; font-size:12px;">Kinh độ (Longitude):</label>
+                    <input type="number" id="aziOrigLng" value="${latlng.lng.toFixed(6)}" style="width:100%; margin-bottom:10px; padding:3px; border:1px solid #bdc3c7;">
+                    <button onclick="saveAzimuthOrigin()" style="background:#2980b9; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer;">Cập nhật</button>
+                    <button onclick="addAzimuthDirection()" style="background:#27ae60; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer; float:right;">+ Add Direction</button>
+                </div>
+            `;
+        }
 
-                // Tính Góc Azimuth (độ)
-                var lat1 = p1.lat * Math.PI / 180;
-                var lon1 = p1.lng * Math.PI / 180;
-                var lat2 = p2.lat * Math.PI / 180;
-                var lon2 = p2.lng * Math.PI / 180;
+        // Hàm được gọi khi bấm "Cập nhật" ở điểm gốc
+        window.saveAzimuthOrigin = function() {
+            var name = document.getElementById('aziOrigName').value;
+            var lat = parseFloat(document.getElementById('aziOrigLat').value);
+            var lng = parseFloat(document.getElementById('aziOrigLng').value);
 
-                var y = Math.sin(lon2 - lon1) * Math.cos(lat2);
-                var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-                var brng = Math.atan2(y, x);
-                var azimuth = (((brng * 180 / Math.PI) + 360) % 360);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                window.currentOriginName = name;
+                var newLatLng = L.latLng(lat, lng);
+                originPointMarker.setLatLng(newLatLng);
+                map.setView(newLatLng); // Dịch map về điểm vừa nhập
+                updateAllDirectionLines(newLatLng);
+                originPointMarker.setPopupContent(getOriginPopupHtml(newLatLng, name));
+            } else { alert("Tọa độ không hợp lệ!"); }
+        };
 
-                // Gắn popup thông số ở giữa tia
-                var centerLatLng = [(p1.lat + p2.lat) / 2, (p1.lng + p2.lng) / 2];
-                var tooltipHtml = `<div style="background: rgba(255,255,255,0.95); padding: 5px 8px; border: 1px solid #e74c3c; border-radius: 4px; font-size: 12px; font-weight: bold; color: #c0392b; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transform: translate(-50%, -50%);">
-                    Khoảng cách: ${distance.toFixed(1)} m<br>Góc (Azimuth): ${azimuth.toFixed(1)}°
-                </div>`;
+        // Hàm được gọi khi bấm "Add Direction"
+        window.addAzimuthDirection = function() {
+            if (!originPointMarker) return;
+            var startLatLng = originPointMarker.getLatLng();
+            var distance = 100; // Mặc định 100m
+            var azimuth = 0;    // Mặc định Bắc
+            var endLatLng = calculateDestination(startLatLng.lat, startLatLng.lng, azimuth, distance);
 
-                var measureIcon = L.divIcon({ className: 'custom-measure-icon', html: tooltipHtml, iconSize: [0, 0] });
-                L.marker(centerLatLng, {icon: measureIcon}).addTo(azimuthLayer);
+            var id = Date.now();
+            var name = "Sector " + (window.directionLines.length + 1);
 
-                // Reset để người dùng có thể bấm đo cặp điểm tiếp theo
-                azimuthPoints = [];
+            var line = L.polyline([startLatLng, endLatLng], {color: '#e74c3c', weight: 2, dashArray: '5,5'}).addTo(azimuthControlLayer);
+
+            var endMarker = L.marker(endLatLng, {
+                draggable: true,
+                icon: L.divIcon({className: 'custom-end-icon', html: '<div style="width:12px; height:12px; background:#e74c3c; border-radius:50%; border:2px solid white; box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>', iconSize: [12, 12], iconAnchor: [6, 6]})
+            }).addTo(azimuthControlLayer);
+
+            var dirObj = { id: id, line: line, marker: endMarker, name: name, azimuth: azimuth, distance: distance };
+            window.directionLines.push(dirObj);
+
+            updateEndMarkerTooltip(dirObj);
+            endMarker.bindPopup(getEndPopupHtml(dirObj));
+
+            // Bắt sự kiện Drag Real-time
+            endMarker.on('drag', function(e) {
+                var currentStart = originPointMarker.getLatLng();
+                var currentEnd = e.target.getLatLng();
+                line.setLatLngs([currentStart, currentEnd]);
+
+                var stats = calculateDistanceAndAzimuth(currentStart, currentEnd);
+                dirObj.distance = stats.distance;
+                dirObj.azimuth = stats.azimuth;
+
+                updateEndMarkerTooltip(dirObj);
+                endMarker.setPopupContent(getEndPopupHtml(dirObj));
+            });
+        };
+
+        // Cập nhật lại các tia khi Điểm gốc bị kéo đi
+        function updateAllDirectionLines(newStartLatLng) {
+            window.directionLines.forEach(function(dir) {
+                var currentEnd = dir.marker.getLatLng();
+                dir.line.setLatLngs([newStartLatLng, currentEnd]);
+                var stats = calculateDistanceAndAzimuth(newStartLatLng, currentEnd);
+                dir.distance = stats.distance;
+                dir.azimuth = stats.azimuth;
+                updateEndMarkerTooltip(dir);
+                dir.marker.setPopupContent(getEndPopupHtml(dir));
+            });
+        }
+
+        // HTML Popup Điểm Ngọn
+        function getEndPopupHtml(dirObj) {
+            return `
+                <div style="width: 180px;">
+                    <label style="font-weight:bold; font-size:12px;">Tên Hướng:</label>
+                    <input type="text" id="dirName_${dirObj.id}" value="${dirObj.name}" style="width:100%; margin-bottom:5px; padding:3px;">
+                    <label style="font-weight:bold; font-size:12px;">Góc Azimuth (°):</label>
+                    <input type="number" id="dirAzi_${dirObj.id}" value="${dirObj.azimuth.toFixed(1)}" style="width:100%; margin-bottom:5px; padding:3px;">
+                    <label style="font-weight:bold; font-size:12px;">Độ dài tuyến (m):</label>
+                    <input type="number" id="dirDist_${dirObj.id}" value="${dirObj.distance.toFixed(1)}" style="width:100%; margin-bottom:10px; padding:3px;">
+                    <button onclick="saveDirection(${dirObj.id})" style="background:#2980b9; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer; width:100%;">Lưu Thay Đổi</button>
+                </div>
+            `;
+        }
+
+        // Cập nhật điểm ngọn khi nhập số liệu thủ công
+        window.saveDirection = function(id) {
+            var dirObj = window.directionLines.find(d => d.id === id);
+            if (!dirObj) return;
+
+            var newName = document.getElementById('dirName_' + id).value;
+            var newAzi = parseFloat(document.getElementById('dirAzi_' + id).value);
+            var newDist = parseFloat(document.getElementById('dirDist_' + id).value);
+
+            if (!isNaN(newAzi) && !isNaN(newDist)) {
+                dirObj.name = newName;
+                dirObj.azimuth = newAzi;
+                dirObj.distance = newDist;
+
+                var startLatLng = originPointMarker.getLatLng();
+                var newEndLatLng = calculateDestination(startLatLng.lat, startLatLng.lng, newAzi, newDist);
+
+                dirObj.marker.setLatLng(newEndLatLng);
+                dirObj.line.setLatLngs([startLatLng, newEndLatLng]);
+
+                updateEndMarkerTooltip(dirObj);
+                dirObj.marker.setPopupContent(getEndPopupHtml(dirObj));
+                dirObj.marker.closePopup();
+            } else { alert("Thông số không hợp lệ!"); }
+        };
+
+        // Render Tooltip nổi cho điểm ngọn
+        function updateEndMarkerTooltip(dirObj) {
+            var content = `<b>${dirObj.name}</b><br>Azimuth: ${dirObj.azimuth.toFixed(1)}°<br>Khoảng cách: ${dirObj.distance.toFixed(1)}m`;
+            if (dirObj.marker.getTooltip()) {
+                dirObj.marker.setTooltipContent(content);
+            } else {
+                dirObj.marker.bindTooltip(content, {permanent: true, direction: 'top', className: 'azi-tooltip', offset: [0, -10]}).openTooltip();
             }
-        });
+        }
+
+        // =========================================================
+        // HÀM TOÁN HỌC CHO AZIMUTH
+        // =========================================================
+        function calculateDestination(lat, lng, azimuth, radiusMeters) {
+            var R = 6378137;
+            var angleRad = azimuth * Math.PI / 180;
+            var dx = radiusMeters * Math.sin(angleRad);
+            var dy = radiusMeters * Math.cos(angleRad);
+            var dLat = dy / R * (180 / Math.PI);
+            var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+            return L.latLng(lat + dLat, lng + dLng);
+        }
+
+        function calculateDistanceAndAzimuth(p1, p2) {
+            var distance = p1.distanceTo(p2);
+            var lat1 = p1.lat * Math.PI / 180;
+            var lon1 = p1.lng * Math.PI / 180;
+            var lat2 = p2.lat * Math.PI / 180;
+            var lon2 = p2.lng * Math.PI / 180;
+            var y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+            var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+            var brng = Math.atan2(y, x);
+            var azimuth = (((brng * 180 / Math.PI) + 360) % 360);
+            return { distance: distance, azimuth: azimuth };
+        }
 
 
         // Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính) và Kích Thước Điểm Đo
