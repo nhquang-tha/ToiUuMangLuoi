@@ -24,7 +24,7 @@ exports.getMapData = async (req, res) => {
     }
 };
 
-// API Lấy dữ liệu TA_Query join với RF_4G (Bổ sung CELL_NAME, Site_code để hỗ trợ Tìm kiếm)
+// API Lấy dữ liệu TA_Query join với RF_4G
 exports.getTAData = async (req, res) => {
     try {
         const q = `
