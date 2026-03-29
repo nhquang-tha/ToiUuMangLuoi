@@ -1,85 +1,105 @@
 <%- include('partials/head') %>
+<%
+    // Chuẩn bị biến an toàn để hiển thị Sidebar
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; }
+    
+    .table-wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; }
+    .data-table tbody tr:hover { background-color: #f4f6f8; }
+</style>
+
 <div class="layout">
-    <%- include('partials/sidebar') %>
+    <!-- Load Sidebar và truyền dữ liệu người dùng vào -->
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    
     <main class="main-content">
         <header class="topbar">
-            <h1><%= page %></h1>
+            <h1>Quản Lý Người Dùng (User Manager)</h1>
         </header>
+        
         <div class="content-body">
             
-            <% if(message) { %> <div class="alert alert-success"><%= message %></div> <% } %>
-            <% if(error) { %> <div class="alert alert-danger"><%= error %></div> <% } %>
+            <!-- Form Thêm Tài Khoản Mới -->
+            <div class="card" style="margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #27ae60;">
+                <h3 style="margin-top: 0; color: #2c3e50; margin-bottom: 15px;">➕ Thêm Tài Khoản Mới</h3>
+                <form action="/system/users/add" method="POST" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Tên đăng nhập:</label>
+                        <input type="text" name="username" required placeholder="Nhập username..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Mật khẩu:</label>
+                        <input type="password" name="password" required placeholder="Nhập mật khẩu..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                    </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Phân Quyền:</label>
+                        <select name="role" required style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; cursor: pointer;">
+                            <option value="user">USER (Chỉ xem báo cáo)</option>
+                            <option value="admin">ADMIN (Quản trị viên)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; height: 39px;">Tạo Tài Khoản</button>
+                </form>
+            </div>
 
-            <div style="display: flex; gap: 20px;">
-                <!-- Form Thêm User -->
-                <div class="card" style="flex: 1; max-width: 350px;">
-                    <h3>Tạo Tài Khoản Mới</h3>
-                    <form action="/system/users/add" method="POST" style="margin-top: 15px;">
-                        <div class="form-group">
-                            <label>Tên Đăng Nhập (Username)</label>
-                            <input type="text" name="username" class="form-control" required style="width: 100%; padding: 8px;">
-                        </div>
-                        <div class="form-group" style="margin-top: 15px;">
-                            <label>Mật Khẩu</label>
-                            <input type="password" name="password" class="form-control" required style="width: 100%; padding: 8px;">
-                        </div>
-                        <div class="form-group" style="margin-top: 15px;">
-                            <label>Phân Quyền (Role)</label>
-                            <select name="role" class="form-control" style="width: 100%; padding: 8px;">
-                                <option value="user">User (Chỉ xem)</option>
-                                <option value="admin">Admin (Toàn quyền)</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn-success" style="margin-top: 20px; width: 100%; padding: 10px; border: none; border-radius: 4px; color: white; cursor: pointer;">Tạo Tài Khoản</button>
-                    </form>
-                </div>
-
-                <!-- Danh Sách User -->
-                <div class="card" style="flex: 2;">
-                    <h3>Danh Sách Người Dùng Hệ Thống</h3>
-                    <table class="data-table" style="width: 100%; margin-top: 15px; border-collapse: collapse;">
-                        <thead style="background: #f8f9fa;">
-                            <tr>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: left;">ID</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: left;">Username</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: left;">Role</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;">Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% users.forEach(user => { %>
+            <!-- Bảng Danh Sách Người Dùng -->
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tên Đăng Nhập</th>
+                            <th>Quyền Hạn</th>
+                            <th>Ngày Tạo</th>
+                            <th style="text-align: center;">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (typeof users !== 'undefined' && users.length > 0) { %>
+                            <% users.forEach(u => { %>
                                 <tr>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee;"><%= user.id %></td>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee;"><strong><%= user.username %></strong></td>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                                        <span style="padding: 3px 8px; border-radius: 12px; font-size: 12px; background: <%= user.role === 'admin' ? '#e74c3c' : '#3498db' %>; color: white;">
-                                            <%= user.role.toUpperCase() %>
+                                    <td><strong>#<%= u.id %></strong></td>
+                                    <td style="color: #2980b9; font-weight: bold;"><%= u.username %></td>
+                                    <td>
+                                        <span style="padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; background: <%= (u.role || '').toLowerCase() === 'admin' ? '#e74c3c' : '#95a5a6' %>;">
+                                            <%= (u.role || 'USER').toUpperCase() %>
                                         </span>
                                     </td>
-                                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">
-                                        <% if(currentUser.id !== user.id) { %>
-                                            <form action="/system/users/delete/<%= user.id %>" method="POST" onsubmit="return confirm('Xóa tài khoản này?');">
-                                                <button type="submit" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Xóa</button>
-                                            </form>
+                                    <td>
+                                        <%= u.created_at ? new Date(u.created_at).toLocaleString('vi-VN') : 'Không xác định' %>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <!-- Không cho phép User xóa chính bản thân mình -->
+                                        <% if (activeUser && u.id === activeUser.id) { %>
+                                            <span style="font-size: 12px; color: #7f8c8d; font-style: italic; display: inline-block; padding: 5px;">Đang đăng nhập</span>
                                         <% } else { %>
-                                            <span style="color: #95a5a6; font-size: 12px;">Đang đăng nhập</span>
+                                            <form action="/system/users/delete/<%= u.id %>" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Chắc chắn muốn xóa tài khoản <%= u.username %> vĩnh viễn?');">
+                                                <button type="submit" class="btn-danger" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 3px; font-size: 12px; font-weight: bold; cursor: pointer;">Xóa</button>
+                                            </form>
                                         <% } %>
                                     </td>
                                 </tr>
                             <% }) %>
-                        </tbody>
-                    </table>
-                </div>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 30px; color: #7f8c8d;">Không có dữ liệu người dùng</td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
             </div>
 
         </div>
     </main>
 </div>
-<style>
-    .alert { padding: 15px; margin-bottom: 20px; border-radius: 4px; }
-    .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-    .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    .btn-success { background: #27ae60;} .btn-success:hover{ background: #219653; }
-</style>
 </body>
 </html>
