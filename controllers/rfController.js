@@ -55,6 +55,33 @@ exports.getList = async (req, res) => {
     }
 };
 
+exports.exportData = async (req, res) => {
+    const network = req.query.network || '3g';
+    const search = req.query.search ? req.query.search.trim() : '';
+
+    let tableName = `rf_${network}`;
+    let nameColumn = network === '5g' ? 'SITE_NAME' : 'CELL_NAME'; 
+    
+    let searchClause = '';
+    let queryParams = [];
+
+    if (search) {
+        // Tìm kiếm theo Cell Code HOẶC Tên Cell
+        searchClause = `WHERE Cell_code LIKE ? OR ${nameColumn} LIKE ?`;
+        queryParams.push(`%${search}%`, `%${search}%`);
+    }
+
+    try {
+        // Lấy TOÀN BỘ dữ liệu (Không dùng LIMIT / OFFSET)
+        const dataQuery = `SELECT * FROM ${tableName} ${searchClause}`;
+        const [rows] = await db.query(dataQuery, queryParams);
+        res.json(rows);
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu xuất Excel:", error);
+        res.status(500).json({ error: "Lỗi cơ sở dữ liệu" });
+    }
+};
+
 exports.getForm = async (req, res) => {
     const action = req.params.action;
     const network = req.params.network;
