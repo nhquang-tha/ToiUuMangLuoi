@@ -89,7 +89,7 @@ exports.handleImportData = async (req, res) => {
 
     // VÒNG LẶP XỬ LÝ NHIỀU FILE
     for (let file of req.files) {
-        try {
+        try { // <- Bắt đầu khối TRY (nếu trước kia mất ngoặc này sẽ sinh lỗi Syntax Error)
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             
@@ -102,7 +102,7 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // CHUẨN HÓA THỜI GIAN THEO DD/MM/YYYY TRƯỚC KHI LƯU VÀO DB (Chỉ áp dụng cho KPI và RF)
+            // CHUẨN HÓA THỜI GIAN
             if (networkType !== 'ta_query' && networkType !== 'poi_4g' && networkType !== 'poi_5g') {
                 data.forEach(row => {
                     let t = row['Thời gian'];
@@ -125,7 +125,7 @@ exports.handleImportData = async (req, res) => {
                 });
             }
 
-            // LOGIC KIỂM TRA ĐÚNG CHỦNG LOẠI FILE
+            // KIỂM TRA ĐÚNG LOẠI FILE
             const requiredHeaders = {
                 'rf_3g': ['CSHT_code', 'PSC', 'DL_UARFCN'],
                 'rf_4g': ['CSHT_code', 'ENodeBID', 'PCI'],
@@ -134,8 +134,8 @@ exports.handleImportData = async (req, res) => {
                 'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'],
                 'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT'],
                 'ta_query': ['Date', 'eNodeB Name', 'Cell Code', 'L.RA.TA.UE.Index0'],
-                'poi_4g': ['Cell_Code', 'Site_Code', 'POI'], // Validate file POI 4G
-                'poi_5g': ['Cell_Code', 'Site_Code', 'POI']  // Validate file POI 5G
+                'poi_4g': ['Cell_Code', 'Site_Code', 'POI'], 
+                'poi_5g': ['Cell_Code', 'Site_Code', 'POI']  
             };
 
             const headersInFile = Object.keys(data[0]);
@@ -157,7 +157,7 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // XÓA DỮ LIỆU CŨ CỦA CÁC NGÀY CÓ TRONG FILE NÀY ĐỂ GHI ĐÈ 
+            // XÓA DỮ LIỆU CŨ ĐỂ GHI ĐÈ 
             if (networkType.startsWith('kpi_')) {
                 const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
                 if (uniqueDates.length > 0) {
@@ -246,9 +246,8 @@ exports.handleImportData = async (req, res) => {
             await db.query(sql, [values]);
             totalImported += values.length;
 
-        } catch (error) {
+        } catch (error) { // <- KẾT THÚC KHỐI TRY VÀ BẮT LỖI
             console.error("Lỗi khi xử lý file:", error);
-            // In rõ lỗi của MySQL ra màn hình UI để người dùng thấy
             errorLogs.push(`File ${file.originalname} bị lỗi: ${error.message}`);
         }
     } // End For loop
