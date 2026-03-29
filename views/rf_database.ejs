@@ -1,25 +1,96 @@
-<!-- Bọc nút Thêm Mới góc trên cùng -->
-<% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
-    <a href="/rf-database/add/<%= currentNetwork %>" class="btn-primary" style="margin-left: 15px; background: #27ae60; border: none; text-decoration: none;">+ Thêm Trạm Mới</a>
-<% } %>
+<%- include('partials/head') %>
 
-<!-- ------------------------------------------------ -->
-<!-- Trong vòng lặp <table ...> hiển thị dữ liệu -->
-<!-- ------------------------------------------------ -->
+<%
+    // SỬ DỤNG LOCALS ĐỂ CHỐNG LỖI CRASH (500 INTERNAL SERVER ERROR) TỐI ĐA
+    const currentNet = locals.network || locals.currentNetwork || '3g';
+    const rfData = locals.data || locals.rfData || locals.rows || [];
+    const isAdmin = locals.currentUser && locals.currentUser.role === 'admin';
+%>
 
-<!-- Cột Tiêu đề thao tác -->
-<% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
-    <th style="width: 120px; text-align: center; position: sticky; right: 0; background-color: #f4f6f8; z-index: 2;">Thao Tác</th>
-<% } %>
+<style>
+    .table-wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+    .data-table th, .data-table td { padding: 10px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; position: sticky; top: 0; z-index: 10;}
+    .data-table tbody tr:hover { background-color: #f4f6f8; }
+    
+    /* Cột thao tác dính chặt lề phải */
+    .sticky-col { position: sticky; right: 0; background-color: #fff; border-left: 2px solid #ecf0f1; text-align: center !important;}
+    .data-table th.sticky-col { background-color: #f8f9fa; z-index: 11; }
+</style>
 
-<!-- Các nút Sửa/Xóa của từng hàng -->
-<% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
-    <td style="text-align: center; position: sticky; right: 0; background-color: #fff; z-index: 1; border-left: 2px solid #ddd;">
-        <div style="display: flex; gap: 5px; justify-content: center;">
-            <a href="/rf-database/edit/<%= currentNetwork %>/<%= row.id %>" class="btn-sm btn-primary" style="background: #f39c12; border: none; text-decoration: none;">Sửa</a>
-            <form action="/rf-database/delete/<%= currentNetwork %>/<%= row.id %>" method="POST" style="margin:0;" onsubmit="return confirm('Chắc chắn xóa trạm này?');">
-                <button type="submit" class="btn-sm btn-danger" style="background: #c0392b; border: none;">Xóa</button>
-            </form>
+<div class="layout">
+    <%- include('partials/sidebar') %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1>Quản Lý Cơ Sở Dữ Liệu Trạm (RF Database)</h1>
+        </header>
+        
+        <div class="content-body">
+            <div class="card" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                
+                <!-- Lọc theo mạng -->
+                <form action="/rf-database" method="GET" style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                    <label style="font-weight: bold; color: #2c3e50;">Chọn Mạng:</label>
+                    <select name="network" onchange="this.form.submit()" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer;">
+                        <option value="3g" <%= currentNet === '3g' ? 'selected' : '' %>>Trạm 3G (rf_3g)</option>
+                        <option value="4g" <%= currentNet === '4g' ? 'selected' : '' %>>Trạm 4G (rf_4g)</option>
+                        <option value="5g" <%= currentNet === '5g' ? 'selected' : '' %>>Trạm 5G (rf_5g)</option>
+                    </select>
+                </form>
+
+                <!-- Nút Thêm mới chỉ hiện cho Admin -->
+                <% if (isAdmin) { %>
+                    <a href="/rf-database/add/<%= currentNet %>" class="btn-primary" style="background: #27ae60; border: none; text-decoration: none; padding: 10px 15px;">➕ Thêm Trạm Mới</a>
+                <% } %>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <% if (rfData.length > 0) { %>
+                        <thead>
+                            <tr>
+                                <!-- Tự động sinh tên cột dựa trên dữ liệu thật trả về từ DB -->
+                                <% Object.keys(rfData[0]).forEach(key => { %>
+                                    <th><%= key %></th>
+                                <% }) %>
+                                
+                                <% if (isAdmin) { %>
+                                    <th class="sticky-col">Thao Tác</th>
+                                <% } %>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% rfData.forEach(row => { %>
+                                <tr>
+                                    <% Object.values(row).forEach(val => { %>
+                                        <td><%= val !== null && val !== undefined ? val : '' %></td>
+                                    <% }) %>
+                                    
+                                    <% if (isAdmin) { %>
+                                        <td class="sticky-col">
+                                            <div style="display: flex; gap: 5px; justify-content: center;">
+                                                <a href="/rf-database/edit/<%= currentNet %>/<%= row.id || row.ID %>" class="btn-primary" style="background: #f39c12; border: none; padding: 5px 10px; font-size: 12px; text-decoration: none;">Sửa</a>
+                                                <form action="/rf-database/delete/<%= currentNet %>/<%= row.id || row.ID %>" method="POST" style="margin:0;" onsubmit="return confirm('Chắc chắn xóa trạm này?');">
+                                                    <button type="submit" class="btn-danger" style="background: #c0392b; border: none; padding: 5px 10px; font-size: 12px;">Xóa</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    <% } %>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    <% } else { %>
+                        <tbody>
+                            <tr>
+                                <td style="text-align: center; padding: 30px; color: #7f8c8d;">Chưa có dữ liệu trạm cho mạng <%= currentNet.toUpperCase() %>. Vui lòng Import dữ liệu.</td>
+                            </tr>
+                        </tbody>
+                    <% } %>
+                </table>
+            </div>
         </div>
-    </td>
-<% } %>
+    </main>
+</div>
+</body>
+</html>
