@@ -1,53 +1,54 @@
 const db = require('../models/db');
 
-// Hiển thị giao diện trang KPI Analytics
-exports.getKpiAnalyticsPage = (req, res) => {
-    res.render('kpi_analytics', { title: 'KPI Analytics', page: 'KPI Analytics' });
+// Render trang giao diện KPI Analytics
+exports.getKpiAnalyticsPage = async (req, res) => {
+    // Thuật toán lấy user an toàn
+    const activeUser = res.locals.currentUser || req.session.user || req.user;
+    
+    res.render('kpi_analytics', {
+        title: 'Phân Tích KPI',
+        page: 'KPI Analytics',
+        currentUser: activeUser
+    });
 };
 
-// API trả về dữ liệu dạng JSON cho biểu đồ
+// API trả về dữ liệu KPI dưới dạng JSON cho biểu đồ Chart.js
 exports.getKpiData = async (req, res) => {
-    const { network, cellName } = req.query;
-    if (!network || !cellName) {
-        return res.status(400).json({ error: 'Vui lòng nhập đầy đủ thông tin!' });
-    }
+    const network = req.query.network || '4g';
+    const cellName = req.query.cellName ? req.query.cellName.trim() : '';
+    
+    let tableName = `kpi_${network}`;
+    let cellColumn = 'Cell_name'; // Mặc định cho 4G
+    
+    if (network === '3g') cellColumn = 'Ten_CELL';
+    if (network === '5g') cellColumn = 'Ten_CELL';
 
     try {
-        let tableName = '';
-        let cellColumn = 'Ten_CELL'; // Tên cột mặc định cho 3G và 5G
-        
-        if (network === '3g') { 
-            tableName = 'kpi_3g'; 
-        } else if (network === '4g') { 
-            tableName = 'kpi_4g'; 
-            cellColumn = 'Cell_name'; // 4G dùng cột Cell_name
-        } else if (network === '5g') { 
-            tableName = 'kpi_5g'; 
-        } else { 
-            return res.status(400).json({ error: 'Loại mạng không hợp lệ' }); 
+        let query = `SELECT * FROM ${tableName}`;
+        let params = [];
+
+        // Nếu người dùng có nhập tên Cell để tìm kiếm
+        if (cellName) {
+            query += ` WHERE ${cellColumn} LIKE ?`;
+            params.push(`%${cellName}%`);
         }
 
-        // Lấy tất cả dữ liệu của Cell đó
-        const [rows] = await db.query(`SELECT * FROM ${tableName} WHERE ${cellColumn} = ?`, [cellName]);
-        
+        const [rows] = await db.query(query, params);
         res.json(rows);
     } catch (error) {
-        console.error("Lỗi khi lấy dữ liệu KPI:", error);
-        res.status(500).json({ error: 'Lỗi server khi tải dữ liệu KPI' });
+        console.error("Lỗi khi lấy dữ liệu KPI Analytics:", error);
+        res.status(500).json({ error: "Lỗi truy xuất cơ sở dữ liệu." });
     }
 };
 
-// Chức năng Reset toàn bộ Database KPI (Dành riêng cho Admin)
+// Hàm Reset toàn bộ dữ liệu KPI của 1 mạng (Dành cho Admin)
 exports.resetData = async (req, res) => {
-    const { network } = req.params;
-    const tableName = `kpi_${network}`;
+    const network = req.params.network;
     try {
-        // Lệnh TRUNCATE xóa sạch dữ liệu và đưa ID về lại 1
-        await db.query(`TRUNCATE TABLE ${tableName}`);
-        // Trả về một script hiện thông báo Alert và quay lại trang trước đó (Import Data)
-        res.send(`<script>alert('Đã xóa sạch toàn bộ dữ liệu bảng ${tableName.toUpperCase()} thành công! Bạn có thể tiến hành Import lại từ đầu.'); window.location.href='/import-data';</script>`);
+        await db.query(`TRUNCATE TABLE kpi_${network}`);
+        res.redirect('/import-data');
     } catch (error) {
-        console.error(error);
-        res.status(500).send("Lỗi reset dữ liệu KPI. Vui lòng thử lại sau.");
+        console.error("Lỗi khi reset KPI:", error);
+        res.status(500).send("Lỗi hệ thống khi xóa dữ liệu.");
     }
 };
