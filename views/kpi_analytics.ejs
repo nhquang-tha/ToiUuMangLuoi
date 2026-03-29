@@ -1,305 +1,215 @@
 <%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; }
+    .filter-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;}
+    .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; height: 350px; position: relative; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 1024px) { .charts-grid { grid-template-columns: 1fr; } }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <div class="layout">
-    <%- include('partials/sidebar') %>
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1><%= page %></h1>
+            <h1>Phân Tích KPI Bằng Đồ Thị</h1>
         </header>
+        
         <div class="content-body">
             
-            <div class="card" style="margin-bottom: 20px;">
-                <form id="kpiSearchForm" style="display: flex; gap: 15px; align-items: flex-end;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label>Công Nghệ</label>
-                        <select id="networkSelect" class="form-control" required style="width: 150px; padding: 10px;">
-                            <option value="3g">Mạng 3G</option>
-                            <option value="4g">Mạng 4G</option>
-                            <option value="5g">Mạng 5G</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0; flex: 1; max-width: 400px;">
-                        <label>Tên Cell (Cell Name)</label>
-                        <input type="text" id="cellInput" class="form-control" placeholder="Ví dụ: 3G_TXN026M23_THA hoặc 4G-HHA021M41-THA" required style="padding: 10px; width: 100%;">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: auto; padding: 10px 20px;">Xem Biểu Đồ</button>
-                </form>
-                <div id="statusMessage" style="margin-top: 15px; font-weight: bold;"></div>
+            <div class="filter-card">
+                <div style="flex: 1; min-width: 200px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Chọn Mạng Lưới:</label>
+                    <select id="networkSelect" style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; cursor: pointer;">
+                        <option value="4g" selected>Mạng 4G LTE</option>
+                        <option value="3g">Mạng 3G WCDMA</option>
+                        <option value="5g">Mạng 5G NR</option>
+                    </select>
+                </div>
+                <div style="flex: 2; min-width: 250px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Tên Cell (Bỏ trống để xem toàn mạng):</label>
+                    <input type="text" id="cellNameInput" placeholder="Ví dụ: 4G-HHA021M41-THA..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                </div>
+                <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 10px 25px; border-radius: 4px; font-weight: bold; cursor: pointer; height: 41px;">📊 Trích Xuất Biểu Đồ</button>
             </div>
 
-            <div id="chartsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px;">
-                <!-- HTML của các biểu đồ sẽ được tự động chèn vào đây -->
+            <div id="loadingMsg" style="display: none; text-align: center; color: #e67e22; font-weight: bold; margin-bottom: 15px;">⏳ Đang tải dữ liệu từ máy chủ...</div>
+            <div id="errorMsg" style="display: none; text-align: center; color: #e74c3c; font-weight: bold; margin-bottom: 15px;"></div>
+
+            <div class="charts-grid" id="chartsArea" style="display: none;">
+                <div class="chart-container">
+                    <canvas id="chartThroughput"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chartTraffic"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chartCSSR"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chartCDR"></canvas>
+                </div>
             </div>
 
         </div>
     </main>
 </div>
 
-<!-- MODAL POPUP PHÓNG TO BIỂU ĐỒ KHI CLICK -->
-<div id="chartModal" style="display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.85); backdrop-filter: blur(4px);">
-    <div style="background-color:#fff; margin: 3% auto; padding: 25px; width: 90%; max-width: 1200px; border-radius: 12px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
-        <span id="closeModal" style="position:absolute; right:20px; top:15px; color:#555; font-size:32px; font-weight:bold; cursor:pointer; line-height:1;">&times;</span>
-        <h2 id="modalTitle" style="text-align:center; margin-top:0; margin-bottom:20px; color:#2c3e50;">Chi Tiết Biểu Đồ</h2>
-        <div style="width:100%; height:70vh; position:relative;">
-            <canvas id="modalCanvas"></canvas>
-        </div>
-    </div>
-</div>
-
-<!-- KỸ THUẬT NHÚNG AN TOÀN TUYỆT ĐỐI BẰNG BASE64 -->
 <script>
-    const scriptTag = document.createElement('script');
-    scriptTag.src = atob('aHR0cHM6Ly9jZG5qcy5jbG91ZGZsYXJlLmNvbS9hamF4L2xpYnMvQ2hhcnQuanMvMy45LjEvY2hhcnQubWluLmpz');
-    document.head.appendChild(scriptTag);
-</script>
+    // Khai báo các biến lưu trữ đối tượng biểu đồ (để hủy đi vẽ lại khi thay đổi dữ liệu)
+    let throughputChart, trafficChart, cssrChart, cdrChart;
 
-<script>
-    // =========================================================================
-    // ENGINE SẮP XẾP THỜI GIAN TOÁN HỌC - TƯƠNG ĐƯƠNG PYTHON STRPTIME
-    // =========================================================================
-    function parseDateToSortableInteger(val) {
-        if (!val) return 0;
-
-        let str = String(val).trim().replace(/["'\r\n]/g, '').split(' ')[0];
-        
-        // 1. Nếu Database trả về chuẩn VN DD/MM/YYYY
-        if (str.includes('/')) {
-            let parts = str.split('/');
-            if (parts.length === 3) {
-                let d = parseInt(parts[0], 10);
-                let m = parseInt(parts[1], 10);
-                let y = parseInt(parts[2], 10);
-                if (y < 100) y += 2000;
-                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
-            }
-        }
-
-        // 2. Nếu Database lỡ trả về ISO YYYY-MM-DD
-        if (str.includes('-')) {
-            let parts = str.split('T')[0].split('-');
-            if (parts.length === 3 && parts[0].length === 4) {
-                let y = parseInt(parts[0], 10);
-                let m = parseInt(parts[1], 10);
-                let d = parseInt(parts[2], 10);
-                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return (y * 10000) + (m * 100) + d;
-            }
-        }
-
-        return 0;
+    // Hàm sắp xếp dữ liệu theo ngày tháng (Thoi_gian: DD/MM/YYYY)
+    function sortDataByDate(data) {
+        return data.sort((a, b) => {
+            const parseDate = (dateStr) => {
+                if (!dateStr) return 0;
+                const parts = dateStr.split('/');
+                if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+                return 0;
+            };
+            return parseDate(a.Thoi_gian) - parseDate(b.Thoi_gian);
+        });
     }
 
-    function integerToDDMMYYYY(num) {
-        if (!num || num === 0) return '';
-        let s = String(num); 
-        if (s.length !== 8) return '';
-        let y = s.substring(0, 4);
-        let m = s.substring(4, 6);
-        let d = s.substring(6, 8);
-        return `${d}/${m}/${y}`;
-    }
-    // =========================================================================
-
-    // Đóng Popup
-    document.getElementById('closeModal').onclick = function() {
-        document.getElementById('chartModal').style.display = 'none';
-    };
-    window.onclick = function(event) {
-        if (event.target == document.getElementById('chartModal')) {
-            document.getElementById('chartModal').style.display = 'none';
-        }
-    };
-
-    document.getElementById('kpiSearchForm').addEventListener('submit', async function(e) {
-        e.preventDefault(); 
-        
+    async function fetchAndDrawCharts() {
         const network = document.getElementById('networkSelect').value;
-        const cellName = document.getElementById('cellInput').value.trim();
-        const statusMsg = document.getElementById('statusMessage');
-        const chartsContainer = document.getElementById('chartsContainer');
+        const cellName = document.getElementById('cellNameInput').value.trim();
 
-        if (!cellName) return;
-
-        statusMsg.style.color = 'blue';
-        statusMsg.textContent = 'Đang tải dữ liệu...';
-        chartsContainer.innerHTML = '';
+        document.getElementById('loadingMsg').style.display = 'block';
+        document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('chartsArea').style.display = 'none';
 
         try {
-            if (typeof Chart === 'undefined') {
-                statusMsg.style.color = 'orange';
-                statusMsg.textContent = 'Đang khởi tạo thư viện biểu đồ, vui lòng chờ giây lát...';
-                await new Promise(r => setTimeout(r, 1500)); 
-                if (typeof Chart === 'undefined') {
-                    throw new Error("Không thể tải thư viện Chart.js. Vui lòng tải lại trang.");
-                }
-            }
-
             const response = await fetch(`/api/kpi-data?network=${network}&cellName=${encodeURIComponent(cellName)}`);
-            let rawData = await response.json();
+            if (!response.ok) throw new Error('Lỗi truy xuất từ máy chủ');
+            let data = await response.json();
 
-            if (rawData.error) {
-                statusMsg.style.color = 'red';
-                statusMsg.textContent = rawData.error;
+            if (data.length === 0) {
+                document.getElementById('loadingMsg').style.display = 'none';
+                document.getElementById('errorMsg').innerText = 'Không tìm thấy dữ liệu KPI nào phù hợp!';
+                document.getElementById('errorMsg').style.display = 'block';
                 return;
             }
 
-            if (rawData.length === 0) {
-                statusMsg.style.color = 'red';
-                statusMsg.textContent = `Không tìm thấy dữ liệu KPI nào cho Cell: "${cellName}" trong mạng ${network.toUpperCase()}.`;
-                return;
+            // Sắp xếp dữ liệu theo thứ tự thời gian tăng dần
+            data = sortDataByDate(data);
+
+            const labels = data.map(d => d.Thoi_gian || 'N/A');
+            let throughputData, trafficData, cssrData, cdrData;
+            let throughputLabel = '', trafficLabel = '', cssrLabel = '', cdrLabel = '';
+
+            // ÁNH XẠ DỮ LIỆU TỪ DB LÊN ĐỒ THỊ DỰA THEO TỪNG MẠNG
+            if (network === '4g') {
+                throughputLabel = 'USER DL AVG THPUT (Kbps)';
+                // CHÚ Ý: ĐÃ SỬA THÀNH CHỮ 'K' VIẾT HOA CHO KHỚP CỘT MỚI TẠO
+                throughputData = data.map(d => parseFloat(d.User_DL_Avg_Throughput_Kbps) || 0);
+                
+                trafficLabel = 'Total Data Traffic Volume (GB)';
+                trafficData = data.map(d => parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
+                
+                cssrLabel = 'Call Setup Success Rate (%)';
+                cssrData = data.map(d => parseFloat(d.Call_Setup_SR) || parseFloat(d.RRC_Conn_Estab_SR) || 0);
+                
+                cdrLabel = 'Service Drop All (%)';
+                cdrData = data.map(d => parseFloat(d.Service_Drop_all) || parseFloat(d.Call_Drop_Rate_VoLTE) || 0);
+            } 
+            else if (network === '3g') {
+                throughputLabel = 'HSDPA Throughput (Kbps)';
+                throughputData = data.map(d => parseFloat(d.HSDPATHROUGHPUT) || parseFloat(d.R99DLTHROUGHPUT) || 0);
+                
+                trafficLabel = 'Traffic (Erlang/GB)';
+                trafficData = data.map(d => parseFloat(d.TRAFFIC) || parseFloat(d.PSR99TRAFFICGB) || 0);
+                
+                cssrLabel = 'CSSR (%)';
+                cssrData = data.map(d => parseFloat(d.CSSR) || 0);
+                
+                cdrLabel = 'DCR (%)';
+                cdrData = data.map(d => parseFloat(d.DCR) || 0);
+            } 
+            else if (network === '5g') {
+                throughputLabel = 'User DL Avg Throughput (Kbps)';
+                throughputData = data.map(d => parseFloat(d.A_User_DL_Avg_Throughput) || 0);
+                
+                trafficLabel = 'DL Traffic Volume (GB)';
+                trafficData = data.map(d => parseFloat(d.DL_Traffic_Volume_GB) || parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
+                
+                cssrLabel = 'SgNB Addition SR (%)';
+                cssrData = data.map(d => parseFloat(d.SgNB_Addition_SR) || 0);
+                
+                cdrLabel = 'SgNB Abnormal Release Rate (%)';
+                cdrData = data.map(d => parseFloat(d.SgNB_Abnormal_Release_Rate) || 0);
             }
 
-            // --- BƯỚC 1: XÓA TRÙNG LẶP & ÉP THÀNH SỐ NGUYÊN ---
-            let uniqueDataMap = new Map();
-            rawData.forEach(row => {
-                let sortNum = parseDateToSortableInteger(row.Thoi_gian);
-                if(sortNum > 0) {
-                    row._sortNum = sortNum; // Gắn biến ẩn để làm cơ sở sắp xếp toán học
-                    row.Thoi_gian = integerToDDMMYYYY(sortNum); // Ép hiển thị ra chữ
-                    uniqueDataMap.set(sortNum, row); 
-                }
-            });
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('chartsArea').style.display = 'grid';
 
-            let data = Array.from(uniqueDataMap.values());
-
-            // --- BƯỚC 2: SORT TOÁN HỌC (TĂNG DẦN TỪ TRÁI SANG PHẢI TRÊN BIỂU ĐỒ) ---
-            data.sort((a, b) => a._sortNum - b._sortNum);
-
-            statusMsg.style.color = 'green';
-            statusMsg.textContent = `Tìm thấy ${data.length} ngày dữ liệu duy nhất cho Cell: ${cellName}.`;
-
-            // Lấy labels đã được sắp xếp 100% chuẩn
-            const labels = data.map(row => row.Thoi_gian);
-
-            let chartConfigs = [];
-            if (network === '3g') {
-                chartConfigs = [
-                    { key: 'PSTRAFFIC', title: 'PS TRAFFIC', color: '#3498db' },
-                    { key: 'PSCONGES', title: 'PS CONGES', color: '#e74c3c' },
-                    { key: 'TRAFFIC', title: 'TRAFFIC', color: '#2ecc71' },
-                    { key: 'CSCONGES', title: 'CS CONGES', color: '#f1c40f' }
-                ];
-            } else if (network === '4g') {
-                chartConfigs = [
-                    { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (GB)', color: '#3498db' },
-                    { key: 'User_DL_Avg_Throughput_kbps', title: 'USER DL AVG THPUT (kbps)', color: '#9b59b6' },
-                    { key: 'RB_Util_Rate_DL', title: 'RES BLK DL (%)', color: '#e67e22' },
-                    { key: 'CQI_4G', title: 'CQI 4G', color: '#34495e' } 
-                ];
-            } else if (network === '5g') {
-                chartConfigs = [
-                    { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (GB)', color: '#3498db' },
-                    { key: 'Cell_DL_Avg_Throughput', title: 'CELL DL AVG THROUGHPUT', color: '#1abc9c' },
-                    { key: 'CQI_5G', title: 'CQI 5G', color: '#e74c3c' }
-                ];
-            }
-
-            chartConfigs.forEach((cfg) => {
-                const dataPoints = data.map(row => parseFloat(row[cfg.key]) || 0);
-
-                const chartWrapper = document.createElement('div');
-                chartWrapper.className = 'card';
-                chartWrapper.style.padding = '15px';
-                chartWrapper.style.cursor = 'pointer';
-                chartWrapper.style.transition = 'transform 0.2s, box-shadow 0.2s';
-                chartWrapper.title = "Click để phóng to biểu đồ này";
-                
-                chartWrapper.onmouseover = function() {
-                    this.style.transform = 'scale(1.02)';
-                    this.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
-                };
-                chartWrapper.onmouseout = function() {
-                    this.style.transform = 'scale(1)';
-                    this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)'; 
-                };
-
-                const chartTitle = document.createElement('h3');
-                chartTitle.textContent = cfg.title;
-                chartTitle.style.textAlign = 'center';
-                chartTitle.style.marginBottom = '10px';
-                chartTitle.style.color = '#333';
-                
-                const canvas = document.createElement('canvas');
-
-                chartWrapper.appendChild(chartTitle);
-                chartWrapper.appendChild(canvas);
-                chartsContainer.appendChild(chartWrapper);
-
-                new Chart(canvas, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: cfg.title,
-                            data: dataPoints,
-                            borderColor: cfg.color,
-                            backgroundColor: cfg.color + '33',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.3,
-                            pointBackgroundColor: cfg.color,
-                            pointRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true } }
-                    }
-                });
-
-                chartWrapper.onclick = function() {
-                    document.getElementById('chartModal').style.display = 'block';
-                    document.getElementById('modalTitle').textContent = cfg.title + " (" + cellName + ")";
-                    
-                    if (window.modalChartInstance) {
-                        window.modalChartInstance.destroy();
-                    }
-                    
-                    const ctx = document.getElementById('modalCanvas').getContext('2d');
-                    window.modalChartInstance = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: cfg.title,
-                                data: dataPoints,
-                                borderColor: cfg.color,
-                                backgroundColor: cfg.color + '33',
-                                borderWidth: 3,
-                                fill: true,
-                                tension: 0.3,
-                                pointBackgroundColor: cfg.color,
-                                pointRadius: 6,
-                                pointHoverRadius: 9
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false, 
-                            plugins: { 
-                                legend: { display: false },
-                                tooltip: {
-                                    mode: 'index',
-                                    intersect: false,
-                                    titleFont: { size: 14 },
-                                    bodyFont: { size: 14 },
-                                    padding: 10
-                                }
-                            },
-                            scales: { 
-                                y: { beginAtZero: true, ticks: { font: { size: 14 } } },
-                                x: { ticks: { font: { size: 13 } } }
-                            }
-                        }
-                    });
-                };
-            });
+            // Gọi hàm vẽ 4 biểu đồ
+            drawChart('chartThroughput', throughputChart, labels, throughputData, throughputLabel, '#9b59b6', 'line');
+            drawChart('chartTraffic', trafficChart, labels, trafficData, trafficLabel, '#3498db', 'bar');
+            drawChart('chartCSSR', cssrChart, labels, cssrData, cssrLabel, '#27ae60', 'line');
+            drawChart('chartCDR', cdrChart, labels, cdrData, cdrLabel, '#e74c3c', 'line');
 
         } catch (error) {
             console.error(error);
-            statusMsg.style.color = 'red';
-            statusMsg.textContent = 'Lỗi hệ thống khi vẽ biểu đồ: ' + error.message;
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('errorMsg').innerText = 'Lỗi hệ thống khi vẽ biểu đồ. Vui lòng thử lại sau.';
+            document.getElementById('errorMsg').style.display = 'block';
         }
-    });
+    }
+
+    // Hàm lõi chuyên dùng để Render Chart.js
+    function drawChart(canvasId, chartInstance, labels, dataArr, title, color, type) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        // Hủy biểu đồ cũ (nếu có) để tránh bị chồng chéo khi bấm lọc lại
+        if (Chart.getChart(canvasId)) {
+            Chart.getChart(canvasId).destroy();
+        }
+
+        return new Chart(ctx, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: title,
+                    data: dataArr,
+                    backgroundColor: color + '33', // Thêm độ trong suốt cho màu nền (Fill)
+                    borderColor: color,
+                    borderWidth: 2,
+                    pointBackgroundColor: color,
+                    pointRadius: 4,
+                    fill: type === 'line' ? true : false,
+                    tension: 0.3 // Làm cong mượt đường line
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: { display: true, text: title, font: { size: 14 } },
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 15 } }, // Giới hạn số lượng nhãn trục X tránh bị rối
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // Tự động load dữ liệu 4G khi mới vào trang
+    window.onload = () => {
+        fetchAndDrawCharts();
+    };
 </script>
 </body>
 </html>
