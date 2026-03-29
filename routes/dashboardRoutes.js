@@ -15,8 +15,8 @@ const mapController = require('../controllers/mapController');
 // Cấu hình lưu trữ bộ nhớ đệm cho quá trình upload file
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Middleware gán biến currentUser toàn cục cho tất cả các View
-// Cách này fix triệt để lỗi mất menu Admin khi vào các trang con
+// MIDDLEWARE TOÀN CỤC: Đảm bảo biến currentUser luôn tồn tại trên mọi View
+// Khắc phục triệt để lỗi mất thanh Menu Sidebar ở các trang con
 router.use((req, res, next) => {
     res.locals.currentUser = req.session ? req.session.user : undefined;
     next();
@@ -44,7 +44,7 @@ router.get('/api/ta-data', isAuthenticated, mapController.getTAData);
 // --- ROUTES CHO KPI ANALYTICS ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
-router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData); // Reset Data chỉ dành cho Admin
+router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
 
 // --- ROUTES CHO IMPORT DATA (Hỗ trợ upload Multi-file) ---
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
@@ -52,9 +52,7 @@ router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 
 
 // --- ROUTES CHO RF DATABASE (CRUD) ---
 router.get('/rf-database', isAuthenticated, rfController.getList);
-router.get('/rf-database/export', isAuthenticated, rfController.exportData); // API xuất toàn bộ Excel (bỏ qua phân trang)
-
-// Các Route Xem Form (Mọi User đã xác thực đều được xem form / Mặc dù nút bấm đã ẩn ở Frontend)
+router.get('/rf-database/export', isAuthenticated, rfController.exportData); // API xuất Excel
 router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
 
 // CHẶN QUYỀN TRÊN BACKEND: Chỉ có Admin mới được thực hiện hành động Thêm/Sửa/Xóa dữ liệu
