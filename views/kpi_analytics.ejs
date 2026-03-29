@@ -8,27 +8,50 @@
 <style>
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; }
-    .filter-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;}
-    .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; height: 350px; position: relative; }
+    
+    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #3498db;}
+    
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 1024px) { .charts-grid { grid-template-columns: 1fr; } }
+    
+    .chart-container { 
+        background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+        height: 380px; position: relative; 
+        opacity: 0; /* Ẩn đi chờ hiệu ứng popup */
+    }
+
+    /* HIỆU ỨNG POPUP NẢY (BOUNCING) CHUYÊN NGHIỆP */
+    @keyframes popInBouncing {
+        0% { opacity: 0; transform: scale(0.8) translateY(30px); }
+        60% { opacity: 1; transform: scale(1.03) translateY(-5px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* Các class gán hiệu ứng với độ trễ khác nhau để đồ thị nhảy ra lần lượt */
+    .popup-anim-1 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s forwards; }
+    .popup-anim-2 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s forwards; }
+    .popup-anim-3 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s forwards; }
+    .popup-anim-4 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s forwards; }
+
 </style>
 
+<!-- Load thư viện vẽ biểu đồ Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <div class="layout">
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>Phân Tích KPI Bằng Đồ Thị</h1>
+            <h1>Phân Tích Hiệu Năng Mạng (KPI Analytics)</h1>
         </header>
         
         <div class="content-body">
             
+            <!-- BỘ LỌC DỮ LIỆU -->
             <div class="filter-card">
                 <div style="flex: 1; min-width: 200px;">
                     <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Chọn Mạng Lưới:</label>
-                    <select id="networkSelect" style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; cursor: pointer;">
+                    <select id="networkSelect" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; cursor: pointer; font-size: 14px;">
                         <option value="4g" selected>Mạng 4G LTE</option>
                         <option value="3g">Mạng 3G WCDMA</option>
                         <option value="5g">Mạng 5G NR</option>
@@ -36,38 +59,40 @@
                 </div>
                 <div style="flex: 2; min-width: 250px;">
                     <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Tên Cell (Bỏ trống để xem toàn mạng):</label>
-                    <input type="text" id="cellNameInput" placeholder="Ví dụ: 4G-HHA021M41-THA..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                    <input type="text" id="cellNameInput" placeholder="Ví dụ: 4G-HHA021M41-THA..." style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 14px;">
                 </div>
-                <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 10px 25px; border-radius: 4px; font-weight: bold; cursor: pointer; height: 41px;">📊 Trích Xuất Biểu Đồ</button>
+                <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 15px; transition: 0.2s;">
+                    📊 Trích Xuất Biểu Đồ
+                </button>
             </div>
 
-            <div id="loadingMsg" style="display: none; text-align: center; color: #e67e22; font-weight: bold; margin-bottom: 15px;">⏳ Đang tải dữ liệu từ máy chủ...</div>
-            <div id="errorMsg" style="display: none; text-align: center; color: #e74c3c; font-weight: bold; margin-bottom: 15px;"></div>
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px;">
+                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang tải và phân tích dữ liệu...
+            </div>
+            
+            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
 
+            <!-- KHU VỰC HIỂN THỊ ĐỒ THỊ (Gắn ID để kích hoạt Animation) -->
             <div class="charts-grid" id="chartsArea" style="display: none;">
-                <div class="chart-container">
-                    <canvas id="chartThroughput"></canvas>
-                </div>
-                <div class="chart-container">
-                    <canvas id="chartTraffic"></canvas>
-                </div>
-                <div class="chart-container">
-                    <canvas id="chartCSSR"></canvas>
-                </div>
-                <div class="chart-container">
-                    <canvas id="chartCDR"></canvas>
-                </div>
+                <div class="chart-container" id="box1"><canvas id="chartThroughput"></canvas></div>
+                <div class="chart-container" id="box2"><canvas id="chartTraffic"></canvas></div>
+                <div class="chart-container" id="box3"><canvas id="chartCSSR"></canvas></div>
+                <div class="chart-container" id="box4"><canvas id="chartCDR"></canvas></div>
             </div>
 
         </div>
     </main>
 </div>
 
+<style>
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
 <script>
-    // Khai báo các biến lưu trữ đối tượng biểu đồ (để hủy đi vẽ lại khi thay đổi dữ liệu)
+    // Khai báo các biến lưu trữ đối tượng biểu đồ (để hủy đi vẽ lại)
     let throughputChart, trafficChart, cssrChart, cdrChart;
 
-    // Hàm sắp xếp dữ liệu theo ngày tháng (Thoi_gian: DD/MM/YYYY)
+    // Hàm sắp xếp dữ liệu theo ngày tháng
     function sortDataByDate(data) {
         return data.sort((a, b) => {
             const parseDate = (dateStr) => {
@@ -86,7 +111,11 @@
 
         document.getElementById('loadingMsg').style.display = 'block';
         document.getElementById('errorMsg').style.display = 'none';
+        
+        // Reset trạng thái hiển thị của khung chứa đồ thị để chạy lại Animation
         document.getElementById('chartsArea').style.display = 'none';
+        const boxes = ['box1', 'box2', 'box3', 'box4'];
+        boxes.forEach(id => document.getElementById(id).className = 'chart-container'); 
 
         try {
             const response = await fetch(`/api/kpi-data?network=${network}&cellName=${encodeURIComponent(cellName)}`);
@@ -95,22 +124,22 @@
 
             if (data.length === 0) {
                 document.getElementById('loadingMsg').style.display = 'none';
-                document.getElementById('errorMsg').innerText = 'Không tìm thấy dữ liệu KPI nào phù hợp!';
+                document.getElementById('errorMsg').innerText = 'Không tìm thấy dữ liệu KPI nào phù hợp với bộ lọc!';
                 document.getElementById('errorMsg').style.display = 'block';
                 return;
             }
 
-            // Sắp xếp dữ liệu theo thứ tự thời gian tăng dần
+            // Sắp xếp dữ liệu theo thời gian
             data = sortDataByDate(data);
 
             const labels = data.map(d => d.Thoi_gian || 'N/A');
             let throughputData, trafficData, cssrData, cdrData;
             let throughputLabel = '', trafficLabel = '', cssrLabel = '', cdrLabel = '';
 
-            // ÁNH XẠ DỮ LIỆU TỪ DB LÊN ĐỒ THỊ DỰA THEO TỪNG MẠNG
+            // ÁNH XẠ DỮ LIỆU TỪ DATABASE
             if (network === '4g') {
                 throughputLabel = 'USER DL AVG THPUT (Kbps)';
-                // CHÚ Ý: ĐÃ SỬA THÀNH CHỮ 'K' VIẾT HOA CHO KHỚP CỘT MỚI TẠO
+                // CHÚ Ý: Cột này đã được đảm bảo chính xác 100% với chữ K viết hoa
                 throughputData = data.map(d => parseFloat(d.User_DL_Avg_Throughput_Kbps) || 0);
                 
                 trafficLabel = 'Total Data Traffic Volume (GB)';
@@ -125,26 +154,20 @@
             else if (network === '3g') {
                 throughputLabel = 'HSDPA Throughput (Kbps)';
                 throughputData = data.map(d => parseFloat(d.HSDPATHROUGHPUT) || parseFloat(d.R99DLTHROUGHPUT) || 0);
-                
                 trafficLabel = 'Traffic (Erlang/GB)';
                 trafficData = data.map(d => parseFloat(d.TRAFFIC) || parseFloat(d.PSR99TRAFFICGB) || 0);
-                
                 cssrLabel = 'CSSR (%)';
                 cssrData = data.map(d => parseFloat(d.CSSR) || 0);
-                
                 cdrLabel = 'DCR (%)';
                 cdrData = data.map(d => parseFloat(d.DCR) || 0);
             } 
             else if (network === '5g') {
                 throughputLabel = 'User DL Avg Throughput (Kbps)';
                 throughputData = data.map(d => parseFloat(d.A_User_DL_Avg_Throughput) || 0);
-                
                 trafficLabel = 'DL Traffic Volume (GB)';
                 trafficData = data.map(d => parseFloat(d.DL_Traffic_Volume_GB) || parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
-                
                 cssrLabel = 'SgNB Addition SR (%)';
                 cssrData = data.map(d => parseFloat(d.SgNB_Addition_SR) || 0);
-                
                 cdrLabel = 'SgNB Abnormal Release Rate (%)';
                 cdrData = data.map(d => parseFloat(d.SgNB_Abnormal_Release_Rate) || 0);
             }
@@ -152,7 +175,13 @@
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('chartsArea').style.display = 'grid';
 
-            // Gọi hàm vẽ 4 biểu đồ
+            // KÍCH HOẠT HIỆU ỨNG POPUP NẢY LẦN LƯỢT CHO CÁC KHUNG ĐỒ THỊ
+            document.getElementById('box1').classList.add('popup-anim-1');
+            document.getElementById('box2').classList.add('popup-anim-2');
+            document.getElementById('box3').classList.add('popup-anim-3');
+            document.getElementById('box4').classList.add('popup-anim-4');
+
+            // Vẽ đồ thị
             drawChart('chartThroughput', throughputChart, labels, throughputData, throughputLabel, '#9b59b6', 'line');
             drawChart('chartTraffic', trafficChart, labels, trafficData, trafficLabel, '#3498db', 'bar');
             drawChart('chartCSSR', cssrChart, labels, cssrData, cssrLabel, '#27ae60', 'line');
@@ -161,16 +190,15 @@
         } catch (error) {
             console.error(error);
             document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('errorMsg').innerText = 'Lỗi hệ thống khi vẽ biểu đồ. Vui lòng thử lại sau.';
+            document.getElementById('errorMsg').innerText = 'Lỗi hệ thống khi vẽ biểu đồ. Vui lòng kiểm tra lại kết nối mạng.';
             document.getElementById('errorMsg').style.display = 'block';
         }
     }
 
-    // Hàm lõi chuyên dùng để Render Chart.js
+    // Hàm lõi chuyên dùng để Render Chart.js với hiệu ứng xịn xò
     function drawChart(canvasId, chartInstance, labels, dataArr, title, color, type) {
         const ctx = document.getElementById(canvasId).getContext('2d');
         
-        // Hủy biểu đồ cũ (nếu có) để tránh bị chồng chéo khi bấm lọc lại
         if (Chart.getChart(canvasId)) {
             Chart.getChart(canvasId).destroy();
         }
@@ -182,25 +210,52 @@
                 datasets: [{
                     label: title,
                     data: dataArr,
-                    backgroundColor: color + '33', // Thêm độ trong suốt cho màu nền (Fill)
+                    backgroundColor: type === 'bar' ? color : color + '22', // Trong suốt nhẹ cho biểu đồ đường
                     borderColor: color,
-                    borderWidth: 2,
-                    pointBackgroundColor: color,
-                    pointRadius: 4,
+                    borderWidth: type === 'bar' ? 0 : 3, // Dày nét line
+                    pointBackgroundColor: '#ffffff', // Tâm điểm màu trắng
+                    pointBorderColor: color,
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
                     fill: type === 'line' ? true : false,
-                    tension: 0.3 // Làm cong mượt đường line
+                    tension: 0.4 // Làm cong mượt đường line cực đẹp
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: {
+                    duration: 1500, // Đồ thị tự động vẽ lên mượt mà
+                    easing: 'easeOutQuart'
+                },
                 plugins: {
-                    title: { display: true, text: title, font: { size: 14 } },
-                    legend: { display: false }
+                    title: { display: true, text: title, font: { size: 16, weight: 'bold', family: "'Segoe UI', sans-serif" }, color: '#34495e', padding: { bottom: 15 } },
+                    legend: { display: false },
+                    tooltip: { // Popup Tooltip khi di chuột vào điểm
+                        backgroundColor: 'rgba(44, 62, 80, 0.9)',
+                        titleFont: { size: 14 },
+                        bodyFont: { size: 14, weight: 'bold' },
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y.toLocaleString('vi-VN') + (title.includes('%') ? ' %' : '');
+                            }
+                        }
+                    }
                 },
                 scales: {
-                    x: { ticks: { maxTicksLimit: 15 } }, // Giới hạn số lượng nhãn trục X tránh bị rối
-                    y: { beginAtZero: true }
+                    x: { 
+                        grid: { display: false }, // Ẩn lưới dọc cho hiện đại
+                        ticks: { maxTicksLimit: 12, font: { size: 11 } } 
+                    },
+                    y: { 
+                        beginAtZero: true,
+                        grid: { borderDash: [5, 5], color: '#ecf0f1' }, // Lưới ngang nét đứt
+                        ticks: { font: { size: 12 } }
+                    }
                 }
             }
         });
