@@ -2,9 +2,15 @@
 
 <%
     // SỬ DỤNG LOCALS ĐỂ CHỐNG LỖI CRASH (500 INTERNAL SERVER ERROR) TỐI ĐA
-    const currentNet = locals.network || locals.currentNetwork || '3g';
-    const rfData = locals.data || locals.rfData || locals.rows || [];
+    const currentNet = locals.currentNetwork || locals.network || '3g';
+    const rfData = locals.rfData || locals.data || locals.rows || [];
     const isAdmin = locals.currentUser && locals.currentUser.role === 'admin';
+    
+    // Các biến phục vụ phân trang & tìm kiếm
+    const searchVal = locals.searchQuery || '';
+    const currentPage = locals.currentPage || 1;
+    const totalPages = locals.totalPages || 1;
+    const totalRecords = locals.totalRecords || 0;
 %>
 
 <style>
@@ -24,6 +30,11 @@
 
     .btn-success { background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
     .btn-success:hover { background: #219653; }
+    
+    /* Nút phân trang */
+    .page-btn { padding: 6px 12px; background: #bdc3c7; color: white; text-decoration: none; border-radius: 3px; font-weight: bold; transition: 0.2s;}
+    .page-btn:hover { background: #95a5a6; }
+    .page-btn.active { background: #3498db; }
 </style>
 
 <div class="layout">
@@ -34,31 +45,49 @@
         </header>
         
         <div class="content-body">
-            <div class="card" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+            
+            <!-- THANH CÔNG CỤ TÌM KIẾM & BỘ LỌC -->
+            <div class="card" style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px;">
                 
-                <!-- Lọc theo mạng -->
-                <form action="/rf-database" method="GET" style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                <!-- Hàng 1: Tiêu đề và Thêm/Xuất -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <h3 style="margin: 0; color: #2c3e50;">Dữ liệu: <%= currentNet.toUpperCase() %></h3>
+                    <div style="display: flex; gap: 10px;">
+                        <!-- Nút Xuất Excel (Hiển thị cho tất cả mọi người) -->
+                        <% if (rfData.length > 0) { %>
+                            <button onclick="exportToExcel()" class="btn-success">📥 Xuất Excel (Trang này)</button>
+                        <% } %>
+
+                        <!-- Nút Thêm mới chỉ hiện cho Admin -->
+                        <% if (isAdmin) { %>
+                            <a href="/rf-database/add/<%= currentNet %>" class="btn-primary" style="background: #2980b9; border: none; text-decoration: none; padding: 10px 15px;">➕ Thêm Trạm Mới</a>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Hàng 2: Form Tìm kiếm & Lọc mạng -->
+                <form action="/rf-database" method="GET" style="margin: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #ecf0f1;">
+                    
                     <label style="font-weight: bold; color: #2c3e50;">Chọn Mạng:</label>
                     <select name="network" id="networkSelect" onchange="this.form.submit()" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer;">
-                        <option value="3g" <%= currentNet === '3g' ? 'selected' : '' %>>Trạm 3G (rf_3g)</option>
-                        <option value="4g" <%= currentNet === '4g' ? 'selected' : '' %>>Trạm 4G (rf_4g)</option>
-                        <option value="5g" <%= currentNet === '5g' ? 'selected' : '' %>>Trạm 5G (rf_5g)</option>
+                        <option value="3g" <%= currentNet === '3g' ? 'selected' : '' %>>Trạm 3G</option>
+                        <option value="4g" <%= currentNet === '4g' ? 'selected' : '' %>>Trạm 4G</option>
+                        <option value="5g" <%= currentNet === '5g' ? 'selected' : '' %>>Trạm 5G</option>
                     </select>
+                    
+                    <span style="color: #ccc;">|</span>
+
+                    <input type="text" name="search" value="<%= searchVal %>" placeholder="Nhập Cell Code hoặc Tên Cell..." style="padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; flex: 1; min-width: 250px;">
+                    <button type="submit" class="btn-primary" style="padding: 8px 15px; border: none; background: #34495e; color: white; border-radius: 4px; cursor: pointer;">🔍 Tìm Kiếm</button>
+                    
+                    <% if (searchVal) { %>
+                        <a href="/rf-database?network=<%= currentNet %>" style="color: #e74c3c; text-decoration: none; font-size: 13px; font-weight: bold; padding: 8px;">✖ Xóa lọc</a>
+                    <% } %>
+
                 </form>
-
-                <div style="display: flex; gap: 10px;">
-                    <!-- Nút Xuất Excel (Hiển thị cho tất cả mọi người) -->
-                    <% if (rfData.length > 0) { %>
-                        <button onclick="exportToExcel()" class="btn-success">📥 Xuất Excel</button>
-                    <% } %>
-
-                    <!-- Nút Thêm mới chỉ hiện cho Admin -->
-                    <% if (isAdmin) { %>
-                        <a href="/rf-database/add/<%= currentNet %>" class="btn-primary" style="background: #2980b9; border: none; text-decoration: none; padding: 10px 15px;">➕ Thêm Trạm Mới</a>
-                    <% } %>
-                </div>
             </div>
 
+            <!-- BẢNG DỮ LIỆU -->
             <div class="table-wrapper">
                 <table class="data-table" id="rfTable">
                     <% if (rfData.length > 0) { %>
@@ -97,12 +126,35 @@
                     <% } else { %>
                         <tbody>
                             <tr>
-                                <td style="text-align: center; padding: 30px; color: #7f8c8d;">Chưa có dữ liệu trạm cho mạng <%= currentNet.toUpperCase() %>. Vui lòng Import dữ liệu.</td>
+                                <td style="text-align: center; padding: 30px; color: #7f8c8d;">
+                                    Không tìm thấy dữ liệu trạm phù hợp. Vui lòng kiểm tra lại từ khóa hoặc Import dữ liệu mới.
+                                </td>
                             </tr>
                         </tbody>
                     <% } %>
                 </table>
             </div>
+
+            <!-- THANH ĐIỀU HƯỚNG PHÂN TRANG (PAGINATION) -->
+            <% if (totalPages > 0) { %>
+                <div style="margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 10px;">
+                    <!-- Nút Trang trước -->
+                    <% if (currentPage > 1) { %>
+                        <a href="/rf-database?network=<%= currentNet %>&search=<%= searchVal %>&page=<%= currentPage - 1 %>" class="page-btn">&laquo; Trang trước</a>
+                    <% } %>
+                    
+                    <!-- Thông tin tổng quan -->
+                    <span style="padding: 5px 15px; background: #fff; border: 1px solid #bdc3c7; border-radius: 4px; color: #2c3e50; font-weight: bold; font-size: 13px;">
+                        Trang <%= currentPage %> / <%= totalPages %> (Tổng: <%= totalRecords %> trạm)
+                    </span>
+
+                    <!-- Nút Trang sau -->
+                    <% if (currentPage < totalPages) { %>
+                        <a href="/rf-database?network=<%= currentNet %>&search=<%= searchVal %>&page=<%= currentPage + 1 %>" class="page-btn active">Trang kế tiếp &raquo;</a>
+                    <% } %>
+                </div>
+            <% } %>
+
         </div>
     </main>
 </div>
@@ -110,7 +162,7 @@
 <!-- TÍCH HỢP THƯ VIỆN XUẤT EXCEL VÀ JAVASCRIPT -->
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Tải thư viện SheetJS thông qua Base64 để chống lỗi định dạng khung chat
+        // Tải thư viện SheetJS thông qua Base64 để chống lỗi định dạng
         const xlsxScript = document.createElement('script');
         xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
         document.head.appendChild(xlsxScript);
@@ -133,14 +185,16 @@
         if (isAdminLogged) {
             let rows = cloneTable.rows;
             for (let i = 0; i < rows.length; i++) {
-                rows[i].deleteCell(-1); // Xóa Cell cuối cùng của mỗi hàng
+                if(rows[i].cells.length > 0) {
+                    rows[i].deleteCell(-1); // Xóa Cell cuối cùng của mỗi hàng
+                }
             }
         }
 
         // 4. Biến đổi Bảng thành Book Excel và tải về
         let wb = XLSX.utils.table_to_book(cloneTable, {sheet: "RF_Data"});
         let networkName = document.getElementById('networkSelect').value.toUpperCase();
-        let fileName = `RF_Data_${networkName}.xlsx`;
+        let fileName = `RF_Data_${networkName}_Page_<%= currentPage %>.xlsx`;
         
         XLSX.writeFile(wb, fileName);
     }
