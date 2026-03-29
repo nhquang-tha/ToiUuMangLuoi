@@ -55,7 +55,7 @@
                     <div style="display: flex; gap: 10px;">
                         <!-- Nút Xuất Excel (Hiển thị cho tất cả mọi người) -->
                         <% if (rfData.length > 0) { %>
-                            <button onclick="exportToExcel()" class="btn-success">📥 Xuất Excel (Trang này)</button>
+                            <button onclick="exportToExcel()" class="btn-success" id="btnExport">📥 Xuất Excel (Toàn bộ)</button>
                         <% } %>
 
                         <!-- Nút Thêm mới chỉ hiện cho Admin -->
@@ -168,35 +168,52 @@
         document.head.appendChild(xlsxScript);
     });
 
-    function exportToExcel() {
+    async function exportToExcel() {
         if (typeof XLSX === 'undefined') {
             alert('Thư viện Excel chưa tải xong, vui lòng đợi vài giây và thử lại.');
             return;
         }
 
-        // 1. Lấy bảng gốc HTML
-        let table = document.getElementById('rfTable');
-        
-        // 2. Clone (Nhân bản) bảng ra để không làm ảnh hưởng giao diện đang xem
-        let cloneTable = table.cloneNode(true);
-        
-        // 3. Nếu là Admin, bảng sẽ có cột cuối cùng là "Thao Tác" -> Xóa cột này đi khỏi file Excel
-        let isAdminLogged = <%= isAdmin ? 'true' : 'false' %>;
-        if (isAdminLogged) {
-            let rows = cloneTable.rows;
-            for (let i = 0; i < rows.length; i++) {
-                if(rows[i].cells.length > 0) {
-                    rows[i].deleteCell(-1); // Xóa Cell cuối cùng của mỗi hàng
-                }
-            }
-        }
+        // Lấy thông số Mạng và Từ khóa tìm kiếm hiện tại
+        let networkName = document.getElementById('networkSelect').value;
+        const searchParams = new URLSearchParams(window.location.search);
+        const search = searchParams.get('search') || '';
 
-        // 4. Biến đổi Bảng thành Book Excel và tải về
-        let wb = XLSX.utils.table_to_book(cloneTable, {sheet: "RF_Data"});
-        let networkName = document.getElementById('networkSelect').value.toUpperCase();
-        let fileName = `RF_Data_${networkName}_Page_<%= currentPage %>.xlsx`;
-        
-        XLSX.writeFile(wb, fileName);
+        // Hiệu ứng Loading cho nút bấm
+        const btn = document.getElementById('btnExport');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Đang trích xuất dữ liệu...';
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+
+        try {
+            // Gọi API Backend lấy TOÀN BỘ dữ liệu thay vì HTML DOM
+            const response = await fetch(`/rf-database/export?network=${networkName}&search=${encodeURIComponent(search)}`);
+            if (!response.ok) throw new Error('Lỗi mạng');
+            const data = await response.json();
+
+            if (data.length === 0) {
+                alert('Không có dữ liệu để xuất!');
+                return;
+            }
+
+            // Biến đổi JSON thành File Excel
+            let worksheet = XLSX.utils.json_to_sheet(data);
+            let workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "RF_Data");
+            
+            let fileName = `RF_Data_${networkName.toUpperCase()}_ToanBo.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+            
+        } catch (error) {
+            console.error("Lỗi xuất file:", error);
+            alert('Có lỗi xảy ra khi tải dữ liệu Excel từ máy chủ!');
+        } finally {
+            // Trả lại trạng thái gốc cho nút bấm
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
     }
 </script>
 </body>
