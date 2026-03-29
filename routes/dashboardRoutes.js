@@ -15,6 +15,13 @@ const mapController = require('../controllers/mapController');
 // Cấu hình lưu trữ bộ nhớ đệm cho quá trình upload file
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Middleware gán biến currentUser toàn cục cho tất cả các View
+// Cách này fix triệt để lỗi mất menu Admin khi vào các trang con
+router.use((req, res, next) => {
+    res.locals.currentUser = req.session ? req.session.user : undefined;
+    next();
+});
+
 // --- ROUTES CƠ BẢN (Dashboard & Báo cáo tĩnh) ---
 const pages = [
     { path: '/', name: 'Dashboard' },
