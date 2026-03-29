@@ -103,7 +103,7 @@ exports.handleImportData = async (req, res) => {
             }
 
             // CHUẨN HÓA THỜI GIAN THEO DD/MM/YYYY TRƯỚC KHI LƯU VÀO DB (Chỉ áp dụng cho KPI và RF)
-            if (networkType !== 'ta_query') {
+            if (networkType !== 'ta_query' && networkType !== 'poi_4g' && networkType !== 'poi_5g') {
                 data.forEach(row => {
                     let t = row['Thời gian'];
                     if (t !== undefined && t !== null) {
@@ -133,7 +133,7 @@ exports.handleImportData = async (req, res) => {
                 'kpi_3g': ['Tên RNC', 'CSVOICECSSR', 'CS_SO_ATT'],
                 'kpi_4g': ['District code', 'UL Traffic VoLTE (GB)'],
                 'kpi_5g': ['Tên GNODEB', 'CQI_5G', 'USER_UL_AVG_THROUGHPUT'],
-                'ta_query': ['Date', 'eNodeB Name', 'Cell Code', 'L.RA.TA.UE.Index0'], // Validate file TA
+                'ta_query': ['Date', 'eNodeB Name', 'Cell Code', 'L.RA.TA.UE.Index0'],
                 'poi_4g': ['Cell_Code', 'Site_Code', 'POI'], // Validate file POI 4G
                 'poi_5g': ['Cell_Code', 'Site_Code', 'POI']  // Validate file POI 5G
             };
@@ -147,6 +147,16 @@ exports.handleImportData = async (req, res) => {
             if (networkType === 'kpi_5g') {
                 if (headersInFile.includes('A User Uplink Average Throughput')) requiredHeaders['kpi_5g'][2] = 'A User Uplink Average Throughput';
                 else if (headersInFile.includes('USER_UL_AVG_THROUGHPUT')) requiredHeaders['kpi_5g'][2] = 'USER_UL_AVG_THROUGHPUT';
+            }
+
+            const expectedHeaders = requiredHeaders[networkType];
+            const isValidFile = expectedHeaders.every(header => headersInFile.includes(header));
+            
+            if (!isValidFile) {
+                errorLogs.push(`File ${file.originalname} sai cấu trúc.`);
+                continue;
+            }
+
             // XÓA DỮ LIỆU CŨ CỦA CÁC NGÀY CÓ TRONG FILE NÀY ĐỂ GHI ĐÈ 
             if (networkType.startsWith('kpi_')) {
                 const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
@@ -189,8 +199,19 @@ exports.handleImportData = async (req, res) => {
                 sql = `INSERT INTO kpi_5g (Nha_cung_cap, Tinh, Ten_GNODEB, Ten_CELL, Ma_VNP, Loai_NE, GNODEB_ID, CELL_ID, Thoi_gian, A_User_UL_Avg_Throughput, CQI_5G, Intra_SgNB_PScell_Change, Average_User_Number, DL_RB_Ultilization, UL_RB_Ultilization, Cell_avaibility_rate, Maximum_User_Number, UL_Traffic_Volume_GB, DL_Traffic_Volume_GB, Cell_UL_Avg_Throughput, Cell_DL_Avg_Throughput, SgNB_Abnormal_Release_Rate, SgNB_Addition_SR, A_User_DL_Avg_Throughput, Total_Data_Traffic_Volume_GB, Inter_SgNB_PScell_Change_2) VALUES ?`;
                 values = data.map(row => [row['Nhà cung cấp'], row['Tỉnh'], row['Tên GNODEB'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['GNODEB_ID'] || row['GNODEB ID'], row['CELL_ID'] || row['CELL ID'], row['Thời gian'], row['A User Uplink Average Throughput'] || row['USER_UL_AVG_THROUGHPUT'], row['CQI_5G'], row['Intra-SgNB PScell Change'] || row['INTRA_SGNB_PS_CHANGE'], row['Average User Number'] || row['USER_AVG_NUMBER'], row['Downlink Resource Block Ultilization'] || row['DLINK_RES_BLK_ULT'], row['Uplink Resource Block Ultilization'] || row['ULINK_RES_BLK_ULT'], row['Cell avaibility rate'] || row['CELL_AVAIBILITY_RATE'], row['Maximum User Number'] || row['USER_MAX_NUMBER'], row['UL Traffic Volume (GB)'] || row['UL_TRAFFIC_VOLUME'], row['DL Traffic Volume (GB)'] || row['DL_TRAFFIC_VOLUME'], row['Cell Uplink Average Throughput'] || row['CELL_UL_AVG_THROUGHPUT'], row['Cell Downlink Average Throughput'] || row['CELL_DL_AVG_THROUGHPUT'], row['SgNB Abnormal Release Rate'] || row['SGNB_ABN_RELEASE_RATE'], row['SgNB Addition Success Rate'] || row['SGNB_ADD_SUCCESS_RATE'], row['A User Downlink Average Throughput'] || row['USER_DL_AVG_THROUGHPUT'], row['Total Data Traffic Volume (GB)'] || row['TRAFFIC'], row['Inter-SgNB PScell Change'] || row['INTER_SGNB_PS_CHANGE']]);
             } else if (networkType === 'ta_query') {
-                // XỬ LÝ INSERT CHO BẢNG TA_QUERY (BỌC BACKTICK CỘT DATE VÀ ÉP KIỂU SỐ HỌC AN TOÀN)
-                sql = `INSERT INTO TA_Query (\`Date\`, eNodeB_Name, Cell_FDD_TDD_Indication, Cell_Code, LocalCell_Id, eNodeB_Function_Name, Integrity, Index0, Index1, Index2, Index3, Index4, Index5, Index6, Index7, Index8, Index9, Index10, Index11) VALUES ?`;
+                const getInt = val => {
+                    if (val === undefined || val === null || val === "") return 0;
+                    let n = Number(String(val).replace(/,/g, '').trim());
+                    return isNaN(n) ? 0 : n;
+                };
+                const getFloat = val => {
+                    if (val === undefined || val === null || val === "") return null;
+                    let n = Number(String(val).replace(/,/g, '.').trim());
+                    return isNaN(n) ? null : n;
+                };
+
+                sql = `INSERT INTO TA_Query (\`Date\`, \`eNodeB_Name\`, \`Cell_FDD_TDD_Indication\`, \`Cell_Code\`, \`LocalCell_Id\`, \`eNodeB_Function_Name\`, \`Integrity\`, \`Index0\`, \`Index1\`, \`Index2\`, \`Index3\`, \`Index4\`, \`Index5\`, \`Index6\`, \`Index7\`, \`Index8\`, \`Index9\`, \`Index10\`, \`Index11\`) VALUES ?`;
+                
                 values = data.map(row => [
                     row['Date'] || '', 
                     row['eNodeB Name'] || '', 
@@ -227,7 +248,8 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error("Lỗi khi xử lý file:", error);
-            errorLogs.push(`File ${file.originalname} bị lỗi.`);
+            // In rõ lỗi của MySQL ra màn hình UI để người dùng thấy
+            errorLogs.push(`File ${file.originalname} bị lỗi: ${error.message}`);
         }
     } // End For loop
 
