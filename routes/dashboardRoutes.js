@@ -14,11 +14,23 @@ const mapController = require('../controllers/mapController');
 
 // Cấu hình lưu trữ bộ nhớ đệm cho quá trình upload file
 const upload = multer({ storage: multer.memoryStorage() });
+const db = require('../models/db'); // Bổ sung import DB
 
-// MIDDLEWARE TOÀN CỤC: Đảm bảo biến currentUser luôn tồn tại trên mọi View
-// Khắc phục triệt để lỗi mất thanh Menu Sidebar ở các trang con
-router.use((req, res, next) => {
-    res.locals.currentUser = req.session ? req.session.user : undefined;
+// MIDDLEWARE TOÀN CỤC: Khôi phục Session User thông minh
+router.use(async (req, res, next) => {
+    if (req.session && req.session.user) {
+        res.locals.currentUser = req.session.user;
+    } else if (req.session && (req.session.userId || req.session.user_id || req.session.id)) {
+        // Nếu code Login của bạn chỉ lưu ID vào session, hệ thống sẽ tự query DB để khôi phục Role
+        const uid = req.session.userId || req.session.user_id || req.session.id;
+        try {
+            const [users] = await db.query('SELECT id, username, role FROM users WHERE id = ?', [uid]);
+            if (users.length > 0) {
+                req.session.user = users[0]; // Cập nhật lại session cho chuẩn
+                res.locals.currentUser = users[0];
+            }
+        } catch(e) { console.error("Lỗi khôi phục session:", e); }
+    }
     next();
 });
 
