@@ -8,6 +8,10 @@
 %>
 
 <style>
+    /* BỔ SUNG CSS BỐ CỤC ĐỂ ĐẢM BẢO HIỂN THỊ ĐÚNG SIDEBAR & CONTENT */
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; }
+
     .table-wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
     .data-table th, .data-table td { padding: 10px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
@@ -17,6 +21,9 @@
     /* Cột thao tác dính chặt lề phải */
     .sticky-col { position: sticky; right: 0; background-color: #fff; border-left: 2px solid #ecf0f1; text-align: center !important;}
     .data-table th.sticky-col { background-color: #f8f9fa; z-index: 11; }
+
+    .btn-success { background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-success:hover { background: #219653; }
 </style>
 
 <div class="layout">
@@ -32,21 +39,28 @@
                 <!-- Lọc theo mạng -->
                 <form action="/rf-database" method="GET" style="margin: 0; display: flex; align-items: center; gap: 10px;">
                     <label style="font-weight: bold; color: #2c3e50;">Chọn Mạng:</label>
-                    <select name="network" onchange="this.form.submit()" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer;">
+                    <select name="network" id="networkSelect" onchange="this.form.submit()" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer;">
                         <option value="3g" <%= currentNet === '3g' ? 'selected' : '' %>>Trạm 3G (rf_3g)</option>
                         <option value="4g" <%= currentNet === '4g' ? 'selected' : '' %>>Trạm 4G (rf_4g)</option>
                         <option value="5g" <%= currentNet === '5g' ? 'selected' : '' %>>Trạm 5G (rf_5g)</option>
                     </select>
                 </form>
 
-                <!-- Nút Thêm mới chỉ hiện cho Admin -->
-                <% if (isAdmin) { %>
-                    <a href="/rf-database/add/<%= currentNet %>" class="btn-primary" style="background: #27ae60; border: none; text-decoration: none; padding: 10px 15px;">➕ Thêm Trạm Mới</a>
-                <% } %>
+                <div style="display: flex; gap: 10px;">
+                    <!-- Nút Xuất Excel (Hiển thị cho tất cả mọi người) -->
+                    <% if (rfData.length > 0) { %>
+                        <button onclick="exportToExcel()" class="btn-success">📥 Xuất Excel</button>
+                    <% } %>
+
+                    <!-- Nút Thêm mới chỉ hiện cho Admin -->
+                    <% if (isAdmin) { %>
+                        <a href="/rf-database/add/<%= currentNet %>" class="btn-primary" style="background: #2980b9; border: none; text-decoration: none; padding: 10px 15px;">➕ Thêm Trạm Mới</a>
+                    <% } %>
+                </div>
             </div>
 
             <div class="table-wrapper">
-                <table class="data-table">
+                <table class="data-table" id="rfTable">
                     <% if (rfData.length > 0) { %>
                         <thead>
                             <tr>
@@ -92,5 +106,44 @@
         </div>
     </main>
 </div>
+
+<!-- TÍCH HỢP THƯ VIỆN XUẤT EXCEL VÀ JAVASCRIPT -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tải thư viện SheetJS thông qua Base64 để chống lỗi định dạng khung chat
+        const xlsxScript = document.createElement('script');
+        xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
+        document.head.appendChild(xlsxScript);
+    });
+
+    function exportToExcel() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel chưa tải xong, vui lòng đợi vài giây và thử lại.');
+            return;
+        }
+
+        // 1. Lấy bảng gốc HTML
+        let table = document.getElementById('rfTable');
+        
+        // 2. Clone (Nhân bản) bảng ra để không làm ảnh hưởng giao diện đang xem
+        let cloneTable = table.cloneNode(true);
+        
+        // 3. Nếu là Admin, bảng sẽ có cột cuối cùng là "Thao Tác" -> Xóa cột này đi khỏi file Excel
+        let isAdminLogged = <%= isAdmin ? 'true' : 'false' %>;
+        if (isAdminLogged) {
+            let rows = cloneTable.rows;
+            for (let i = 0; i < rows.length; i++) {
+                rows[i].deleteCell(-1); // Xóa Cell cuối cùng của mỗi hàng
+            }
+        }
+
+        // 4. Biến đổi Bảng thành Book Excel và tải về
+        let wb = XLSX.utils.table_to_book(cloneTable, {sheet: "RF_Data"});
+        let networkName = document.getElementById('networkSelect').value.toUpperCase();
+        let fileName = `RF_Data_${networkName}.xlsx`;
+        
+        XLSX.writeFile(wb, fileName);
+    }
+</script>
 </body>
 </html>
