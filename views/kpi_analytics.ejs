@@ -153,7 +153,7 @@
     // Bảng màu đẹp (Color Palette) dùng để phân tách các Cell
     const CHART_COLORS = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f1c40f', '#e67e22', '#1abc9c', '#34495e', '#d35400', '#c0392b'];
 
-    window.chartDataStore = {}; // Lưu cấu hình biểu đồ để Zoom
+    window.chartDataStore = {}; // Lưu cấu hình RAW để Zoom không bị lỗi Circular Reference
     window.chartInstances = {}; // Lưu object biểu đồ để hủy khi cần
 
     // Tự động load danh sách POI
@@ -281,8 +281,15 @@
                 // Trải dữ liệu ra theo đúng trục thời gian (Nếu ngày đó cell ko có data thì trả về null để đứt nét)
                 const dataPoints = allDates.map(date => {
                     const row = cellRows.find(r => r.Thoi_gian === date);
+                    if (!row) return null;
+                    
+                    let rawVal = row[config.key];
                     // Support cả chữ k thường và K hoa cho độ ổn định
-                    let val = row ? parseFloat(row[config.key] || row[config.key.replace('Kbps', 'kbps')]) : null;
+                    if (rawVal === undefined && config.key.includes('Kbps')) {
+                        rawVal = row[config.key.replace('Kbps', 'kbps')];
+                    }
+                    
+                    let val = parseFloat(rawVal);
                     return isNaN(val) ? null : val; 
                 });
 
@@ -301,6 +308,18 @@
                     spanGaps: true // Nối nét đứt nếu có ngày bị mất dữ liệu
                 };
             });
+
+            // LƯU TRỮ RAW DATA AN TOÀN TRƯỚC KHI VẼ CHart.js (CHỐNG LỖI CRASH POPUP)
+            window.chartDataStore[canvasId] = {
+                labels: allDates,
+                datasets: datasets.map(ds => ({ // Map mảng thuần gọn nhẹ
+                    label: ds.label,
+                    data: ds.data,
+                    borderColor: ds.borderColor,
+                    backgroundColor: ds.backgroundColor
+                })),
+                title: config.title
+            };
 
             // 6. Vẽ biểu đồ lên Canvas
             const ctx = document.getElementById(canvasId).getContext('2d');
@@ -325,27 +344,59 @@
                 }
             };
 
-            window.chartDataStore[canvasId] = chartConfig;
             window.chartInstances[canvasId] = new Chart(ctx, chartConfig);
         });
     }
 
     // --- CHỨC NĂNG MODAL PHÓNG TO (ZOOM) ---
     function openModal(canvasId) {
-        const config = window.chartDataStore[canvasId];
-        if (!config) return;
+        const dataStore = window.chartDataStore[canvasId];
+        if (!dataStore) return;
 
         document.getElementById('chartModal').classList.add('show');
         const ctx = document.getElementById('modalCanvas').getContext('2d');
         if (modalChartInstance) modalChartInstance.destroy();
 
-        // Tạo một bản copy config siêu to khổng lồ cho Modal
-        let modalConfig = JSON.parse(JSON.stringify(config));
-        modalConfig.options.plugins.title.font.size = 22;
-        modalConfig.options.plugins.legend.labels.font.size = 14;
-        modalConfig.data.datasets.forEach(ds => { ds.borderWidth = 3; ds.pointRadius = 5; }); // Làm nét to ra
+        // Tái tạo Dataset chuẩn xác cho màn hình Modal (To và Nét hơn)
+        const zoomedDatasets = dataStore.datasets.map(ds => ({
+            label: ds.label,
+            data: ds.data,
+            borderColor: ds.borderColor,
+            backgroundColor: ds.backgroundColor,
+            borderWidth: 4, 
+            pointBackgroundColor: '#ffffff',
+            pointBorderColor: ds.borderColor,
+            pointBorderWidth: 3,
+            pointRadius: 6,
+            pointHoverRadius: 9,
+            fill: false,
+            tension: 0.3,
+            spanGaps: true
+        }));
 
-        modalChartInstance = new Chart(ctx, modalConfig);
+        modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dataStore.labels,
+                datasets: zoomedDatasets
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' },
+                plugins: {
+                    title: { display: true, text: dataStore.title, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
+                    legend: { display: zoomedDatasets.length > 1, position: 'bottom', labels: { font: { size: 14 } } },
+                    tooltip: {
+                        mode: 'index', intersect: false,
+                        backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, 
+                        padding: 15, cornerRadius: 8, displayColors: true
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 14 } } },
+                    y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 14 } } }
+                }
+            }
+        });
     }
 
     function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
