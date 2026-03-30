@@ -21,9 +21,10 @@ exports.getKpiData = async (req, res) => {
         if (type === 'keyword' && value) {
             const values = value.split(',').map(s => s.trim()).filter(s => s);
             if (values.length === 1) {
-                // Nhập 1 mã -> Tìm theo Trạm (Site) bằng LIKE
-                query += ` WHERE ${cellColumn} LIKE ?`;
-                params.push(`${values[0]}%`);
+                // Nhập 1 mã -> Tìm theo Trạm (Site) hoặc Cell bằng LIKE
+                let siteColumn = (network === '4g') ? 'Site_name' : ((network === '5g') ? 'Ten_GNODEB' : 'Ten_RNC');
+                query += ` WHERE ${cellColumn} LIKE ? OR ${siteColumn} LIKE ?`;
+                params.push(`%${values[0]}%`, `%${values[0]}%`);
             } else {
                 // Nhập nhiều mã cách nhau dấu phẩy -> Tìm bằng IN
                 const placeholders = values.map(() => '?').join(',');
