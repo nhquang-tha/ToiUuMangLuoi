@@ -1,0 +1,295 @@
+<%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+    
+    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #9b59b6;}
+    
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 1024px) { .charts-grid { grid-template-columns: 1fr; } }
+    
+    .chart-container { 
+        background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+        height: 380px; position: relative; 
+        opacity: 0; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .chart-container:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+    .chart-container:hover .zoom-hint { color: #9b59b6; font-weight: bold; }
+    .zoom-hint { position: absolute; top: 15px; right: 20px; font-size: 12px; color: #bdc3c7; transition: 0.3s; pointer-events: none; }
+
+    @keyframes popInBouncing {
+        0% { opacity: 0; transform: scale(0.8) translateY(30px); }
+        60% { opacity: 1; transform: scale(1.03) translateY(-5px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .popup-anim-1 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s forwards; }
+    .popup-anim-2 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s forwards; }
+    .popup-anim-3 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s forwards; }
+    .popup-anim-4 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s forwards; }
+
+    /* Modal Zoom */
+    .modal-overlay {
+        display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7);
+        align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;
+    }
+    .modal-overlay.show { display: flex; opacity: 1; }
+    .modal-content {
+        background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 1300px; height: 85vh; position: relative;
+        transform: scale(0.8); transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column;
+    }
+    .modal-overlay.show .modal-content { transform: scale(1); }
+    .close-btn { position: absolute; top: 15px; right: 25px; font-size: 32px; font-weight: bold; color: #7f8c8d; cursor: pointer; transition: 0.2s; z-index: 10; }
+    .close-btn:hover { color: #e74c3c; }
+    .modal-body { flex: 1; position: relative; width: 100%; height: 100%; }
+
+    #initMsg { text-align: center; padding: 50px; color: #7f8c8d; font-size: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="layout">
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1>Báo Cáo POI (Tổng Hợp KPI Điểm Thu Hút)</h1>
+        </header>
+        
+        <div class="content-body">
+            
+            <div class="filter-card">
+                <div style="flex: 1; min-width: 300px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Danh sách POI (Points of Interest):</label>
+                    <select id="poiSelect" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; cursor: pointer; font-size: 14px; border-left: 4px solid #9b59b6;">
+                        <option value="">Đang tải danh sách POI...</option>
+                    </select>
+                </div>
+                <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #8e44ad; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 15px; transition: 0.2s;">
+                    📊 Trích Xuất Báo Cáo
+                </button>
+            </div>
+
+            <div id="initMsg">
+                <i>Lựa chọn một địa điểm POI từ danh sách thả xuống và bấm "Trích Xuất Báo Cáo".</i>
+            </div>
+
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px;">
+                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang gộp dữ liệu các Cell thuộc POI...
+            </div>
+            
+            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
+
+            <div class="charts-grid" id="chartsArea" style="display: none;">
+                <!-- 4G Charts -->
+                <div class="chart-container" id="box1" onclick="openModal('chart1')">
+                    <span class="zoom-hint">🔍 Click để phóng to</span>
+                    <canvas id="chart1"></canvas>
+                </div>
+                <div class="chart-container" id="box2" onclick="openModal('chart2')">
+                    <span class="zoom-hint">🔍 Click để phóng to</span>
+                    <canvas id="chart2"></canvas>
+                </div>
+                <!-- 5G Charts (Sẽ tự động ẩn nếu POI không có trạm 5G) -->
+                <div class="chart-container" id="box3" onclick="openModal('chart3')">
+                    <span class="zoom-hint">🔍 Click để phóng to</span>
+                    <canvas id="chart3"></canvas>
+                </div>
+                <div class="chart-container" id="box4" onclick="openModal('chart4')">
+                    <span class="zoom-hint">🔍 Click để phóng to</span>
+                    <canvas id="chart4"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- MODAL POPUP PHÓNG TO ĐỒ THỊ -->
+<div id="chartModal" class="modal-overlay">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <div class="modal-body">
+            <canvas id="modalCanvas"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.chartDataStore = {};
+    let modalChartInstance = null;
+
+    // Load danh sách POI khi mới vào trang
+    window.onload = async () => {
+        try {
+            const res = await fetch('/api/poi-list');
+            const list = await res.json();
+            const select = document.getElementById('poiSelect');
+            select.innerHTML = '<option value="">-- Chọn Địa Điểm POI --</option>';
+            list.forEach(poi => {
+                const opt = document.createElement('option');
+                opt.value = poi; opt.textContent = poi;
+                select.appendChild(opt);
+            });
+        } catch (e) {
+            document.getElementById('poiSelect').innerHTML = '<option value="">Lỗi tải danh sách POI</option>';
+        }
+    };
+
+    function sortDataByDate(data) {
+        return data.sort((a, b) => {
+            const parseDate = (d) => {
+                if (!d) return 0;
+                const p = d.split('/');
+                return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : 0;
+            };
+            return parseDate(a.Thoi_gian) - parseDate(b.Thoi_gian);
+        });
+    }
+
+    async function fetchAndDrawCharts() {
+        const poiName = document.getElementById('poiSelect').value;
+
+        if (!poiName) {
+            alert("Vui lòng chọn 1 POI từ danh sách!");
+            return;
+        }
+
+        document.getElementById('initMsg').style.display = 'none';
+        document.getElementById('loadingMsg').style.display = 'block';
+        document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('chartsArea').style.display = 'none';
+        
+        ['box1', 'box2', 'box3', 'box4'].forEach(id => document.getElementById(id).className = 'chart-container'); 
+
+        try {
+            const response = await fetch(`/api/poi-data?poi=${encodeURIComponent(poiName)}`);
+            if (!response.ok) throw new Error('Lỗi máy chủ');
+            const result = await response.json();
+
+            if (!result.data || result.data.length === 0) {
+                document.getElementById('loadingMsg').style.display = 'none';
+                document.getElementById('errorMsg').innerText = `Chưa có dữ liệu KPI cho POI "${poiName}".`;
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
+            }
+
+            const data = sortDataByDate(result.data);
+            const labels = data.map(d => d.Thoi_gian || 'N/A');
+
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('chartsArea').style.display = 'grid';
+
+            // Xử lý đồ thị 4G
+            if (result.has4g) {
+                document.getElementById('box1').style.display = 'block';
+                document.getElementById('box2').style.display = 'block';
+                document.getElementById('box1').classList.add('popup-anim-1');
+                document.getElementById('box2').classList.add('popup-anim-2');
+                
+                const traffic4g = data.map(d => parseFloat(d.traffic_4g) || 0);
+                const thput4g = data.map(d => parseFloat(d.thput_4g) || 0);
+                
+                drawChart('chart1', labels, traffic4g, `[4G] Tổng Traffic GB - ${poiName}`, '#3498db');
+                drawChart('chart2', labels, thput4g, `[4G] Trung bình USER DL THPUT (Kbps)`, '#9b59b6');
+            } else {
+                document.getElementById('box1').style.display = 'none';
+                document.getElementById('box2').style.display = 'none';
+            }
+
+            // Xử lý đồ thị 5G
+            if (result.has5g) {
+                document.getElementById('box3').style.display = 'block';
+                document.getElementById('box4').style.display = 'block';
+                document.getElementById('box3').classList.add('popup-anim-3');
+                document.getElementById('box4').classList.add('popup-anim-4');
+                
+                const traffic5g = data.map(d => parseFloat(d.traffic_5g) || 0);
+                const thput5g = data.map(d => parseFloat(d.thput_5g) || 0);
+                
+                drawChart('chart3', labels, traffic5g, `[5G] Tổng Traffic GB - ${poiName}`, '#e67e22');
+                drawChart('chart4', labels, thput5g, `[5G] Trung bình USER DL THPUT (Kbps)`, '#27ae60');
+            } else {
+                document.getElementById('box3').style.display = 'none';
+                document.getElementById('box4').style.display = 'none';
+            }
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('errorMsg').innerText = 'Lỗi truy xuất hệ thống. Vui lòng kiểm tra lại CSDL.';
+            document.getElementById('errorMsg').style.display = 'block';
+        }
+    }
+
+    function drawChart(canvasId, labels, dataArr, title, color) {
+        window.chartDataStore[canvasId] = { labels, dataArr, title, color };
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        if (Chart.getChart(canvasId)) Chart.getChart(canvasId).destroy();
+
+        return new Chart(ctx, {
+            type: 'line', 
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: title, data: dataArr, backgroundColor: color + '22', borderColor: color,
+                    borderWidth: 3, pointBackgroundColor: '#ffffff', pointBorderColor: color,
+                    pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 7, fill: true, tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 1500, easing: 'easeOutQuart' },
+                plugins: {
+                    title: { display: true, text: title, font: { size: 14, weight: 'bold', family: "'Segoe UI', sans-serif" }, color: '#34495e', padding: { bottom: 15 } },
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(44, 62, 80, 0.9)', titleFont: { size: 14 }, bodyFont: { size: 14, weight: 'bold' },
+                        padding: 12, cornerRadius: 8, displayColors: false,
+                        callbacks: { label: function(context) { return context.parsed.y.toLocaleString('vi-VN'); } }
+                    }
+                },
+                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12, font: { size: 11 } } }, y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 12 } } } }
+            }
+        });
+    }
+
+    function openModal(canvasId) {
+        const config = window.chartDataStore[canvasId];
+        if (!config) return;
+        document.getElementById('chartModal').classList.add('show');
+        const ctx = document.getElementById('modalCanvas').getContext('2d');
+        if (modalChartInstance) modalChartInstance.destroy();
+
+        modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: config.labels,
+                datasets: [{
+                    label: config.title, data: config.dataArr, backgroundColor: config.color + '22', borderColor: config.color,
+                    borderWidth: 4, pointBackgroundColor: '#ffffff', pointBorderColor: config.color,
+                    pointBorderWidth: 3, pointRadius: 6, pointHoverRadius: 9, fill: true, tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' },
+                plugins: {
+                    title: { display: true, text: config.title, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
+                    legend: { display: false },
+                    tooltip: { backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, padding: 15, cornerRadius: 8, displayColors: false, callbacks: { label: function(context) { return context.parsed.y.toLocaleString('vi-VN'); } } }
+                },
+                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 14 } } }, y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 14 } } } }
+            }
+        });
+    }
+
+    function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
+    window.onclick = function(event) { if (event.target === document.getElementById('chartModal')) closeModal(); }
+</script>
+</body>
+</html>
