@@ -122,7 +122,7 @@
 <div id="chartModal" class="modal-overlay">
     <div class="modal-content">
         <span class="close-btn" onclick="closeModal()">&times;</span>
-        <div class="modal-body">
+        <div class="modal-body" id="modalBodyContainer">
             <canvas id="modalCanvas"></canvas>
         </div>
     </div>
@@ -150,11 +150,11 @@
         ]
     };
 
-    // Bảng màu đẹp (Color Palette) dùng để phân tách các Cell
     const CHART_COLORS = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f1c40f', '#e67e22', '#1abc9c', '#34495e', '#d35400', '#c0392b'];
 
-    window.chartDataStore = {}; // Lưu cấu hình RAW để Zoom không bị lỗi Circular Reference
-    window.chartInstances = {}; // Lưu object biểu đồ để hủy khi cần
+    window.chartDataStore = {}; // Lưu cấu hình RAW để Zoom an toàn
+    window.chartInstances = {}; // Lưu object biểu đồ màn hình chính
+    let modalChartInstance = null;
 
     // Tự động load danh sách POI
     window.onload = async () => {
@@ -192,7 +192,6 @@
         const mode = document.getElementById('searchMode').value;
         let requests = [];
 
-        // Ràng buộc nhập liệu
         if (mode === 'keyword') {
             const val = document.getElementById('keywordInput').value.trim();
             if (!val) return alert("Vui lòng nhập Tên Cell hoặc Site!");
@@ -201,7 +200,6 @@
         } else {
             const val = document.getElementById('poiSelect').value;
             if (!val) return alert("Vui lòng chọn 1 POI từ danh sách!");
-            // Nếu chọn POI, ta tự động kéo cả 4G và 5G
             requests.push({ network: '4g', url: `/api/kpi-data?network=4g&type=poi&value=${encodeURIComponent(val)}` });
             requests.push({ network: '5g', url: `/api/kpi-data?network=5g&type=poi&value=${encodeURIComponent(val)}` });
         }
@@ -209,7 +207,7 @@
         document.getElementById('initMsg').style.display = 'none';
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('dynamicChartsArea').style.display = 'none';
-        document.getElementById('dynamicChartsArea').innerHTML = ''; // Xóa sạch chart cũ
+        document.getElementById('dynamicChartsArea').innerHTML = ''; 
         document.getElementById('loadingMsg').style.display = 'block';
 
         let hasData = false;
@@ -241,19 +239,15 @@
         }
     }
 
-    // THUẬT TOÁN ĐỘNG: Xây dựng khu vực biểu đồ (Data Grouping Multi-line)
+    // Xây dựng khu vực biểu đồ (Data Grouping Multi-line)
     function buildChartSection(rawData, network, showTitle) {
         const area = document.getElementById('dynamicChartsArea');
         const configKeys = KPI_CONFIG[network];
-        
-        // 1. Xác định cột chứa tên Cell
         const cellNameKey = (network === '4g') ? 'Cell_name' : 'Ten_CELL';
 
-        // 2. Lấy ra danh sách Ngày (Trục X) và danh sách Cell (Trục Y / Line) duy nhất
         let allDates = sortUniqueDates([...new Set(rawData.map(d => d.Thoi_gian))].filter(Boolean));
         let allCells = [...new Set(rawData.map(d => d[cellNameKey]))].filter(Boolean);
 
-        // 3. Render HTML Khung chứa
         if (showTitle) {
             area.insertAdjacentHTML('beforeend', `<div class="section-title">📊 Dữ liệu Mạng ${network.toUpperCase()} thuộc POI</div>`);
         }
@@ -262,7 +256,6 @@
         area.insertAdjacentHTML('beforeend', `<div class="charts-grid" id="${gridId}"></div>`);
         const gridEl = document.getElementById(gridId);
 
-        // 4. Lặp qua từng chỉ số KPI cấu hình để vẽ
         configKeys.forEach((config, idx) => {
             const canvasId = `canvas_${network}_${config.key}`;
             const boxHtml = `
@@ -273,22 +266,15 @@
             `;
             gridEl.insertAdjacentHTML('beforeend', boxHtml);
 
-            // 5. Build Datasets cho Chart.js (Mỗi Cell là 1 Object Line)
             let datasets = allCells.map((cellName, colorIndex) => {
                 const color = CHART_COLORS[colorIndex % CHART_COLORS.length];
                 const cellRows = rawData.filter(r => r[cellNameKey] === cellName);
                 
-                // Trải dữ liệu ra theo đúng trục thời gian (Nếu ngày đó cell ko có data thì trả về null để đứt nét)
                 const dataPoints = allDates.map(date => {
                     const row = cellRows.find(r => r.Thoi_gian === date);
                     if (!row) return null;
-                    
                     let rawVal = row[config.key];
-                    // Support cả chữ k thường và K hoa cho độ ổn định
-                    if (rawVal === undefined && config.key.includes('Kbps')) {
-                        rawVal = row[config.key.replace('Kbps', 'kbps')];
-                    }
-                    
+                    if (rawVal === undefined && config.key.includes('Kbps')) rawVal = row[config.key.replace('Kbps', 'kbps')];
                     let val = parseFloat(rawVal);
                     return isNaN(val) ? null : val; 
                 });
@@ -304,99 +290,98 @@
                     pointRadius: 4,
                     pointHoverRadius: 6,
                     tension: 0.3,
-                    fill: false, // Biểu đồ nhiều đường không nên Fill để tránh rối mắt
-                    spanGaps: true // Nối nét đứt nếu có ngày bị mất dữ liệu
+                    fill: false, 
+                    spanGaps: true 
                 };
             });
 
-            // LƯU TRỮ RAW DATA AN TOÀN TRƯỚC KHI VẼ CHart.js (CHỐNG LỖI CRASH POPUP)
+            // LƯU TRỮ RAW DATA ĐỂ ZOOM
             window.chartDataStore[canvasId] = {
                 labels: allDates,
-                datasets: datasets.map(ds => ({ // Map mảng thuần gọn nhẹ
-                    label: ds.label,
-                    data: ds.data,
-                    borderColor: ds.borderColor,
-                    backgroundColor: ds.backgroundColor
-                })),
+                datasets: datasets.map(ds => ({ label: ds.label, data: ds.data, borderColor: ds.borderColor, backgroundColor: ds.backgroundColor })),
                 title: config.title
             };
 
-            // 6. Vẽ biểu đồ lên Canvas
             const ctx = document.getElementById(canvasId).getContext('2d');
-            const chartConfig = {
+            window.chartInstances[canvasId] = new Chart(ctx, {
                 type: 'line',
                 data: { labels: allDates, datasets: datasets },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         title: { display: true, text: config.title, font: { size: 14, weight: 'bold' }, color: '#34495e', padding: { bottom: 15 } },
-                        legend: { 
-                            display: datasets.length > 1, // Chỉ hiện chú thích nếu có nhiều hơn 1 Cell
-                            position: 'bottom',
-                            labels: { boxWidth: 12, font: { size: 11 } }
-                        },
-                        tooltip: { mode: 'index', intersect: false } // Hover 1 đường hiện tooltip cho tất cả
+                        legend: { display: datasets.length > 1, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: { mode: 'index', intersect: false } 
                     },
                     scales: {
                         x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } },
                         y: { beginAtZero: true, grid: { borderDash: [5, 5] } }
                     }
                 }
-            };
-
-            window.chartInstances[canvasId] = new Chart(ctx, chartConfig);
+            });
         });
     }
 
-    // --- CHỨC NĂNG MODAL PHÓNG TO (ZOOM) ---
+    // --- CÔNG NGHỆ CHỐNG LỖI BLANK MODAL CHART.JS ---
     function openModal(canvasId) {
         const dataStore = window.chartDataStore[canvasId];
         if (!dataStore) return;
 
-        document.getElementById('chartModal').classList.add('show');
-        const ctx = document.getElementById('modalCanvas').getContext('2d');
-        if (modalChartInstance) modalChartInstance.destroy();
+        const modal = document.getElementById('chartModal');
+        modal.classList.add('show'); // Bước 1: Cho hiển thị Modal lên giao diện trước
 
-        // Tái tạo Dataset chuẩn xác cho màn hình Modal (To và Nét hơn)
-        const zoomedDatasets = dataStore.datasets.map(ds => ({
-            label: ds.label,
-            data: ds.data,
-            borderColor: ds.borderColor,
-            backgroundColor: ds.backgroundColor,
-            borderWidth: 4, 
-            pointBackgroundColor: '#ffffff',
-            pointBorderColor: ds.borderColor,
-            pointBorderWidth: 3,
-            pointRadius: 6,
-            pointHoverRadius: 9,
-            fill: false,
-            tension: 0.3,
-            spanGaps: true
-        }));
-
-        modalChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: dataStore.labels,
-                datasets: zoomedDatasets
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' },
-                plugins: {
-                    title: { display: true, text: dataStore.title, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
-                    legend: { display: zoomedDatasets.length > 1, position: 'bottom', labels: { font: { size: 14 } } },
-                    tooltip: {
-                        mode: 'index', intersect: false,
-                        backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, 
-                        padding: 15, cornerRadius: 8, displayColors: true
-                    }
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 14 } } },
-                    y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 14 } } }
-                }
+        // Bước 2: Sử dụng setTimeout để đợi trình duyệt cấp kích thước chiều Rộng/Cao cho Modal (nếu không Chart.js sẽ vẽ 0x0 pixel)
+        setTimeout(() => {
+            const ctx = document.getElementById('modalCanvas').getContext('2d');
+            
+            if (modalChartInstance) {
+                modalChartInstance.destroy(); // Hủy biểu đồ cũ nếu có
             }
-        });
+
+            // Tái tạo Dataset an toàn (Deep Copy)
+            const zoomedDatasets = dataStore.datasets.map(ds => ({
+                label: ds.label,
+                data: [...ds.data], // Ngắt bộ nhớ tham chiếu để chống lỗi vòng lặp
+                borderColor: ds.borderColor,
+                backgroundColor: ds.backgroundColor,
+                borderWidth: 3, 
+                pointBackgroundColor: '#ffffff',
+                pointBorderColor: ds.borderColor,
+                pointBorderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                fill: false,
+                tension: 0.3,
+                spanGaps: true
+            }));
+
+            // Vẽ biểu đồ Khổng lồ
+            modalChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dataStore.labels,
+                    datasets: zoomedDatasets
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    plugins: {
+                        title: { display: true, text: dataStore.title, font: { size: 22, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
+                        legend: { display: zoomedDatasets.length > 1, position: 'bottom', labels: { font: { size: 14 } } },
+                        tooltip: {
+                            mode: 'index', intersect: false,
+                            backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, 
+                            padding: 15, cornerRadius: 8, displayColors: true
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 14 } } },
+                        y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 14 } } }
+                    }
+                }
+            });
+        }, 50); // Chỉ cần đợi 50ms là đủ an toàn
     }
 
     function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
