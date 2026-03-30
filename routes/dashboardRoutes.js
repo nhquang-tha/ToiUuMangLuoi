@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const db = require('../models/db'); // Bổ sung để phục vụ tự động lấy Session
+const db = require('../models/db'); 
 
 // Import Middlewares Phân quyền
 const { isAuthenticated, isAdmin } = require('../middlewares/authMiddleware');
@@ -13,11 +13,9 @@ const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
 const mapController = require('../controllers/mapController'); 
 
-// Cấu hình lưu trữ bộ nhớ đệm cho quá trình upload file
 const upload = multer({ storage: multer.memoryStorage() });
 
-// MIDDLEWARE TOÀN CỤC: Khôi phục Session User thông minh
-// Khắc phục triệt để lỗi mất menu Admin khi vào các trang con
+// MIDDLEWARE TOÀN CỤC: Khôi phục Session User
 router.use(async (req, res, next) => {
     if (req.session && req.session.user) {
         res.locals.currentUser = req.session.user;
@@ -34,10 +32,10 @@ router.use(async (req, res, next) => {
     next();
 });
 
-// --- ROUTES CƠ BẢN (Dashboard & Báo cáo tĩnh) ---
+// --- ROUTES CƠ BẢN ---
+// LƯU Ý: Đã bỏ '/poi-report' ra khỏi mảng này để thiết lập riêng
 const pages = [
     { path: '/', name: 'Dashboard' },
-    { path: '/poi-report', name: 'POI Report' },
     { path: '/worst-cells', name: 'Worst Cells' },
     { path: '/congestion-3g', name: 'Congestion 3G' },
     { path: '/traffic-down', name: 'Traffic Down' },
@@ -53,10 +51,15 @@ router.get('/gis-map', isAuthenticated, mapController.getMapPage);
 router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
 router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
 
-// --- ROUTES CHO KPI ANALYTICS ---
+// --- ROUTES CHO KPI ANALYTICS & POI REPORT ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
 router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
+
+// CÁC ROUTE MỚI CHO POI REPORT
+router.get('/poi-report', isAuthenticated, kpiController.getPoiReportPage);
+router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
+router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
 
 // --- ROUTES CHO IMPORT DATA ---
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
@@ -64,29 +67,18 @@ router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 
 
 // --- ROUTES CHO RF DATABASE (CRUD) ---
 router.get('/rf-database', isAuthenticated, rfController.getList);
-router.get('/rf-database/export', isAuthenticated, rfController.exportData); // API xuất Excel
-
-// 1. ĐƯA ROUTE RESET VÀ DELETE LÊN TRÊN (Để không bị nhầm lẫn với action)
+router.get('/rf-database/export', isAuthenticated, rfController.exportData); 
 router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
 router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
-
-// 2. CÁC ROUTE CHUNG XUỐNG DƯỚI
 router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
 router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, rfController.saveData);
 
 // --- ROUTES CHO HỆ THỐNG (SYSTEM) ---
 router.get('/system/profile', isAuthenticated, userController.getProfilePage);
 router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
-
-// Quản lý người dùng (Chỉ Admin)
 router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
 router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
 router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
-
-// Đăng xuất
-router.get('/logout', (req, res) => { 
-    req.session.destroy(); 
-    res.redirect('/login'); 
-});
+router.get('/logout', (req, res) => { req.session.destroy(); res.redirect('/login'); });
 
 module.exports = router;
