@@ -17,12 +17,11 @@
     .chart-container { 
         background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
         height: 380px; position: relative; 
-        opacity: 0; /* Ẩn đi chờ hiệu ứng popup */
-        cursor: pointer; /* Hiển thị trỏ chuột dạng nút bấm */
+        opacity: 0; 
+        cursor: pointer; 
         transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
 
-    /* Hiệu ứng khi hover vào biểu đồ để báo hiệu có thể click */
     .chart-container:hover {
         transform: translateY(-5px);
         box-shadow: 0 10px 25px rgba(0,0,0,0.15);
@@ -33,13 +32,7 @@
     }
 
     .zoom-hint {
-        position: absolute;
-        top: 15px;
-        right: 20px;
-        font-size: 12px;
-        color: #bdc3c7;
-        transition: 0.3s;
-        pointer-events: none;
+        position: absolute; top: 15px; right: 20px; font-size: 12px; color: #bdc3c7; transition: 0.3s; pointer-events: none;
     }
 
     /* HIỆU ỨNG POPUP NẢY (BOUNCING) CHUYÊN NGHIỆP */
@@ -61,9 +54,7 @@
         align-items: center; justify-content: center;
         opacity: 0; transition: opacity 0.3s ease;
     }
-    .modal-overlay.show {
-        display: flex; opacity: 1;
-    }
+    .modal-overlay.show { display: flex; opacity: 1; }
     .modal-content {
         background: white; padding: 25px; border-radius: 12px;
         width: 90%; max-width: 1300px; height: 85vh; position: relative;
@@ -71,17 +62,18 @@
         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         display: flex; flex-direction: column;
     }
-    .modal-overlay.show .modal-content {
-        transform: scale(1);
-    }
+    .modal-overlay.show .modal-content { transform: scale(1); }
     .close-btn {
         position: absolute; top: 15px; right: 25px; font-size: 32px;
-        font-weight: bold; color: #7f8c8d; cursor: pointer; transition: 0.2s;
-        z-index: 10;
+        font-weight: bold; color: #7f8c8d; cursor: pointer; transition: 0.2s; z-index: 10;
     }
     .close-btn:hover { color: #e74c3c; }
     .modal-body { flex: 1; position: relative; width: 100%; height: 100%; }
 
+    #initMsg {
+        text-align: center; padding: 50px; color: #7f8c8d; font-size: 16px; 
+        background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
 </style>
 
 <!-- Load thư viện vẽ biểu đồ Chart.js -->
@@ -107,12 +99,16 @@
                     </select>
                 </div>
                 <div style="flex: 2; min-width: 250px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Tên Cell (Bỏ trống để xem toàn mạng):</label>
-                    <input type="text" id="cellNameInput" placeholder="Ví dụ: 4G-HHA021M41-THA..." style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 14px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Nhập chính xác Tên Cell:</label>
+                    <input type="text" id="cellNameInput" placeholder="Bắt buộc nhập (VD: 4G-HHA021M41-THA...)" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 14px; border-left: 4px solid #e74c3c;">
                 </div>
                 <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 15px; transition: 0.2s;">
                     📊 Trích Xuất Biểu Đồ
                 </button>
+            </div>
+
+            <div id="initMsg">
+                <i>Lựa chọn mạng, nhập tên Cell và bấm "Trích Xuất Biểu Đồ" để xem dữ liệu phân tích KPI.</i>
             </div>
 
             <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px;">
@@ -121,23 +117,24 @@
             
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
 
-            <!-- KHU VỰC HIỂN THỊ ĐỒ THỊ (Gắn sự kiện Click để phóng to) -->
+            <!-- KHU VỰC HIỂN THỊ ĐỒ THỊ -->
             <div class="charts-grid" id="chartsArea" style="display: none;">
-                <div class="chart-container" id="box1" onclick="openModal('chartThroughput')">
+                <div class="chart-container" id="box1" onclick="openModal('chart1')">
                     <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chartThroughput"></canvas>
+                    <canvas id="chart1"></canvas>
                 </div>
-                <div class="chart-container" id="box2" onclick="openModal('chartTraffic')">
+                <div class="chart-container" id="box2" onclick="openModal('chart2')">
                     <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chartTraffic"></canvas>
+                    <canvas id="chart2"></canvas>
                 </div>
-                <div class="chart-container" id="box3" onclick="openModal('chartCSSR')">
+                <div class="chart-container" id="box3" onclick="openModal('chart3')">
                     <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chartCSSR"></canvas>
+                    <canvas id="chart3"></canvas>
                 </div>
-                <div class="chart-container" id="box4" onclick="openModal('chartCDR')">
+                <!-- Box 4 có thể bị ẩn đi nếu dùng 5G (chỉ có 3 biểu đồ) -->
+                <div class="chart-container" id="box4" onclick="openModal('chart4')">
                     <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chartCDR"></canvas>
+                    <canvas id="chart4"></canvas>
                 </div>
             </div>
 
@@ -160,12 +157,9 @@
 </style>
 
 <script>
-    // Biến toàn cục để lưu trữ dữ liệu của các biểu đồ đã vẽ
     window.chartDataStore = {};
     let modalChartInstance = null;
-    let throughputChart, trafficChart, cssrChart, cdrChart;
 
-    // Hàm sắp xếp dữ liệu theo ngày tháng
     function sortDataByDate(data) {
         return data.sort((a, b) => {
             const parseDate = (dateStr) => {
@@ -182,10 +176,17 @@
         const network = document.getElementById('networkSelect').value;
         const cellName = document.getElementById('cellNameInput').value.trim();
 
+        // Kiểm tra ràng buộc không được để trống Cell
+        if (!cellName) {
+            alert("Vui lòng nhập Tên Cell trước khi trích xuất biểu đồ!");
+            document.getElementById('cellNameInput').focus();
+            return;
+        }
+
+        document.getElementById('initMsg').style.display = 'none';
         document.getElementById('loadingMsg').style.display = 'block';
         document.getElementById('errorMsg').style.display = 'none';
         
-        // Reset trạng thái hiển thị của khung chứa đồ thị để chạy lại Animation
         document.getElementById('chartsArea').style.display = 'none';
         const boxes = ['box1', 'box2', 'box3', 'box4'];
         boxes.forEach(id => document.getElementById(id).className = 'chart-container'); 
@@ -197,128 +198,111 @@
 
             if (data.length === 0) {
                 document.getElementById('loadingMsg').style.display = 'none';
-                document.getElementById('errorMsg').innerText = 'Không tìm thấy dữ liệu KPI nào phù hợp với bộ lọc!';
+                document.getElementById('errorMsg').innerText = `Không tìm thấy dữ liệu cho Cell "${cellName}" trong hệ thống!`;
                 document.getElementById('errorMsg').style.display = 'block';
                 return;
             }
 
-            // Sắp xếp dữ liệu theo thời gian
             data = sortDataByDate(data);
-
             const labels = data.map(d => d.Thoi_gian || 'N/A');
-            let throughputData, trafficData, cssrData, cdrData;
-            let throughputLabel = '', trafficLabel = '', cssrLabel = '', cdrLabel = '';
+            
+            let data1, data2, data3, data4;
+            let title1, title2, title3, title4;
 
-            // ÁNH XẠ DỮ LIỆU TỪ DATABASE
-            if (network === '4g') {
-                throughputLabel = 'USER DL AVG THPUT (Kbps)';
-                throughputData = data.map(d => parseFloat(d.User_DL_Avg_Throughput_Kbps) || 0);
+            // ÁNH XẠ CHÍNH XÁC KPI THEO YÊU CẦU CỦA TỪNG MẠNG
+            if (network === '3g') {
+                title1 = 'PS TRAFFIC (Erl/GB)';
+                data1 = data.map(d => parseFloat(d.PSTRAFFIC) || 0);
                 
-                trafficLabel = 'Total Data Traffic Volume (GB)';
-                trafficData = data.map(d => parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
+                title2 = 'PS CONGES (%)';
+                data2 = data.map(d => parseFloat(d.PSCONGES) || 0);
                 
-                cssrLabel = 'Call Setup Success Rate (%)';
-                cssrData = data.map(d => parseFloat(d.Call_Setup_SR) || parseFloat(d.RRC_Conn_Estab_SR) || 0);
+                title3 = 'TRAFFIC (Erl/GB)';
+                data3 = data.map(d => parseFloat(d.TRAFFIC) || 0);
                 
-                cdrLabel = 'Service Drop All (%)';
-                cdrData = data.map(d => parseFloat(d.Service_Drop_all) || parseFloat(d.Call_Drop_Rate_VoLTE) || 0);
+                title4 = 'CS CONGES (%)';
+                data4 = data.map(d => parseFloat(d.CSCONGES) || 0);
+                
+                document.getElementById('box4').style.display = 'block'; // Hiển thị đủ 4 biểu đồ
             } 
-            else if (network === '3g') {
-                throughputLabel = 'HSDPA Throughput (Kbps)';
-                throughputData = data.map(d => parseFloat(d.HSDPATHROUGHPUT) || parseFloat(d.R99DLTHROUGHPUT) || 0);
-                trafficLabel = 'Traffic (Erlang/GB)';
-                trafficData = data.map(d => parseFloat(d.TRAFFIC) || parseFloat(d.PSR99TRAFFICGB) || 0);
-                cssrLabel = 'CSSR (%)';
-                cssrData = data.map(d => parseFloat(d.CSSR) || 0);
-                cdrLabel = 'DCR (%)';
-                cdrData = data.map(d => parseFloat(d.DCR) || 0);
+            else if (network === '4g') {
+                title1 = 'TRAFFIC (Total Data Volume GB)';
+                data1 = data.map(d => parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
+                
+                title2 = 'USER DL AVG THPUT (Kbps)';
+                data2 = data.map(d => parseFloat(d.User_DL_Avg_Throughput_Kbps) || parseFloat(d.User_DL_Avg_Throughput_kbps) || 0);
+                
+                title3 = 'RES BLK DL (RB Util Rate DL %)';
+                data3 = data.map(d => parseFloat(d.RB_Util_Rate_DL) || 0);
+                
+                title4 = 'CQI 4G';
+                data4 = data.map(d => parseFloat(d.CQI_4G) || 0);
+                
+                document.getElementById('box4').style.display = 'block'; // Hiển thị đủ 4 biểu đồ
             } 
             else if (network === '5g') {
-                throughputLabel = 'User DL Avg Throughput (Kbps)';
-                throughputData = data.map(d => parseFloat(d.A_User_DL_Avg_Throughput) || 0);
-                trafficLabel = 'DL Traffic Volume (GB)';
-                trafficData = data.map(d => parseFloat(d.DL_Traffic_Volume_GB) || parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
-                cssrLabel = 'SgNB Addition SR (%)';
-                cssrData = data.map(d => parseFloat(d.SgNB_Addition_SR) || 0);
-                cdrLabel = 'SgNB Abnormal Release Rate (%)';
-                cdrData = data.map(d => parseFloat(d.SgNB_Abnormal_Release_Rate) || 0);
+                title1 = 'TRAFFIC (Total Data Volume GB)';
+                data1 = data.map(d => parseFloat(d.Total_Data_Traffic_Volume_GB) || 0);
+                
+                title2 = 'CELL DL AVG THROUGHPUT (Kbps)';
+                data2 = data.map(d => parseFloat(d.Cell_DL_Avg_Throughput) || 0);
+                
+                title3 = 'CQI 5G';
+                data3 = data.map(d => parseFloat(d.CQI_5G) || 0);
+                
+                // Mạng 5G chỉ có 3 biểu đồ -> Ẩn Box thứ 4
+                document.getElementById('box4').style.display = 'none';
             }
 
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('chartsArea').style.display = 'grid';
 
-            // KÍCH HOẠT HIỆU ỨNG POPUP NẢY LẦN LƯỢT CHO CÁC KHUNG ĐỒ THỊ
+            // Kích hoạt animation
             document.getElementById('box1').classList.add('popup-anim-1');
             document.getElementById('box2').classList.add('popup-anim-2');
             document.getElementById('box3').classList.add('popup-anim-3');
-            document.getElementById('box4').classList.add('popup-anim-4');
+            if(network !== '5g') document.getElementById('box4').classList.add('popup-anim-4');
 
-            // Vẽ đồ thị (Mọi biểu đồ giờ đều là Line)
-            drawChart('chartThroughput', labels, throughputData, throughputLabel, '#9b59b6');
-            drawChart('chartTraffic', labels, trafficData, trafficLabel, '#3498db');
-            drawChart('chartCSSR', labels, cssrData, cssrLabel, '#27ae60');
-            drawChart('chartCDR', labels, cdrData, cdrLabel, '#e74c3c');
+            // Vẽ đồ thị Line
+            drawChart('chart1', labels, data1, title1, '#3498db');
+            drawChart('chart2', labels, data2, title2, '#9b59b6');
+            drawChart('chart3', labels, data3, title3, '#27ae60');
+            if(network !== '5g') drawChart('chart4', labels, data4, title4, '#e74c3c');
 
         } catch (error) {
             console.error(error);
             document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('errorMsg').innerText = 'Lỗi hệ thống khi vẽ biểu đồ. Vui lòng kiểm tra lại kết nối mạng.';
+            document.getElementById('errorMsg').innerText = 'Lỗi truy xuất hệ thống. Vui lòng kiểm tra lại cấu trúc Database.';
             document.getElementById('errorMsg').style.display = 'block';
         }
     }
 
-    // Hàm lõi chuyên dùng để Render Chart.js
     function drawChart(canvasId, labels, dataArr, title, color) {
-        // Lưu cấu hình vào biến toàn cục để tái sử dụng lúc phóng to Modal
         window.chartDataStore[canvasId] = { labels, dataArr, title, color };
-
         const ctx = document.getElementById(canvasId).getContext('2d');
         
-        if (Chart.getChart(canvasId)) {
-            Chart.getChart(canvasId).destroy();
-        }
+        if (Chart.getChart(canvasId)) Chart.getChart(canvasId).destroy();
 
         return new Chart(ctx, {
-            type: 'line', // Chuyển toàn bộ đồ thị thành đường line
+            type: 'line', 
             data: {
                 labels: labels,
                 datasets: [{
-                    label: title,
-                    data: dataArr,
-                    backgroundColor: color + '22', // Trong suốt nhẹ cho biểu đồ đường
-                    borderColor: color,
-                    borderWidth: 3, 
-                    pointBackgroundColor: '#ffffff',
-                    pointBorderColor: color,
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 7,
-                    fill: true,
-                    tension: 0.4 // Làm cong mượt đường line
+                    label: title, data: dataArr, backgroundColor: color + '22', borderColor: color,
+                    borderWidth: 3, pointBackgroundColor: '#ffffff', pointBorderColor: color,
+                    pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 7, fill: true, tension: 0.4
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: {
-                    duration: 1500,
-                    easing: 'easeOutQuart'
-                },
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 1500, easing: 'easeOutQuart' },
                 plugins: {
-                    title: { display: true, text: title, font: { size: 16, weight: 'bold', family: "'Segoe UI', sans-serif" }, color: '#34495e', padding: { bottom: 15 } },
+                    title: { display: true, text: title, font: { size: 14, weight: 'bold', family: "'Segoe UI', sans-serif" }, color: '#34495e', padding: { bottom: 15 } },
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(44, 62, 80, 0.9)',
-                        titleFont: { size: 14 },
-                        bodyFont: { size: 14, weight: 'bold' },
-                        padding: 12,
-                        cornerRadius: 8,
-                        displayColors: false,
-                        callbacks: {
-                            label: function(context) {
-                                return context.parsed.y.toLocaleString('vi-VN') + (title.includes('%') ? ' %' : '');
-                            }
-                        }
+                        backgroundColor: 'rgba(44, 62, 80, 0.9)', titleFont: { size: 14 }, bodyFont: { size: 14, weight: 'bold' },
+                        padding: 12, cornerRadius: 8, displayColors: false,
+                        callbacks: { label: function(context) { return context.parsed.y.toLocaleString('vi-VN'); } }
                     }
                 },
                 scales: {
@@ -329,7 +313,6 @@
         });
     }
 
-    // --- CÁC HÀM XỬ LÝ MODAL PHÓNG TO ĐỒ THỊ ---
     function openModal(canvasId) {
         const config = window.chartDataStore[canvasId];
         if (!config) return;
@@ -337,49 +320,27 @@
         document.getElementById('chartModal').classList.add('show');
         const ctx = document.getElementById('modalCanvas').getContext('2d');
 
-        if (modalChartInstance) {
-            modalChartInstance.destroy();
-        }
+        if (modalChartInstance) modalChartInstance.destroy();
 
-        // Vẽ lại phiên bản cực đại trên Modal
         modalChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: config.labels,
                 datasets: [{
-                    label: config.title,
-                    data: config.dataArr,
-                    backgroundColor: config.color + '22',
-                    borderColor: config.color,
-                    borderWidth: 4, // Đậm hơn khi phóng to
-                    pointBackgroundColor: '#ffffff',
-                    pointBorderColor: config.color,
-                    pointBorderWidth: 3,
-                    pointRadius: 6,
-                    pointHoverRadius: 9,
-                    fill: true,
-                    tension: 0.4
+                    label: config.title, data: config.dataArr, backgroundColor: config.color + '22', borderColor: config.color,
+                    borderWidth: 4, pointBackgroundColor: '#ffffff', pointBorderColor: config.color,
+                    pointBorderWidth: 3, pointRadius: 6, pointHoverRadius: 9, fill: true, tension: 0.4
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 600, easing: 'easeOutQuart' },
+                responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' },
                 plugins: {
                     title: { display: true, text: config.title, font: { size: 24, weight: 'bold', family: "'Segoe UI', sans-serif" }, color: '#2c3e50', padding: { bottom: 20 } },
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(44, 62, 80, 0.95)',
-                        titleFont: { size: 16 },
-                        bodyFont: { size: 16, weight: 'bold' },
-                        padding: 15,
-                        cornerRadius: 8,
-                        displayColors: false,
-                        callbacks: {
-                            label: function(context) {
-                                return context.parsed.y.toLocaleString('vi-VN') + (config.title.includes('%') ? ' %' : '');
-                            }
-                        }
+                        backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' },
+                        padding: 15, cornerRadius: 8, displayColors: false,
+                        callbacks: { label: function(context) { return context.parsed.y.toLocaleString('vi-VN'); } }
                     }
                 },
                 scales: {
@@ -390,22 +351,12 @@
         });
     }
 
-    function closeModal() {
-        document.getElementById('chartModal').classList.remove('show');
-    }
+    function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
 
-    // Đóng Modal khi click ra khoảng trống tối (overlay) bên ngoài khung biểu đồ
     window.onclick = function(event) {
         const modal = document.getElementById('chartModal');
-        if (event.target === modal) {
-            closeModal();
-        }
+        if (event.target === modal) closeModal();
     }
-
-    // Tự động load dữ liệu 4G khi mới vào trang
-    window.onload = () => {
-        fetchAndDrawCharts();
-    };
 </script>
 </body>
 </html>
