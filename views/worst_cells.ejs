@@ -20,6 +20,9 @@
     .bad-cell { color: #c0392b; font-weight: bold; }
     .violation-badge { background: #fbeeeeb0; color: #e74c3c; padding: 4px 8px; border-radius: 4px; border: 1px solid #fad2d2; font-size: 11px;}
 
+    .btn-kpi { background: #3498db; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-size: 11px; font-weight: bold; display: inline-block; transition: 0.2s; border: 1px solid #2980b9; }
+    .btn-kpi:hover { background: #2980b9; transform: scale(1.05); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
@@ -33,7 +36,6 @@
         
         <div class="content-body">
             
-            <!-- BỘ LỌC DỮ LIỆU -->
             <div class="filter-card">
                 <div style="flex: 1; min-width: 250px;">
                     <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Khoảng thời gian (Tính từ ngày mới nhất):</label>
@@ -55,7 +57,6 @@
                 </div>
             </div>
 
-            <!-- HƯỚNG DẪN / THÔNG BÁO -->
             <div id="initMsg" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; font-size: 14px; color: #34495e;">
                 <strong>💡 Tiêu chí Worst Cell (Áp dụng 1 trong 4):</strong><br>
                 1. User DL Avg Thput < 7000 kbps<br>
@@ -70,7 +71,6 @@
             
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
 
-            <!-- BẢNG KẾT QUẢ -->
             <div class="table-wrapper" id="tableContainer">
                 <div style="padding: 15px; border-bottom: 1px solid #eee; font-weight: bold; color: #c0392b;">
                     Tổng số Cell vi phạm: <span id="totalCount">0</span> Cell.
@@ -86,11 +86,11 @@
                             <th>PRB DL (%) <br><small style="color:#e74c3c">&gt;20%</small></th>
                             <th>CQI 4G (%) <br><small style="color:#e74c3c">&lt;93%</small></th>
                             <th>Drop Rate (%) <br><small style="color:#e74c3c">&gt;0.3%</small></th>
-                            <th>Nguyên Nhân Lỗi (Ngày mới nhất)</th>
+                            <th>Nguyên Nhân Lỗi</th>
+                            <th style="text-align: center;">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
-                        <!-- Dữ liệu JS đẩy vào đây -->
                     </tbody>
                 </table>
             </div>
@@ -99,15 +99,12 @@
     </main>
 </div>
 
-<!-- TÍCH HỢP THƯ VIỆN EXCEL -->
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const xlsxScript = document.createElement('script');
         xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
         document.head.appendChild(xlsxScript);
     });
-
-    let currentWorstData = [];
 
     async function fetchWorstCells() {
         const days = document.getElementById('daysSelect').value;
@@ -124,8 +121,6 @@
             if (!response.ok) throw new Error('Lỗi máy chủ');
             const data = await response.json();
             
-            currentWorstData = data;
-
             document.getElementById('loadingMsg').style.display = 'none';
 
             if (data.length === 0) {
@@ -138,14 +133,12 @@
                 return;
             }
 
-            // Render dữ liệu ra bảng
             document.getElementById('totalCount').innerText = data.length;
             const tbody = document.getElementById('tableBody');
             
             data.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 
-                // Highlight các giá trị vi phạm
                 const thputStyle = (parseFloat(row.User_DL_Avg_Throughput_Kbps) < 7000) ? 'bad-cell' : '';
                 const prbStyle = (parseFloat(row.RB_Util_Rate_DL) > 20) ? 'bad-cell' : '';
                 const cqiStyle = (parseFloat(row.CQI_4G) < 93) ? 'bad-cell' : '';
@@ -160,6 +153,9 @@
                     <td class="${cqiStyle}">${row.CQI_4G}</td>
                     <td class="${dropStyle}">${row.Service_Drop_all}</td>
                     <td><span class="violation-badge">${row.Violations}</span></td>
+                    <td style="text-align:center;">
+                        <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -180,12 +176,14 @@
             alert('Thư viện Excel chưa tải xong, vui lòng đợi...');
             return;
         }
-        
-        let table = document.getElementById('worstTable');
+        let table = document.getElementById('worstTable').cloneNode(true);
+        // Xóa cột thao tác khi xuất file Excel
+        for (let i = 0; i < table.rows.length; i++) {
+            table.rows[i].deleteCell(-1); 
+        }
         let wb = XLSX.utils.table_to_book(table, {sheet: "Worst_Cells"});
         let days = document.getElementById('daysSelect').value;
         let fileName = `Bao_Cao_Worst_Cells_Lien_Tiep_${days}_Ngay.xlsx`;
-        
         XLSX.writeFile(wb, fileName);
     }
 </script>
