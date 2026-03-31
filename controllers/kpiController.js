@@ -117,3 +117,116 @@ exports.getPoiData = async (req, res) => {
         res.json({ has4g: codes4g.length > 0, has5g: codes5g.length > 0, data: Object.values(map) });
     } catch (error) { res.status(500).json({ error: "Lỗi xử lý dữ liệu POI" }); }
 };
+
+// ==========================================
+// CÁC HÀM XỬ LÝ CHO WORST CELLS (MẠNG 4G)
+// ==========================================
+
+exports.getWorstCellsPage = async (req, res) => {
+    const activeUser = res.locals.currentUser || req.session.user || req.user;
+    res.render('worst_cells', { title: 'Worst Cells 4G', page: 'Worst Cells', currentUser: activeUser });
+};
+
+exports.getWorstCellsData = async (req, res) => {
+    const days = parseInt(req.query.days) || 1;
+
+    try {
+        // 1. Quét tìm danh sách các Ngày có trong DB và sắp xếp Mới nhất -> Cũ nhất
+        const [dateRows] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL');
+        if (dateRows.length === 0) return res.json([]);
+
+        const parseDate = (d) => {
+            const p = d.split('/');
+            return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : 0;
+        };
+
+        const validDates = dateRows.map(r => r.Thoi_gian).sort((a, b) => parseDate(b) - parseDate(a));
+        
+        // Cắt lấy N ngày mới nhất theo lựa chọn
+        const targetDates = validDates.slice(0, days);
+        if (targetDates.length === 0) return res.json([]);
+
+        // 2. Chỉ query dữ liệu của N ngày này để tối ưu RAM
+        const placeholders = targetDates.map(() => '?').join(',');
+        const query = `
+            SELECT Cell_name, Thoi_gian, 
+                   User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all 
+            FROM kpi_4g 
+            WHERE Thoi_gian IN (${placeholders})
+        `;
+        const [data] = await db.query(query, targetDates);
+
+        // 3. Gom nhóm dữ liệu theo từng Cell
+        const cellMap = {};
+        data.forEach(row => {
+            if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = [];
+            cellMap[row.Cell_name].push(row);
+        });
+
+        // 4. Thuật toán Lọc Worst Cell
+        const worstCells = [];
+        for (const cell in cellMap) {
+            const records = cellMap[cell];
+            
+            // Nếu Cell không xuất hiện đủ N ngày -> Loại bỏ
+            if (records.length !== days) continue;
+
+            let isWorstAllDays = true;
+            for (const row of records) {
+                // Hỗ trợ cả 2 định dạng chữ K hoa và thường để chống lỗi
+                let rawThput = row.User_DL_Avg_Throughput_Kbps !== undefined ? row.User_DL_Avg_Throughput_Kbps : row.User_DL_Avg_Throughput_kbps;
+                
+                const thput = parseFloat(rawThput);
+                const prb = parseFloat(row.RB_Util_Rate_DL);
+                const cqi = parseFloat(row.CQI_4G);
+                const drop = parseFloat(row.Service_Drop_all);
+
+                // KIỂM TRA 4 ĐIỀU KIỆN KÉM CHẤT LƯỢNG
+                const cond1 = !isNaN(thput) && thput < 7000;
+                const cond2 = !isNaN(prb) && prb > 20;
+                const cond3 = !isNaN(cqi) && cqi < 93;
+                const cond4 = !isNaN(drop) && drop > 0.3;
+
+                // Nếu có 1 ngày KHÔNG dính bất kỳ lỗi nào -> Không tính là Worst Cell liên tiếp
+                if (!(cond1 || cond2 || cond3 || cond4)) {
+                    isWorstAllDays = false;
+                    break; 
+                }
+            }
+
+            // Nếu thỏa mãn liên tục N ngày, thêm vào danh sách
+            if (isWorstAllDays) {
+                // Lấy bản ghi của ngày mới nhất để hiển thị số liệu lên bảng
+                const latestRecord = records.sort((a, b) => parseDate(b.Thoi_gian) - parseDate(a.Thoi_gian))[0];
+                let rawThput = latestRecord.User_DL_Avg_Throughput_Kbps !== undefined ? latestRecord.User_DL_Avg_Throughput_Kbps : latestRecord.User_DL_Avg_Throughput_kbps;
+                
+                const thput = parseFloat(rawThput);
+                const prb = parseFloat(latestRecord.RB_Util_Rate_DL);
+                const cqi = parseFloat(latestRecord.CQI_4G);
+                const drop = parseFloat(latestRecord.Service_Drop_all);
+
+                let reasons = [];
+                if (!isNaN(thput) && thput < 7000) reasons.push(`Thput thấp (${thput.toFixed(2)})`);
+                if (!isNaN(prb) && prb > 20) reasons.push(`PRB cao (${prb.toFixed(2)}%)`);
+                if (!isNaN(cqi) && cqi < 93) reasons.push(`CQI thấp (${cqi.toFixed(2)}%)`);
+                if (!isNaN(drop) && drop > 0.3) reasons.push(`Drop cao (${drop.toFixed(2)}%)`);
+
+                worstCells.push({
+                    Cell_name: cell,
+                    Latest_Date: latestRecord.Thoi_gian,
+                    User_DL_Avg_Throughput_Kbps: isNaN(thput) ? '-' : thput.toFixed(2),
+                    RB_Util_Rate_DL: isNaN(prb) ? '-' : prb.toFixed(2),
+                    CQI_4G: isNaN(cqi) ? '-' : cqi.toFixed(2),
+                    Service_Drop_all: isNaN(drop) ? '-' : drop.toFixed(3),
+                    Violations: reasons.join(' | ')
+                });
+            }
+        }
+
+        res.json(worstCells);
+
+    } catch (error) {
+        console.error("Lỗi lấy Worst Cells:", error);
+        res.status(500).json({ error: "Lỗi xử lý DB" });
+    }
+};
