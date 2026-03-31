@@ -226,6 +226,18 @@
 
         document.getElementById('initMsg').style.display = 'none';
         document.getElementById('errorMsg').style.display = 'none';
+        
+        // --- THUẬT TOÁN DỌN RÁC (CHỐNG LỖI CHART.JS CRASH) ---
+        if (window.chartInstances) {
+            for (let key in window.chartInstances) {
+                if (window.chartInstances[key]) {
+                    window.chartInstances[key].destroy();
+                }
+            }
+        }
+        window.chartInstances = {};
+        window.chartDataStore = {};
+
         document.getElementById('dynamicChartsArea').style.display = 'none';
         document.getElementById('dynamicChartsArea').innerHTML = ''; 
         document.getElementById('loadingMsg').style.display = 'block';
@@ -235,6 +247,8 @@
         try {
             for (let req of requests) {
                 const res = await fetch(req.url);
+                if (!res.ok) throw new Error("Mã lỗi máy chủ HTTP " + res.status);
+                
                 const data = await res.json();
                 
                 if (data && data.length > 0) {
@@ -253,8 +267,9 @@
             }
 
         } catch (error) {
+            console.error("Lỗi vẽ biểu đồ:", error);
             document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('errorMsg').innerText = "Có lỗi xảy ra khi truy vấn CSDL.";
+            document.getElementById('errorMsg').innerText = "Lỗi xử lý hệ thống: " + error.message + " (Vui lòng kiểm tra lại kết nối mạng hoặc Tên Cột trong CSDL).";
             document.getElementById('errorMsg').style.display = 'block';
         }
     }
