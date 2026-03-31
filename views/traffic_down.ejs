@@ -1,0 +1,259 @@
+<%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+    
+    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; border-top: 4px solid #8e44ad;}
+    
+    .table-wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; display: none; animation: fadeIn 0.5s ease;}
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+    .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; position: sticky; top: 0; z-index: 10;}
+    .data-table tbody tr:hover { background-color: #f9f0fc; }
+    
+    .bad-cell { color: #c0392b; font-weight: bold; }
+    .ratio-badge { background: #fbeeeeb0; color: #e74c3c; padding: 4px 10px; border-radius: 12px; border: 1px solid #fad2d2; font-size: 12px; font-weight: bold;}
+
+    .header-zero { border-bottom: 2px solid #e74c3c; padding: 15px; font-weight: bold; color: #c0392b; font-size: 16px; background: #fdf2f2; }
+    .header-drop { border-bottom: 2px solid #f39c12; padding: 15px; font-weight: bold; color: #d35400; font-size: 16px; background: #fef5e7; }
+    .header-poi { border-bottom: 2px solid #8e44ad; padding: 15px; font-weight: bold; color: #732d91; font-size: 16px; background: #f4ecf8; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+<div class="layout">
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1>Phân Tích Cảnh Báo: Sụt Giảm Lưu Lượng (Traffic Down)</h1>
+        </header>
+        
+        <div class="content-body">
+            
+            <div class="filter-card">
+                <div style="flex: 1; min-width: 250px;">
+                    <p style="margin: 0 0 5px 0; color: #7f8c8d; font-size: 14px;">Thuật toán so sánh dữ liệu mới nhất với dữ liệu cùng thứ tuần trước.</p>
+                    <div id="dateInfo" style="font-weight: bold; color: #8e44ad; font-size: 16px;">
+                        Ngày phân tích: <span style="color:#2c3e50;">[Chưa lấy dữ liệu]</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="fetchTrafficDown()" class="btn-primary" style="background: #8e44ad; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 14px; transition: 0.2s;">
+                        🔍 Bắt Đầu Phân Tích
+                    </button>
+                    <button onclick="exportToExcel()" id="btnExport" class="btn-success" style="background: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 14px; display: none;">
+                        📥 Xuất Excel (Tất Cả)
+                    </button>
+                </div>
+            </div>
+
+            <!-- HƯỚNG DẪN / THÔNG BÁO -->
+            <div id="initMsg" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; font-size: 14px; color: #34495e;">
+                <strong>💡 Tiêu chí Lọc Traffic:</strong><br>
+                <span style="color: #e74c3c">1. Cell Không Lưu Lượng:</span> Traffic hôm nay &lt; 0.1 GB <strong>VÀ</strong> Traffic TB 7 ngày trước &gt; 2 GB.<br>
+                <span style="color: #f39c12">2. Cell Suy Giảm:</span> Traffic hôm nay &lt; 70% Traffic tuần trước <strong>VÀ</strong> Traffic tuần trước &gt; 1 GB.<br>
+                <span style="color: #8e44ad">3. POI Suy Giảm:</span> Tổng Traffic POI hôm nay &lt; 70% Tổng Traffic POI tuần trước (Cùng thứ).
+            </div>
+
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #8e44ad; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; margin-bottom: 15px;">
+                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang xử lý đối soát lưu lượng giữa các tuần...
+            </div>
+            
+            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
+
+            <!-- BẢNG 1: CELL KHÔNG LƯU LƯỢNG -->
+            <div class="table-wrapper" id="zeroTableWrapper">
+                <div class="header-zero">
+                    🔴 BẢNG 1: CELL KHÔNG LƯU LƯỢNG (<span id="zeroCount">0</span>)
+                </div>
+                <table class="data-table" id="zeroTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Tên Cell 4G</th>
+                            <th>Traffic Hôm nay (GB)</th>
+                            <th>Traffic TB 7 ngày trước (GB)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zeroBody"></tbody>
+                </table>
+            </div>
+
+            <!-- BẢNG 2: CELL SUY GIẢM -->
+            <div class="table-wrapper" id="dropCellTableWrapper">
+                <div class="header-drop">
+                    🟠 BẢNG 2: CELL SUY GIẢM LƯU LƯỢNG (<span id="dropCellCount">0</span>)
+                </div>
+                <table class="data-table" id="dropCellTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Tên Cell 4G</th>
+                            <th>Traffic Hôm nay (GB)</th>
+                            <th>Traffic Tuần trước (GB)</th>
+                            <th>Tỷ Lệ Giảm (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dropCellBody"></tbody>
+                </table>
+            </div>
+
+            <!-- BẢNG 3: POI SUY GIẢM -->
+            <div class="table-wrapper" id="dropPoiTableWrapper">
+                <div class="header-poi">
+                    🟣 BẢNG 3: POI SUY GIẢM LƯU LƯỢNG (<span id="dropPoiCount">0</span>)
+                </div>
+                <table class="data-table" id="dropPoiTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Tên POI 4G</th>
+                            <th>Tổng Traffic Hôm nay (GB)</th>
+                            <th>Tổng Traffic Tuần trước (GB)</th>
+                            <th>Tỷ Lệ Giảm (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dropPoiBody"></tbody>
+                </table>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- TÍCH HỢP THƯ VIỆN EXCEL -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const xlsxScript = document.createElement('script');
+        xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
+        document.head.appendChild(xlsxScript);
+    });
+
+    async function fetchTrafficDown() {
+        document.getElementById('initMsg').style.display = 'none';
+        document.getElementById('loadingMsg').style.display = 'block';
+        document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('zeroTableWrapper').style.display = 'none';
+        document.getElementById('dropCellTableWrapper').style.display = 'none';
+        document.getElementById('dropPoiTableWrapper').style.display = 'none';
+        document.getElementById('btnExport').style.display = 'none';
+
+        try {
+            const response = await fetch('/api/traffic-down-data');
+            const data = await response.json();
+            
+            document.getElementById('loadingMsg').style.display = 'none';
+
+            if (data.error) {
+                document.getElementById('errorMsg').innerText = data.error;
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('dateInfo').innerHTML = `Hôm nay: <span style="color:#2c3e50;">${data.latestDate}</span> | Tuần trước (Cùng thứ): <span style="color:#2c3e50;">${data.lastWeekDate}</span>`;
+
+            // RENDER BẢNG 1: ZERO TRAFFIC
+            const zeroBody = document.getElementById('zeroBody');
+            zeroBody.innerHTML = '';
+            document.getElementById('zeroCount').innerText = data.zeroTrafficCells.length;
+            if (data.zeroTrafficCells.length > 0) {
+                data.zeroTrafficCells.forEach((row, index) => {
+                    zeroBody.insertAdjacentHTML('beforeend', `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td style="font-weight: bold; color: #c0392b;">${row.Cell_name}</td>
+                            <td style="color: #e74c3c; font-weight:bold;">${row.t0}</td>
+                            <td style="color: #27ae60;">${row.avg7}</td>
+                        </tr>
+                    `);
+                });
+            } else {
+                zeroBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
+            }
+            document.getElementById('zeroTableWrapper').style.display = 'block';
+
+            // RENDER BẢNG 2: DROPPED CELL
+            const dropCellBody = document.getElementById('dropCellBody');
+            dropCellBody.innerHTML = '';
+            document.getElementById('dropCellCount').innerText = data.droppedTrafficCells.length;
+            if (data.droppedTrafficCells.length > 0) {
+                data.droppedTrafficCells.forEach((row, index) => {
+                    dropCellBody.insertAdjacentHTML('beforeend', `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td style="font-weight: bold; color: #d35400;">${row.Cell_name}</td>
+                            <td class="bad-cell">${row.t0}</td>
+                            <td>${row.t7}</td>
+                            <td><span class="ratio-badge">Giảm còn ${row.ratio}%</span></td>
+                        </tr>
+                    `);
+                });
+            } else {
+                dropCellBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
+            }
+            document.getElementById('dropCellTableWrapper').style.display = 'block';
+
+            // RENDER BẢNG 3: DROPPED POI
+            const dropPoiBody = document.getElementById('dropPoiBody');
+            dropPoiBody.innerHTML = '';
+            document.getElementById('dropPoiCount').innerText = data.droppedTrafficPOIs.length;
+            if (data.droppedTrafficPOIs.length > 0) {
+                data.droppedTrafficPOIs.forEach((row, index) => {
+                    dropPoiBody.insertAdjacentHTML('beforeend', `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td style="font-weight: bold; color: #8e44ad;">${row.POI}</td>
+                            <td class="bad-cell">${row.t0}</td>
+                            <td>${row.t7}</td>
+                            <td><span class="ratio-badge">Giảm còn ${row.ratio}%</span></td>
+                        </tr>
+                    `);
+                });
+            } else {
+                dropPoiBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có POI nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
+            }
+            document.getElementById('dropPoiTableWrapper').style.display = 'block';
+
+            // Hiện nút Export
+            document.getElementById('btnExport').style.display = 'block';
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('errorMsg').innerText = 'Lỗi kết nối cơ sở dữ liệu.';
+            document.getElementById('errorMsg').style.display = 'block';
+        }
+    }
+
+    function exportToExcel() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel chưa tải xong, vui lòng đợi...');
+            return;
+        }
+        
+        let wb = XLSX.utils.book_new();
+
+        // Sheet 1
+        let wsZero = XLSX.utils.table_to_sheet(document.getElementById('zeroTable'));
+        XLSX.utils.book_append_sheet(wb, wsZero, "Cell_Khong_Luu_Luong");
+
+        // Sheet 2
+        let wsDrop = XLSX.utils.table_to_sheet(document.getElementById('dropCellTable'));
+        XLSX.utils.book_append_sheet(wb, wsDrop, "Cell_Suy_Giam");
+
+        // Sheet 3
+        let wsPoi = XLSX.utils.table_to_sheet(document.getElementById('dropPoiTable'));
+        XLSX.utils.book_append_sheet(wb, wsPoi, "POI_Suy_Giam");
+
+        XLSX.writeFile(wb, "Bao_Cao_Traffic_Down_Tong_Hop.xlsx");
+    }
+</script>
+</body>
+</html>
