@@ -33,10 +33,9 @@ router.use(async (req, res, next) => {
 });
 
 // --- ROUTES CƠ BẢN ---
-// LƯU Ý: Đã bỏ '/poi-report' ra khỏi mảng này để thiết lập riêng
+// LƯU Ý: Đã bỏ '/poi-report' VÀ '/worst-cells' ra khỏi mảng này để thiết lập riêng
 const pages = [
     { path: '/', name: 'Dashboard' },
-    { path: '/worst-cells', name: 'Worst Cells' },
     { path: '/congestion-3g', name: 'Congestion 3G' },
     { path: '/traffic-down', name: 'Traffic Down' },
     { path: '/scrip', name: 'Scrip' }
@@ -53,13 +52,13 @@ router.get('/api/ta-data', isAuthenticated, mapController.getTAData);
 
 // --- ROUTES CHO KPI ANALYTICS & POI REPORT ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
-router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
-router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
-
-// CÁC ROUTE MỚI CHO POI REPORT
+// CÁC ROUTE MỚI CHO POI REPORT VÀ WORST CELLS
 router.get('/poi-report', isAuthenticated, kpiController.getPoiReportPage);
 router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
 router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
+
+router.get('/worst-cells', isAuthenticated, kpiController.getWorstCellsPage);
+router.get('/api/worst-cells-data', isAuthenticated, kpiController.getWorstCellsData);
 
 // --- ROUTES CHO IMPORT DATA ---
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
