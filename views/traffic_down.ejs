@@ -24,6 +24,10 @@
     .header-drop { border-bottom: 2px solid #f39c12; padding: 15px; font-weight: bold; color: #d35400; font-size: 16px; background: #fef5e7; }
     .header-poi { border-bottom: 2px solid #8e44ad; padding: 15px; font-weight: bold; color: #732d91; font-size: 16px; background: #f4ecf8; }
 
+    /* CSS CHO NÚT XEM KPI */
+    .btn-kpi { background: #3498db; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-size: 11px; font-weight: bold; display: inline-block; transition: 0.2s; border: 1px solid #2980b9; }
+    .btn-kpi:hover { background: #2980b9; transform: scale(1.05); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
@@ -80,6 +84,7 @@
                             <th>Tên Cell 4G</th>
                             <th>Traffic Hôm nay (GB)</th>
                             <th>Traffic TB 7 ngày trước (GB)</th>
+                            <th style="text-align: center;">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody id="zeroBody"></tbody>
@@ -99,6 +104,7 @@
                             <th>Traffic Hôm nay (GB)</th>
                             <th>Traffic Tuần trước (GB)</th>
                             <th>Tỷ Lệ Giảm (%)</th>
+                            <th style="text-align: center;">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody id="dropCellBody"></tbody>
@@ -118,6 +124,7 @@
                             <th>Tổng Traffic Hôm nay (GB)</th>
                             <th>Tổng Traffic Tuần trước (GB)</th>
                             <th>Tỷ Lệ Giảm (%)</th>
+                            <th style="text-align: center;">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody id="dropPoiBody"></tbody>
@@ -171,11 +178,14 @@
                             <td style="font-weight: bold; color: #c0392b;">${row.Cell_name}</td>
                             <td style="color: #e74c3c; font-weight:bold;">${row.t0}</td>
                             <td style="color: #27ae60;">${row.avg7}</td>
+                            <td style="text-align: center;">
+                                <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                            </td>
                         </tr>
                     `);
                 });
             } else {
-                zeroBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#7f8c8d;">Không có Cell L1800 nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
+                zeroBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có Cell L1800 nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
             }
             document.getElementById('zeroTableWrapper').style.display = 'block';
 
@@ -192,11 +202,14 @@
                             <td class="bad-cell">${row.t0}</td>
                             <td>${row.t7}</td>
                             <td><span class="ratio-badge">Giảm còn ${row.ratio}%</span></td>
+                            <td style="text-align: center;">
+                                <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                            </td>
                         </tr>
                     `);
                 });
             } else {
-                dropCellBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có Cell L1800 nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
+                dropCellBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Không có Cell L1800 nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
             }
             document.getElementById('dropCellTableWrapper').style.display = 'block';
 
@@ -213,11 +226,14 @@
                             <td class="bad-cell">${row.t0}</td>
                             <td>${row.t7}</td>
                             <td><span class="ratio-badge">Giảm còn ${row.ratio}%</span></td>
+                            <td style="text-align: center;">
+                                <a href="/kpi-analytics?network=4g&poi=${encodeURIComponent(row.POI)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                            </td>
                         </tr>
                     `);
                 });
             } else {
-                dropPoiBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có POI nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
+                dropPoiBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Không có POI nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
             }
             document.getElementById('dropPoiTableWrapper').style.display = 'block';
 
@@ -240,16 +256,22 @@
         
         let wb = XLSX.utils.book_new();
 
-        // Sheet 1
-        let wsZero = XLSX.utils.table_to_sheet(document.getElementById('zeroTable'));
+        // Copy Table and remove last column (Thao Tác) for all 3 tables
+        const cleanTableForExport = (tableId) => {
+            let table = document.getElementById(tableId).cloneNode(true);
+            for (let i = 0; i < table.rows.length; i++) {
+                if(table.rows[i].cells.length > 0) table.rows[i].deleteCell(-1); 
+            }
+            return table;
+        };
+
+        let wsZero = XLSX.utils.table_to_sheet(cleanTableForExport('zeroTable'));
         XLSX.utils.book_append_sheet(wb, wsZero, "Cell_Khong_Luu_Luong");
 
-        // Sheet 2
-        let wsDrop = XLSX.utils.table_to_sheet(document.getElementById('dropCellTable'));
+        let wsDrop = XLSX.utils.table_to_sheet(cleanTableForExport('dropCellTable'));
         XLSX.utils.book_append_sheet(wb, wsDrop, "Cell_Suy_Giam");
 
-        // Sheet 3
-        let wsPoi = XLSX.utils.table_to_sheet(document.getElementById('dropPoiTable'));
+        let wsPoi = XLSX.utils.table_to_sheet(cleanTableForExport('dropPoiTable'));
         XLSX.utils.book_append_sheet(wb, wsPoi, "POI_Suy_Giam");
 
         XLSX.writeFile(wb, "Bao_Cao_Traffic_Down_Tong_Hop.xlsx");
