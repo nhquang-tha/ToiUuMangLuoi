@@ -6,9 +6,15 @@ exports.getKpiAnalyticsPage = async (req, res) => {
 };
 
 exports.getKpiData = async (req, res) => {
-    const network = req.query.network || '4g';
+    // Đảm bảo network luôn được viết thường và mặc định là 4g
+    const network = req.query.network ? req.query.network.toLowerCase() : '4g';
     const type = req.query.type || 'keyword';
     const value = req.query.value ? req.query.value.trim() : '';
+
+    // Lớp xác thực an toàn: Chặn lỗi HTTP 500 nếu truyền sai mạng
+    if (!['3g', '4g', '5g'].includes(network)) {
+        return res.status(400).json({ error: "Loại mạng không được hỗ trợ." });
+    }
 
     let tableName = `kpi_${network}`;
     let cellColumn = (network === '4g') ? 'Cell_name' : 'Ten_CELL';
