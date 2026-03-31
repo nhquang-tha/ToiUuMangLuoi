@@ -33,10 +33,9 @@ router.use(async (req, res, next) => {
 });
 
 // --- ROUTES CƠ BẢN ---
-// LƯU Ý: Đã bỏ '/poi-report', '/worst-cells', và '/congestion-3g' ra khỏi mảng này để thiết lập riêng
+// LƯU Ý: Đã bỏ '/poi-report', '/worst-cells', '/congestion-3g', VÀ '/traffic-down' ra khỏi mảng này để thiết lập riêng
 const pages = [
     { path: '/', name: 'Dashboard' },
-    { path: '/traffic-down', name: 'Traffic Down' },
     { path: '/scrip', name: 'Scrip' }
 ];
 
@@ -63,6 +62,10 @@ router.get('/api/worst-cells-data', isAuthenticated, kpiController.getWorstCells
 // ROUTE CHO CONGESTION 3G
 router.get('/congestion-3g', isAuthenticated, kpiController.getCongestion3gPage);
 router.get('/api/congestion-3g-data', isAuthenticated, kpiController.getCongestion3gData);
+
+// ROUTE CHO TRAFFIC DOWN
+router.get('/traffic-down', isAuthenticated, kpiController.getTrafficDownPage);
+router.get('/api/traffic-down-data', isAuthenticated, kpiController.getTrafficDownData);
 
 // --- ROUTES CHO IMPORT DATA ---
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
