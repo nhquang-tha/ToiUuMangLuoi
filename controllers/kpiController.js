@@ -43,6 +43,8 @@ exports.getKpiData = async (req, res) => {
             return res.json([]);
         }
 
+        query += ` LIMIT 10000`; 
+        
         const [rows] = await db.query(query, params);
         res.json(rows);
 
@@ -59,6 +61,10 @@ exports.resetData = async (req, res) => {
         res.redirect('/import-data');
     } catch (error) { res.status(500).send("Lỗi xóa dữ liệu."); }
 };
+
+// ==========================================
+// CÁC HÀM XỬ LÝ CHO POI REPORT
+// ==========================================
 
 exports.getPoiReportPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
@@ -112,6 +118,10 @@ exports.getPoiData = async (req, res) => {
         res.json({ has4g: codes4g.length > 0, has5g: codes5g.length > 0, data: Object.values(map) });
     } catch (error) { res.status(500).json({ error: "Lỗi xử lý dữ liệu POI" }); }
 };
+
+// ==========================================
+// CÁC HÀM XỬ LÝ CHO WORST CELLS (4G)
+// ==========================================
 
 exports.getWorstCellsPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
@@ -212,6 +222,10 @@ exports.getWorstCellsData = async (req, res) => {
     }
 };
 
+// ==========================================
+// CÁC HÀM XỬ LÝ CHO CONGESTION 3G
+// ==========================================
+
 exports.getCongestion3gPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
     res.render('congestion_3g', { title: 'Congestion 3G', page: 'Congestion 3G', currentUser: activeUser });
@@ -254,7 +268,6 @@ exports.getCongestion3gData = async (req, res) => {
             const records = cellMap[cell];
             if (records.length !== days) continue;
 
-            // CHỈ XÉT CELL TỒN TẠI TRONG NGÀY MỚI NHẤT
             if (!records.some(r => r.Thoi_gian === latestDateStr)) continue;
 
             let isCongestedAllDays = true;
@@ -302,6 +315,10 @@ exports.getCongestion3gData = async (req, res) => {
     }
 };
 
+// ==========================================
+// CÁC HÀM XỬ LÝ CHO TRAFFIC DOWN (SUY GIẢM LƯU LƯỢNG 4G)
+// ==========================================
+
 exports.getTrafficDownPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
     res.render('traffic_down', { title: 'Traffic Down', page: 'Traffic Down', currentUser: activeUser });
@@ -336,7 +353,6 @@ exports.getTrafficDownData = async (req, res) => {
         const neededDates = [t0_str, ...last7DaysStrings];
         const placeholders = neededDates.map(() => '?').join(',');
 
-        // TRUY VẤN LẤY THÊM CELLTYPE ĐỂ LỌC L1800
         const [kpiData] = await db.query(`
             SELECT Cell_name, CellType, Thoi_gian, Total_Data_Traffic_Volume_GB 
             FROM kpi_4g 
@@ -352,7 +368,6 @@ exports.getTrafficDownData = async (req, res) => {
             const cell = row.Cell_name;
             if (!cellStats[cell]) cellStats[cell] = { t0: 0, t7: 0, sum7: 0, isL1800: false, presentInT0: false };
             
-            // Đánh dấu nếu là Cell L1800
             if (row.CellType && row.CellType.includes('L1800')) {
                 cellStats[cell].isL1800 = true;
             }
@@ -379,7 +394,6 @@ exports.getTrafficDownData = async (req, res) => {
             const t7 = stats.t7;
             const avg7 = stats.sum7 / 7; 
 
-            // CHỈ XÉT BẢNG 1 VÀ 2 NẾU TỒN TẠI TRONG NGÀY MỚI NHẤT VÀ LÀ CELL L1800
             if (stats.presentInT0 && stats.isL1800) {
                 if (t0 < 0.1 && avg7 > 2) {
                     zeroTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), avg7: avg7.toFixed(2) });
@@ -389,7 +403,6 @@ exports.getTrafficDownData = async (req, res) => {
                 }
             }
 
-            // Gộp dữ liệu cho POI (Cộng dồn toàn bộ các Cell thuộc POI)
             const poi = cellToPoi[cell];
             if (poi) {
                 if (!poiStats[poi]) poiStats[poi] = { t0: 0, t7: 0 };
