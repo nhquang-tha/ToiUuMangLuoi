@@ -152,11 +152,11 @@
 
     const CHART_COLORS = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f1c40f', '#e67e22', '#1abc9c', '#34495e', '#d35400', '#c0392b'];
 
-    window.chartDataStore = {}; // Lưu cấu hình RAW để Zoom an toàn
-    window.chartInstances = {}; // Lưu object biểu đồ màn hình chính
+    window.chartDataStore = {}; 
+    window.chartInstances = {}; 
     let modalChartInstance = null;
 
-    // Tự động load danh sách POI
+    // Tự động load danh sách POI và xử lý Deep Link từ các trang Cảnh Báo
     window.onload = async () => {
         try {
             const res = await fetch('/api/poi-list');
@@ -165,6 +165,28 @@
             select.innerHTML = '<option value="">-- Click để Chọn POI --</option>';
             list.forEach(poi => select.insertAdjacentHTML('beforeend', `<option value="${poi}">${poi}</option>`));
         } catch (e) {}
+
+        // ĐỌC THAM SỐ TỪ URL ĐỂ TỰ ĐỘNG CHẠY BIỂU ĐỒ (DEEP LINKING)
+        const urlParams = new URLSearchParams(window.location.search);
+        const cellParam = urlParams.get('cell');
+        const poiParam = urlParams.get('poi');
+        const networkParam = urlParams.get('network');
+
+        if (cellParam) {
+            document.getElementById('searchMode').value = 'keyword';
+            toggleSearchMode();
+            if (networkParam) document.getElementById('networkSelect').value = networkParam;
+            document.getElementById('keywordInput').value = cellParam;
+            executeAnalysis(); // Tự động click nút vẽ
+        } else if (poiParam) {
+            document.getElementById('searchMode').value = 'poi';
+            toggleSearchMode();
+            // Cần một chút thời gian để select box được đổ danh sách POI
+            setTimeout(() => {
+                document.getElementById('poiSelect').value = poiParam;
+                executeAnalysis();
+            }, 300);
+        }
     };
 
     // Đổi giao diện UI tùy theo chế độ tra cứu
@@ -179,7 +201,6 @@
         }
     }
 
-    // Engine: Sắp xếp chuỗi ngày tháng
     function sortUniqueDates(datesArray) {
         return datesArray.sort((a, b) => {
             const pa = a.split('/'); const pb = b.split('/');
@@ -187,7 +208,6 @@
         });
     }
 
-    // Hàm gọi API và bắt đầu xử lý
     async function executeAnalysis() {
         const mode = document.getElementById('searchMode').value;
         let requests = [];
@@ -239,7 +259,6 @@
         }
     }
 
-    // Xây dựng khu vực biểu đồ (Data Grouping Multi-line)
     function buildChartSection(rawData, network, showTitle) {
         const area = document.getElementById('dynamicChartsArea');
         const configKeys = KPI_CONFIG[network];
@@ -295,7 +314,6 @@
                 };
             });
 
-            // LƯU TRỮ RAW DATA ĐỂ ZOOM
             window.chartDataStore[canvasId] = {
                 labels: allDates,
                 datasets: datasets.map(ds => ({ label: ds.label, data: ds.data, borderColor: ds.borderColor, backgroundColor: ds.backgroundColor })),
@@ -322,26 +340,23 @@
         });
     }
 
-    // --- CÔNG NGHỆ CHỐNG LỖI BLANK MODAL CHART.JS ---
     function openModal(canvasId) {
         const dataStore = window.chartDataStore[canvasId];
         if (!dataStore) return;
 
         const modal = document.getElementById('chartModal');
-        modal.classList.add('show'); // Bước 1: Cho hiển thị Modal lên giao diện trước
+        modal.classList.add('show'); 
 
-        // Bước 2: Sử dụng setTimeout để đợi trình duyệt cấp kích thước chiều Rộng/Cao cho Modal (nếu không Chart.js sẽ vẽ 0x0 pixel)
         setTimeout(() => {
             const ctx = document.getElementById('modalCanvas').getContext('2d');
             
             if (modalChartInstance) {
-                modalChartInstance.destroy(); // Hủy biểu đồ cũ nếu có
+                modalChartInstance.destroy(); 
             }
 
-            // Tái tạo Dataset an toàn (Deep Copy)
             const zoomedDatasets = dataStore.datasets.map(ds => ({
                 label: ds.label,
-                data: [...ds.data], // Ngắt bộ nhớ tham chiếu để chống lỗi vòng lặp
+                data: [...ds.data], 
                 borderColor: ds.borderColor,
                 backgroundColor: ds.backgroundColor,
                 borderWidth: 3, 
@@ -355,7 +370,6 @@
                 spanGaps: true
             }));
 
-            // Vẽ biểu đồ Khổng lồ
             modalChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -381,7 +395,7 @@
                     }
                 }
             });
-        }, 50); // Chỉ cần đợi 50ms là đủ an toàn
+        }, 50); 
     }
 
     function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
