@@ -131,12 +131,17 @@ exports.getWorstCellsData = async (req, res) => {
         };
 
         const validDates = dateRows.map(r => r.Thoi_gian).sort((a, b) => parseDate(b) - parseDate(a));
-        
         const targetDates = validDates.slice(0, days);
         if (targetDates.length === 0) return res.json([]);
 
         const placeholders = targetDates.map(() => '?').join(',');
-        const query = `SELECT Cell_name, Thoi_gian, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`;
+        
+        // CHỈ LẤY CÁC CELL CÓ CELLTYPE LÀ L1800
+        const query = `
+            SELECT Cell_name, Thoi_gian, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all 
+            FROM kpi_4g 
+            WHERE CellType LIKE '%L1800%' AND Thoi_gian IN (${placeholders})
+        `;
         const [data] = await db.query(query, targetDates);
 
         const cellMap = {};
@@ -146,10 +151,14 @@ exports.getWorstCellsData = async (req, res) => {
         });
 
         const worstCells = [];
+        const latestDateStr = targetDates[0];
+
         for (const cell in cellMap) {
             const records = cellMap[cell];
             
             if (records.length !== days) continue;
+            // CHỈ XÉT KHI CELL NÀY TỒN TẠI TRONG NGÀY KPI MỚI NHẤT
+            if (!records.some(r => r.Thoi_gian === latestDateStr)) continue;
 
             let isWorstAllDays = true;
             for (const row of records) {
@@ -203,10 +212,6 @@ exports.getWorstCellsData = async (req, res) => {
     }
 };
 
-// ==========================================
-// CÁC HÀM XỬ LÝ CHO CONGESTION 3G
-// ==========================================
-
 exports.getCongestion3gPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
     res.render('congestion_3g', { title: 'Congestion 3G', page: 'Congestion 3G', currentUser: activeUser });
@@ -230,8 +235,7 @@ exports.getCongestion3gData = async (req, res) => {
 
         const placeholders = targetDates.map(() => '?').join(',');
         const query = `
-            SELECT Ten_CELL, Thoi_gian, 
-                   CSCONGES, CS_SO_ATT, PSCONGES, PS_SO_ATT
+            SELECT Ten_CELL, Thoi_gian, CSCONGES, CS_SO_ATT, PSCONGES, PS_SO_ATT
             FROM kpi_3g 
             WHERE Thoi_gian IN (${placeholders})
         `;
@@ -244,9 +248,14 @@ exports.getCongestion3gData = async (req, res) => {
         });
 
         const congestedCells = [];
+        const latestDateStr = targetDates[0];
+
         for (const cell in cellMap) {
             const records = cellMap[cell];
             if (records.length !== days) continue;
+
+            // CHỈ XÉT CELL TỒN TẠI TRONG NGÀY MỚI NHẤT
+            if (!records.some(r => r.Thoi_gian === latestDateStr)) continue;
 
             let isCongestedAllDays = true;
             for (const row of records) {
@@ -272,12 +281,8 @@ exports.getCongestion3gData = async (req, res) => {
                 const psAtt = parseFloat(latestRecord.PS_SO_ATT);
 
                 let reasons = [];
-                if ((!isNaN(csCong) && csCong > 2) && (!isNaN(csAtt) && csAtt > 100)) {
-                    reasons.push(`CS CONG > 2% & CS ATT > 100`);
-                }
-                if ((!isNaN(psCong) && psCong > 2) && (!isNaN(psAtt) && psAtt > 500)) {
-                    reasons.push(`PS CONG > 2% & PS ATT > 500`);
-                }
+                if ((!isNaN(csCong) && csCong > 2) && (!isNaN(csAtt) && csAtt > 100)) reasons.push(`CS CONG > 2% & CS ATT > 100`);
+                if ((!isNaN(psCong) && psCong > 2) && (!isNaN(psAtt) && psAtt > 500)) reasons.push(`PS CONG > 2% & PS ATT > 500`);
 
                 congestedCells.push({
                     Cell_name: cell,
@@ -296,10 +301,6 @@ exports.getCongestion3gData = async (req, res) => {
         res.status(500).json({ error: "Lỗi xử lý DB" });
     }
 };
-
-// ==========================================
-// CÁC HÀM XỬ LÝ CHO TRAFFIC DOWN (SUY GIẢM LƯU LƯỢNG)
-// ==========================================
 
 exports.getTrafficDownPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
@@ -320,16 +321,13 @@ exports.getTrafficDownData = async (req, res) => {
             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
         };
 
-        // 1. Tìm ngày mới nhất
         const validDates = dateRows.map(r => r.Thoi_gian).sort((a, b) => parseDate(b) - parseDate(a));
         const t0_str = validDates[0];
         const t0_ts = parseDate(t0_str);
 
-        // 2. Ngày cùng thứ của tuần trước (chính xác cách 7 ngày)
         const t7_ts = t0_ts - 7 * 86400000;
         const t7_str = formatDate(t7_ts);
 
-        // 3. Chuỗi 7 ngày trước đó (để tính trung bình)
         const last7DaysStrings = [];
         for (let i = 1; i <= 7; i++) {
             last7DaysStrings.push(formatDate(t0_ts - i * 86400000));
@@ -338,27 +336,31 @@ exports.getTrafficDownData = async (req, res) => {
         const neededDates = [t0_str, ...last7DaysStrings];
         const placeholders = neededDates.map(() => '?').join(',');
 
-        // 4. Truy vấn dữ liệu KPI 4G chỉ cho các ngày cần thiết
+        // TRUY VẤN LẤY THÊM CELLTYPE ĐỂ LỌC L1800
         const [kpiData] = await db.query(`
-            SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB 
+            SELECT Cell_name, CellType, Thoi_gian, Total_Data_Traffic_Volume_GB 
             FROM kpi_4g 
             WHERE Thoi_gian IN (${placeholders})
         `, neededDates);
 
-        // 5. Truy vấn dữ liệu POI 4G
         const [poiData] = await db.query(`SELECT Cell_Code, POI FROM poi_4g WHERE POI IS NOT NULL AND POI != ''`);
         const cellToPoi = {};
         poiData.forEach(p => cellToPoi[p.Cell_Code] = p.POI);
 
-        // 6. Xử lý gộp dữ liệu
         const cellStats = {};
         kpiData.forEach(row => {
             const cell = row.Cell_name;
-            if (!cellStats[cell]) cellStats[cell] = { t0: 0, t7: 0, sum7: 0 };
+            if (!cellStats[cell]) cellStats[cell] = { t0: 0, t7: 0, sum7: 0, isL1800: false, presentInT0: false };
             
+            // Đánh dấu nếu là Cell L1800
+            if (row.CellType && row.CellType.includes('L1800')) {
+                cellStats[cell].isL1800 = true;
+            }
+
             const traffic = parseFloat(row.Total_Data_Traffic_Volume_GB) || 0;
             if (row.Thoi_gian === t0_str) {
                 cellStats[cell].t0 = traffic;
+                cellStats[cell].presentInT0 = true;
             } else {
                 if (row.Thoi_gian === t7_str) {
                     cellStats[cell].t7 = traffic;
@@ -375,28 +377,19 @@ exports.getTrafficDownData = async (req, res) => {
             const stats = cellStats[cell];
             const t0 = stats.t0;
             const t7 = stats.t7;
-            const avg7 = stats.sum7 / 7; // Trung bình 7 ngày (từ t-1 đến t-7)
+            const avg7 = stats.sum7 / 7; 
 
-            // BỘ LỌC 1: Cell Không Lưu Lượng
-            if (t0 < 0.1 && avg7 > 2) {
-                zeroTrafficCells.push({
-                    Cell_name: cell,
-                    t0: t0.toFixed(2),
-                    avg7: avg7.toFixed(2)
-                });
+            // CHỈ XÉT BẢNG 1 VÀ 2 NẾU TỒN TẠI TRONG NGÀY MỚI NHẤT VÀ LÀ CELL L1800
+            if (stats.presentInT0 && stats.isL1800) {
+                if (t0 < 0.1 && avg7 > 2) {
+                    zeroTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), avg7: avg7.toFixed(2) });
+                }
+                if (t0 < 0.7 * t7 && t7 > 1) {
+                    droppedTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), t7: t7.toFixed(2), ratio: ((t0 / t7) * 100).toFixed(1) });
+                }
             }
 
-            // BỘ LỌC 2: Cell Suy Giảm
-            if (t0 < 0.7 * t7 && t7 > 1) {
-                droppedTrafficCells.push({
-                    Cell_name: cell,
-                    t0: t0.toFixed(2),
-                    t7: t7.toFixed(2),
-                    ratio: ((t0 / t7) * 100).toFixed(1)
-                });
-            }
-
-            // Gộp dữ liệu cho POI (Chỉ quan tâm t0 và t7)
+            // Gộp dữ liệu cho POI (Cộng dồn toàn bộ các Cell thuộc POI)
             const poi = cellToPoi[cell];
             if (poi) {
                 if (!poiStats[poi]) poiStats[poi] = { t0: 0, t7: 0 };
@@ -410,18 +403,11 @@ exports.getTrafficDownData = async (req, res) => {
             const t0 = poiStats[poi].t0;
             const t7 = poiStats[poi].t7;
             
-            // BỘ LỌC 3: POI Suy Giảm
             if (t7 > 0 && t0 < 0.7 * t7) {
-                droppedTrafficPOIs.push({
-                    POI: poi,
-                    t0: t0.toFixed(2),
-                    t7: t7.toFixed(2),
-                    ratio: ((t0 / t7) * 100).toFixed(1)
-                });
+                droppedTrafficPOIs.push({ POI: poi, t0: t0.toFixed(2), t7: t7.toFixed(2), ratio: ((t0 / t7) * 100).toFixed(1) });
             }
         }
 
-        // Sắp xếp dữ liệu để ưu tiên các ca nghiêm trọng (Tỷ lệ giảm cao nhất, TB cao nhất) lên đầu
         zeroTrafficCells.sort((a,b) => b.avg7 - a.avg7);
         droppedTrafficCells.sort((a,b) => a.ratio - b.ratio);
         droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio);
