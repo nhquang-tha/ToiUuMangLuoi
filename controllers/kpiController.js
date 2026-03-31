@@ -146,7 +146,7 @@ exports.getWorstCellsData = async (req, res) => {
 
         const placeholders = targetDates.map(() => '?').join(',');
         
-        // CHỈ LẤY CÁC CELL CÓ CELLTYPE LÀ L1800
+        // CHỈ LỌC CÁC CELL CÓ CELLTYPE LÀ L1800
         const query = `
             SELECT Cell_name, Thoi_gian, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all 
             FROM kpi_4g 
@@ -165,9 +165,9 @@ exports.getWorstCellsData = async (req, res) => {
 
         for (const cell in cellMap) {
             const records = cellMap[cell];
-            
             if (records.length !== days) continue;
-            // CHỈ XÉT KHI CELL NÀY TỒN TẠI TRONG NGÀY KPI MỚI NHẤT
+            
+            // YÊU CẦU: Phải có mặt ở ngày mới nhất
             if (!records.some(r => r.Thoi_gian === latestDateStr)) continue;
 
             let isWorstAllDays = true;
@@ -216,10 +216,7 @@ exports.getWorstCellsData = async (req, res) => {
             }
         }
         res.json(worstCells);
-    } catch (error) {
-        console.error("Lỗi lấy Worst Cells:", error);
-        res.status(500).json({ error: "Lỗi xử lý DB" });
-    }
+    } catch (error) { res.status(500).json({ error: "Lỗi xử lý DB" }); }
 };
 
 // ==========================================
@@ -267,7 +264,8 @@ exports.getCongestion3gData = async (req, res) => {
         for (const cell in cellMap) {
             const records = cellMap[cell];
             if (records.length !== days) continue;
-
+            
+            // YÊU CẦU: Có trong ngày mới nhất
             if (!records.some(r => r.Thoi_gian === latestDateStr)) continue;
 
             let isCongestedAllDays = true;
@@ -309,10 +307,7 @@ exports.getCongestion3gData = async (req, res) => {
             }
         }
         res.json(congestedCells);
-    } catch (error) {
-        console.error("Lỗi lấy Congestion 3G:", error);
-        res.status(500).json({ error: "Lỗi xử lý DB" });
-    }
+    } catch (error) { res.status(500).json({ error: "Lỗi xử lý DB" }); }
 };
 
 // ==========================================
@@ -394,6 +389,7 @@ exports.getTrafficDownData = async (req, res) => {
             const t7 = stats.t7;
             const avg7 = stats.sum7 / 7; 
 
+            // CHỈ XÉT CELL TỒN TẠI VÀ THUỘC L1800
             if (stats.presentInT0 && stats.isL1800) {
                 if (t0 < 0.1 && avg7 > 2) {
                     zeroTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), avg7: avg7.toFixed(2) });
@@ -433,8 +429,5 @@ exports.getTrafficDownData = async (req, res) => {
             droppedTrafficPOIs
         });
 
-    } catch (error) {
-        console.error("Lỗi lấy Traffic Down:", error);
-        res.status(500).json({ error: "Lỗi xử lý DB" });
-    }
+    } catch (error) { res.status(500).json({ error: "Lỗi xử lý DB" }); }
 };
