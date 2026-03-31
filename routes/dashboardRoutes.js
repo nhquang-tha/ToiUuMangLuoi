@@ -12,9 +12,6 @@ const rfController = require('../controllers/rfController');
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
 
-// Tạm thời vô hiệu hóa mapController nếu bạn chưa xây dựng xong tính năng Bản Đồ GIS để chống sập Server
-// const mapController = require('../controllers/mapController'); 
-
 // Cấu hình lưu trữ bộ nhớ đệm cho quá trình upload file
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -47,6 +44,7 @@ pages.forEach(page => {
 
 // --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA (Đang xây dựng) ---
 // Mở comment các dòng dưới đây khi bạn bắt đầu code file mapController.js
+// const mapController = require('../controllers/mapController'); 
 // router.get('/gis-map', isAuthenticated, mapController.getMapPage);
 // router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
 // router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
