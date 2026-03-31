@@ -11,11 +11,14 @@ const dashboardController = require('../controllers/dashboardController');
 const rfController = require('../controllers/rfController'); 
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
-const mapController = require('../controllers/mapController'); 
 
+// Tạm thời vô hiệu hóa mapController nếu bạn chưa xây dựng xong tính năng Bản Đồ GIS để chống sập Server
+// const mapController = require('../controllers/mapController'); 
+
+// Cấu hình lưu trữ bộ nhớ đệm cho quá trình upload file
 const upload = multer({ storage: multer.memoryStorage() });
 
-// MIDDLEWARE TOÀN CỤC: Khôi phục Session User
+// MIDDLEWARE TOÀN CỤC: Khôi phục Session User thông minh
 router.use(async (req, res, next) => {
     if (req.session && req.session.user) {
         res.locals.currentUser = req.session.user;
@@ -32,8 +35,7 @@ router.use(async (req, res, next) => {
     next();
 });
 
-// --- ROUTES CƠ BẢN ---
-// LƯU Ý: Đã bỏ '/poi-report', '/worst-cells', '/congestion-3g', VÀ '/traffic-down' ra khỏi mảng này để thiết lập riêng
+// --- ROUTES CƠ BẢN (TRANG TĨNH) ---
 const pages = [
     { path: '/', name: 'Dashboard' },
     { path: '/scrip', name: 'Scrip' }
@@ -43,15 +45,17 @@ pages.forEach(page => {
     router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
 });
 
-// --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA ---
-router.get('/gis-map', isAuthenticated, mapController.getMapPage);
-router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
-router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
+// --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA (Đang xây dựng) ---
+// Mở comment các dòng dưới đây khi bạn bắt đầu code file mapController.js
+// router.get('/gis-map', isAuthenticated, mapController.getMapPage);
+// router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
+// router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
 
-// --- ROUTES CHO KPI ANALYTICS & BÁO CÁO NÂNG CAO ---
+// --- ROUTES CHO KPI ANALYTICS & CÁC CẢNH BÁO CHẤT LƯỢNG ---
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
+router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
+router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
 
-// CÁC ROUTE MỚI CHO POI REPORT VÀ WORST CELLS
 router.get('/poi-report', isAuthenticated, kpiController.getPoiReportPage);
 router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
 router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
@@ -59,11 +63,9 @@ router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
 router.get('/worst-cells', isAuthenticated, kpiController.getWorstCellsPage);
 router.get('/api/worst-cells-data', isAuthenticated, kpiController.getWorstCellsData);
 
-// ROUTE CHO CONGESTION 3G
 router.get('/congestion-3g', isAuthenticated, kpiController.getCongestion3gPage);
 router.get('/api/congestion-3g-data', isAuthenticated, kpiController.getCongestion3gData);
 
-// ROUTE CHO TRAFFIC DOWN
 router.get('/traffic-down', isAuthenticated, kpiController.getTrafficDownPage);
 router.get('/api/traffic-down-data', isAuthenticated, kpiController.getTrafficDownData);
 
@@ -85,6 +87,11 @@ router.post('/system/profile/change-password', isAuthenticated, userController.c
 router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
 router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
 router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
-router.get('/logout', (req, res) => { req.session.destroy(); res.redirect('/login'); });
+
+// Đăng xuất
+router.get('/logout', (req, res) => { 
+    req.session.destroy(); 
+    res.redirect('/login'); 
+});
 
 module.exports = router;
