@@ -12,7 +12,26 @@ const rfController = require('../controllers/rfController');
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
 
+// ĐÃ MỞ KHÓA MAP CONTROLLER ĐỂ CHẠY BẢN ĐỒ GIS
+const mapController = require('../controllers/mapController'); 
+
 const upload = multer({ storage: multer.memoryStorage() });
+
+const safeCtrl = (handler) => {
+    if (typeof handler === 'function') return handler;
+    return (req, res) => {
+        res.status(503).send(`
+            <div style="font-family: Arial, sans-serif; padding: 40px; text-align: center; color: #2c3e50; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #e74c3c; font-size: 24px;">⚠️ Tính Năng Đang Được Cập Nhật</h2>
+                <p style="font-size: 16px; line-height: 1.6;">Hệ thống không tìm thấy đoạn mã xử lý cho chức năng này.</p>
+                <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #f39c12; text-align: left; margin: 20px 0;">
+                    <strong>Nguyên nhân:</strong> File trên GitHub chưa được cập nhật đầy đủ mã nguồn mới nhất. Hãy kiểm tra lại.
+                </div>
+                <a href="/" style="display: inline-block; padding: 12px 25px; background: #3498db; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; transition: 0.2s;">⬅ Quay lại Trang Chủ</a>
+            </div>
+        `);
+    };
+};
 
 // MIDDLEWARE TOÀN CỤC: Khôi phục Session User thông minh
 router.use(async (req, res, next) => {
@@ -38,45 +57,50 @@ const pages = [
 ];
 
 pages.forEach(page => {
-    router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
+    router.get(page.path, isAuthenticated, safeCtrl(dashboardController.renderPage(page.name)));
 });
 
+// --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA (ĐÃ HOẠT ĐỘNG) ---
+router.get('/gis-map', isAuthenticated, safeCtrl(mapController.getMapPage));
+router.get('/api/gis-data', isAuthenticated, safeCtrl(mapController.getMapData));
+router.get('/api/ta-data', isAuthenticated, safeCtrl(mapController.getTAData)); 
+
 // --- ROUTES CHO KPI ANALYTICS & CÁC CẢNH BÁO CHẤT LƯỢNG ---
-router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
-router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
-router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
+router.get('/kpi-analytics', isAuthenticated, safeCtrl(kpiController.getKpiAnalyticsPage));
+router.get('/api/kpi-data', isAuthenticated, safeCtrl(kpiController.getKpiData));
+router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, safeCtrl(kpiController.resetData));
 
-router.get('/poi-report', isAuthenticated, kpiController.getPoiReportPage);
-router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
-router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
+router.get('/poi-report', isAuthenticated, safeCtrl(kpiController.getPoiReportPage));
+router.get('/api/poi-list', isAuthenticated, safeCtrl(kpiController.getPoiList));
+router.get('/api/poi-data', isAuthenticated, safeCtrl(kpiController.getPoiData));
 
-router.get('/worst-cells', isAuthenticated, kpiController.getWorstCellsPage);
-router.get('/api/worst-cells-data', isAuthenticated, kpiController.getWorstCellsData);
+router.get('/worst-cells', isAuthenticated, safeCtrl(kpiController.getWorstCellsPage));
+router.get('/api/worst-cells-data', isAuthenticated, safeCtrl(kpiController.getWorstCellsData));
 
-router.get('/congestion-3g', isAuthenticated, kpiController.getCongestion3gPage);
-router.get('/api/congestion-3g-data', isAuthenticated, kpiController.getCongestion3gData);
+router.get('/congestion-3g', isAuthenticated, safeCtrl(kpiController.getCongestion3gPage));
+router.get('/api/congestion-3g-data', isAuthenticated, safeCtrl(kpiController.getCongestion3gData));
 
-router.get('/traffic-down', isAuthenticated, kpiController.getTrafficDownPage);
-router.get('/api/traffic-down-data', isAuthenticated, kpiController.getTrafficDownData);
+router.get('/traffic-down', isAuthenticated, safeCtrl(kpiController.getTrafficDownPage));
+router.get('/api/traffic-down-data', isAuthenticated, safeCtrl(kpiController.getTrafficDownData));
 
 // --- ROUTES CHO IMPORT DATA ---
-router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
-router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), dashboardController.handleImportData);
+router.get('/import-data', isAuthenticated, isAdmin, safeCtrl(dashboardController.getImportPage));
+router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), safeCtrl(dashboardController.handleImportData));
 
 // --- ROUTES CHO RF DATABASE (CRUD) ---
-router.get('/rf-database', isAuthenticated, rfController.getList);
-router.get('/rf-database/export', isAuthenticated, rfController.exportData); 
-router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
-router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
-router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
-router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, rfController.saveData);
+router.get('/rf-database', isAuthenticated, safeCtrl(rfController.getList));
+router.get('/rf-database/export', isAuthenticated, safeCtrl(rfController.exportData)); 
+router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, safeCtrl(rfController.deleteData));
+router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, safeCtrl(rfController.resetData));
+router.get('/rf-database/:action/:network/:id?', isAuthenticated, safeCtrl(rfController.getForm));
+router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, safeCtrl(rfController.saveData));
 
 // --- ROUTES CHO HỆ THỐNG (SYSTEM) ---
-router.get('/system/profile', isAuthenticated, userController.getProfilePage);
-router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
-router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
-router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
-router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
+router.get('/system/profile', isAuthenticated, safeCtrl(userController.getProfilePage));
+router.post('/system/profile/change-password', isAuthenticated, safeCtrl(userController.changePassword));
+router.get('/system/users', isAuthenticated, isAdmin, safeCtrl(userController.getUserManagerPage));
+router.post('/system/users/add', isAuthenticated, isAdmin, safeCtrl(userController.addUser));
+router.post('/system/users/delete/:id', isAuthenticated, isAdmin, safeCtrl(userController.deleteUser));
 
 // Đăng xuất
 router.get('/logout', (req, res) => { 
