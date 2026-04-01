@@ -22,7 +22,7 @@
     
     /* FIX CHIỀU CAO BẢN ĐỒ: Bao bọc bằng Flexbox chuẩn */
     .map-wrapper { position: relative; flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; }
-    #map { flex: 1; height: 100%; width: 100%; z-index: 1; }
+    #map { flex: 1; height: 100%; width: 100%; z-index: 1; background: #e5e3df; }
     
     /* Loading overlay */
     #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; }
@@ -39,18 +39,29 @@
     .rf-popup-container::-webkit-scrollbar { width: 6px; }
     .rf-popup-container::-webkit-scrollbar-track { background: #f1f1f1; }
     .rf-popup-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 3px; }
+
+    /* Style cho các nút điều khiển mới trên bản đồ */
+    .custom-leaflet-btn a {
+        font-size: 18px !important;
+        line-height: 30px !important;
+        text-align: center;
+        text-decoration: none;
+        color: #333;
+        display: block;
+        width: 30px;
+        height: 30px;
+    }
+    .custom-leaflet-btn a:hover { background-color: #f4f4f4; color: #2980b9; }
 </style>
 
 <div class="layout">
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         
-        <!-- Thanh điều khiển công cụ Bản đồ -->
         <div class="map-header">
             <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
             <div class="map-controls">
                 <label style="font-weight: bold; color: #7f8c8d;">Phân tích theo mạng:</label>
-                <!-- Mặc định chọn 4G, chỉ tải dữ liệu mạng được chọn -->
                 <select id="networkSelect" onchange="loadMapData()">
                     <option value="4g" selected>Mạng 4G LTE</option>
                     <option value="3g">Mạng 3G WCDMA</option>
@@ -62,8 +73,7 @@
             </div>
         </div>
         
-        <!-- Wrapper bản đồ đã được sửa lỗi xẹp chiều cao -->
-        <div class="map-wrapper">
+        <div class="map-wrapper" id="mapWrapper">
             <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang dựng hình ảnh mô phỏng trạm...</div>
             <div id="map"></div>
         </div>
@@ -72,40 +82,87 @@
 </div>
 
 <script>
-    // 1. KHỞI TẠO BẢN ĐỒ TÂM VIỆT NAM
+    // 1. KHỞI TẠO BẢN ĐỒ TÂM VIỆT NAM (Thanh Hóa)
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
 
     // 2. TÍCH HỢP LỚP BẢN ĐỒ GOOGLE MAPS
-    // Google Map Cơ bản (Street)
     const googleStreets = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}', {
         attribution: 'Map data &copy; Google',
         maxZoom: 20
     });
     
-    // Google Map Vệ tinh lai (Satellite + Labels)
     const googleHybrid = L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}', {
         attribution: 'Map data &copy; Google',
         maxZoom: 20
     });
 
-    // Mặc định hiển thị Google Streets
     googleStreets.addTo(map); 
     
-    // Thêm công cụ chọn lớp Bản đồ (Layer Control)
     L.control.layers({
         "🌍 Google Map (Cơ bản)": googleStreets,
         "🛰️ Google Map (Vệ tinh)": googleHybrid
     }).addTo(map);
 
-    // FIX LỖI BẢN ĐỒ KHÔNG RENDER ĐẦY ĐỦ (Kích hoạt lại size sau 500ms)
+    // 3. THÊM NÚT FULL SCREEN VÀ GPS VÀO BẢN ĐỒ
+    // Nút Full Screen
+    L.Control.FullScreen = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function(map) {
+            let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn');
+            container.innerHTML = '<a href="#" title="Toàn màn hình">⛶</a>';
+            container.onclick = function(e) {
+                e.preventDefault();
+                let mapElement = document.getElementById('mapWrapper');
+                if (!document.fullscreenElement) {
+                    mapElement.requestFullscreen().catch(err => console.log(err));
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+            return container;
+        }
+    });
+    map.addControl(new L.Control.FullScreen());
+
+    // Nút GPS (Vị trí hiện tại)
+    let userMarker = null;
+    L.Control.GPS = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function(map) {
+            let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn');
+            container.innerHTML = '<a href="#" title="Vị trí của tôi">📍</a>';
+            container.onclick = function(e) {
+                e.preventDefault();
+                map.locate({setView: true, maxZoom: 15});
+            }
+            return container;
+        }
+    });
+    map.addControl(new L.Control.GPS());
+
+    // Xử lý sự kiện khi tìm thấy GPS
+    map.on('locationfound', function(e) {
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.circleMarker(e.latlng, {
+            radius: 8, fillColor: "#2980b9", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8
+        }).addTo(map).bindPopup("📍 Bạn đang ở đây!").openPopup();
+    });
+    map.on('locationerror', function(e) {
+        alert("Không thể lấy định vị GPS. Vui lòng cho phép trình duyệt truy cập vị trí.");
+    });
+
+    // Fix lỗi bản đồ xẹp khi đổi chế độ toàn màn hình
+    document.addEventListener('fullscreenchange', () => {
+        setTimeout(() => map.invalidateSize(), 200);
+    });
     setTimeout(() => { map.invalidateSize(); }, 500);
 
     // ====================================================
     // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT VÙNG PHỦ
     // ====================================================
     function getDestination(lat, lng, azimuth, distanceMeters) {
-        const R = 6378137; // Bán kính trái đất (m)
+        const R = 6378137; 
         const brng = azimuth * Math.PI / 180;
         const lat1 = lat * Math.PI / 180;
         const lon1 = lng * Math.PI / 180;
@@ -117,31 +174,28 @@
     }
 
     function createSector(lat, lng, azimuth, cellName, networkType, rfData) {
-        // Tùy chỉnh Bán kính cánh quạt theo đặc thù bước sóng từng công nghệ
         let radius = 250; 
-        if (networkType === '3g') radius = 300; // 3G phủ rộng hơn
-        if (networkType === '5g') radius = 150; // 5G phủ hẹp hơn
+        if (networkType === '3g') radius = 300; 
+        if (networkType === '5g') radius = 150; 
         
-        const beamwidth = 65; // Góc mở phổ biến của Anten Panel là 65 độ
+        const beamwidth = 65; 
         
-        // Đổi màu tùy theo mạng
-        let color = '#3498db'; // 4G Xanh dương
-        if (networkType === '3g') color = '#e67e22'; // 3G Cam
-        if (networkType === '5g') color = '#2ecc71'; // 5G Xanh lá
+        // CẬP NHẬT MÀU SẮC THEO YÊU CẦU: 4G(Đỏ), 3G(Vàng), 5G(Xanh dương)
+        let color = '#e74c3c'; // Mặc định 4G: Đỏ
+        if (networkType === '3g') color = '#f1c40f'; // 3G: Vàng
+        if (networkType === '5g') color = '#3498db'; // 5G: Xanh Dương
 
         const center = [lat, lng];
         const points = [center];
         const startAngle = azimuth - beamwidth / 2;
         const endAngle = azimuth + beamwidth / 2;
 
-        // Tính các đỉnh dọc theo đường cong cánh quạt
         for (let i = startAngle; i <= endAngle; i += 5) { 
             points.push(getDestination(lat, lng, i, radius));
         }
         points.push(getDestination(lat, lng, endAngle, radius));
         points.push(center);
         
-        // Khởi tạo đa giác Polygon mô phỏng Cell
         const polygon = L.polygon(points, {
             color: color,
             weight: 1.5,
@@ -149,12 +203,8 @@
             fillOpacity: 0.55
         });
 
-        // ----------------------------------------------------
-        // XÂY DỰNG BẢNG HTML CHỨA TOÀN BỘ RF DATABASE CHO POPUP
-        // ----------------------------------------------------
+        // TẠO BẢNG POPUP DATABASE
         let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
-        
-        // Duyệt qua mảng rfData đã được cấu trúc chặt chẽ từ Backend
         if (Array.isArray(rfData)) {
             rfData.forEach(item => {
                 tableHtml += `<tr>
@@ -165,7 +215,6 @@
         }
         tableHtml += `</table></div>`;
 
-        // Gắn Popup vào Cánh quạt
         polygon.bindPopup(`
             <div style="font-family: Arial; min-width: 320px;">
                 <h4 style="margin: 0 0 5px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
@@ -203,7 +252,6 @@
 
             let bounds = [];
 
-            // Vẽ hàng loạt hình quạt lên bản đồ
             data.forEach(item => {
                 if(item.lat && item.lng) {
                     const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData);
@@ -212,7 +260,6 @@
                 }
             });
 
-            // Tự động căn giữa và Zoom bao quát tất cả các trạm
             if (bounds.length > 0) {
                 map.fitBounds(bounds);
             }
@@ -226,7 +273,6 @@
         }
     }
 
-    // Tự động load dữ liệu 4G khi vừa mở trang
     window.onload = loadMapData;
 </script>
 </body>
