@@ -6,15 +6,9 @@ exports.getKpiAnalyticsPage = async (req, res) => {
 };
 
 exports.getKpiData = async (req, res) => {
-    // Đảm bảo network luôn được viết thường và mặc định là 4g
-    const network = req.query.network ? req.query.network.toLowerCase() : '4g';
+    const network = req.query.network || '4g';
     const type = req.query.type || 'keyword';
     const value = req.query.value ? req.query.value.trim() : '';
-
-    // Lớp xác thực an toàn: Chặn lỗi HTTP 500 nếu truyền sai mạng
-    if (!['3g', '4g', '5g'].includes(network)) {
-        return res.status(400).json({ error: "Loại mạng không được hỗ trợ." });
-    }
 
     let tableName = `kpi_${network}`;
     let cellColumn = (network === '4g') ? 'Cell_name' : 'Ten_CELL';
@@ -152,11 +146,14 @@ exports.getWorstCellsData = async (req, res) => {
 
         const placeholders = targetDates.map(() => '?').join(',');
         
-        // CHỈ LỌC CÁC CELL CÓ CELLTYPE LÀ L1800
+        // Lọc L1800 và BỎ QUA các Cell bắt đầu bằng MBF_TH hoặc VNP-4G
         const query = `
             SELECT Cell_name, Thoi_gian, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all 
             FROM kpi_4g 
-            WHERE CellType LIKE '%L1800%' AND Thoi_gian IN (${placeholders})
+            WHERE CellType LIKE '%L1800%' 
+              AND Cell_name NOT LIKE 'MBF_TH%' 
+              AND Cell_name NOT LIKE 'VNP-4G%'
+              AND Thoi_gian IN (${placeholders})
         `;
         const [data] = await db.query(query, targetDates);
 
@@ -354,10 +351,13 @@ exports.getTrafficDownData = async (req, res) => {
         const neededDates = [t0_str, ...last7DaysStrings];
         const placeholders = neededDates.map(() => '?').join(',');
 
+        // BỎ QUA các Cell bắt đầu bằng MBF_TH hoặc VNP-4G
         const [kpiData] = await db.query(`
             SELECT Cell_name, CellType, Thoi_gian, Total_Data_Traffic_Volume_GB 
             FROM kpi_4g 
-            WHERE Thoi_gian IN (${placeholders})
+            WHERE Cell_name NOT LIKE 'MBF_TH%' 
+              AND Cell_name NOT LIKE 'VNP-4G%'
+              AND Thoi_gian IN (${placeholders})
         `, neededDates);
 
         const [poiData] = await db.query(`SELECT Cell_Code, POI FROM poi_4g WHERE POI IS NOT NULL AND POI != ''`);
