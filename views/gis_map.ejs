@@ -46,6 +46,12 @@
     .info.legend { background: white; padding: 10px 15px; border-radius: 5px; box-shadow: 0 1px 5px rgba(0,0,0,0.4); font-size: 12px; line-height: 18px; color: #333; }
     .info.legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.9; border-radius: 50%; border: 1px solid #7f8c8d;}
     .info.legend h4 { margin: 0 0 5px 0; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 3px;}
+
+    /* CSS Thanh trượt cấu hình */
+    .slider-control { background: white; padding: 12px 15px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.4); width: 220px; }
+    .slider-control input[type=range] { -webkit-appearance: none; width: 100%; margin: 8px 0; background: transparent; }
+    .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: #bdc3c7; border-radius: 3px; }
+    .slider-control input[type=range]::-webkit-slider-thumb { height: 16px; width: 16px; border-radius: 50%; background: #3498db; cursor: pointer; -webkit-appearance: none; margin-top: -5px; }
 </style>
 
 <div class="layout">
@@ -137,6 +143,50 @@
     });
     map.addControl(new L.Control.GPS());
 
+    // THÊM THANH SLIDER ĐIỀU CHỈNH KÍCH THƯỚC Ở GÓC DƯỚI BÊN TRÁI
+    L.Control.Sliders = L.Control.extend({
+        options: { position: 'bottomleft' },
+        onAdd: function (map) {
+            let div = L.DomUtil.create('div', 'info legend leaflet-control slider-control');
+            div.innerHTML = `
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 13px; font-weight: bold; color: #2c3e50;">Kích thước Điểm Đo ITS: <span id="markerSizeVal" style="color:#e67e22">3.5</span></label><br>
+                    <input type="range" id="markerSizeSlider" min="1" max="10" step="0.5" value="3.5">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: bold; color: #2c3e50;">Bán kính Cánh Quạt Cell: <span id="sectorSizeVal" style="color:#2980b9">100%</span></label><br>
+                    <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="100">
+                </div>
+            `;
+            // Ngăn sự kiện click/scroll ảnh hưởng đến bản đồ bên dưới
+            L.DomEvent.disableClickPropagation(div);
+            L.DomEvent.disableScrollPropagation(div);
+            return div;
+        }
+    });
+    map.addControl(new L.Control.Sliders());
+
+    // SỰ KIỆN THANH SLIDER
+    document.getElementById('markerSizeSlider').addEventListener('input', function(e) {
+        let size = parseFloat(e.target.value);
+        document.getElementById('markerSizeVal').innerText = size;
+        itsLogLayer.eachLayer(function(layer) {
+            if (layer instanceof L.CircleMarker) {
+                layer.setRadius(size);
+            }
+        });
+    });
+
+    document.getElementById('sectorSizeSlider').addEventListener('input', function(e) {
+        let scale = parseFloat(e.target.value) / 100;
+        document.getElementById('sectorSizeVal').innerText = e.target.value + '%';
+        // Tính toán và vẽ lại đa giác ngay lập tức mà không cần tải lại dữ liệu DB
+        globalPolygons.forEach(item => {
+            let newPoints = calculateSectorPoints(item.lat, item.lng, item.azimuth, item.baseRadius, scale);
+            item.polygon.setLatLngs(newPoints);
+        });
+    });
+
     map.on('locationfound', function(e) {
         if (userMarker) map.removeLayer(userMarker);
         userMarker = L.circleMarker(e.latlng, { radius: 8, fillColor: "#2980b9", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8 }).addTo(map).bindPopup("📍 Bạn đang ở đây!").openPopup();
@@ -145,6 +195,9 @@
     document.addEventListener('fullscreenchange', () => { setTimeout(() => map.invalidateSize(), 200); });
     setTimeout(() => { map.invalidateSize(); }, 500);
 
+    // ====================================================
+    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT
+    // ====================================================
     function getDestination(lat, lng, azimuth, distanceMeters) {
         const R = 6378137; 
         const brng = azimuth * Math.PI / 180;
@@ -155,16 +208,9 @@
         return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
     }
 
-    function createSector(lat, lng, azimuth, cellName, networkType, rfData) {
-        let radius = 250; 
-        if (networkType === '3g') radius = 300; 
-        if (networkType === '5g') radius = 150; 
-        
+    function calculateSectorPoints(lat, lng, azimuth, baseRadius, scale) {
+        let radius = baseRadius * scale;
         const beamwidth = 65; 
-        let color = '#e74c3c'; 
-        if (networkType === '3g') color = '#f1c40f'; 
-        if (networkType === '5g') color = '#3498db'; 
-
         const center = [lat, lng];
         const points = [center];
         const startAngle = azimuth - beamwidth / 2;
@@ -173,6 +219,15 @@
         for (let i = startAngle; i <= endAngle; i += 5) points.push(getDestination(lat, lng, i, radius));
         points.push(getDestination(lat, lng, endAngle, radius));
         points.push(center);
+        return points;
+    }
+
+    function createSector(lat, lng, azimuth, cellName, networkType, rfData, baseRadius, scale) {
+        let color = '#e74c3c'; 
+        if (networkType === '3g') color = '#f1c40f'; 
+        if (networkType === '5g') color = '#3498db'; 
+
+        const points = calculateSectorPoints(lat, lng, azimuth, baseRadius, scale);
         
         const polygon = L.polygon(points, { color: color, weight: 1.5, fillColor: color, fillOpacity: 0.55 });
 
@@ -199,11 +254,14 @@
         
         loading.style.display = 'block';
         layerGroup.clearLayers();
-        itsLogLayer.clearLayers(); // Tải mạng mới thì xóa log ITS cũ
-        if (legendControl) map.removeControl(legendControl); // Xóa legend
+        itsLogLayer.clearLayers(); 
+        if (legendControl) map.removeControl(legendControl); 
         globalPolygons = []; 
         defaultBounds = [];
         document.getElementById('mapSearchInput').value = ''; 
+
+        // Lấy tỷ lệ scale hiện tại của Slider
+        let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
         try {
             const response = await fetch(`/api/gis-data?network=${network}`);
@@ -216,14 +274,19 @@
 
             data.forEach(item => {
                 if(item.lat && item.lng) {
-                    const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData);
+                    let baseRadius = 250; 
+                    if (network === '3g') baseRadius = 300; 
+                    if (network === '5g') baseRadius = 150; 
+
+                    const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData, baseRadius, scale);
                     sector.addTo(layerGroup);
                     defaultBounds.push([item.lat, item.lng]);
                     
                     globalPolygons.push({
                         cellStr: String(item.cell).toLowerCase(), siteStr: String(item.site).toLowerCase(),
-                        polygon: sector, lat: item.lat, lng: item.lng, baseColor: sector.options.color,
-                        rawData: item // Giữ lại cấu trúc Data gốc (LAC, CI, ENodeBID...)
+                        polygon: sector, lat: item.lat, lng: item.lng, azimuth: item.azimuth, 
+                        baseRadius: baseRadius, baseColor: sector.options.color,
+                        rawData: item 
                     });
                 }
             });
@@ -276,16 +339,14 @@
     // MODULE: ĐỌC VÀ VẼ LOG FILE ĐO KIỂM (ITS)
     // ====================================================
     
-    // Quy tắc màu RSRP 4G
     function getColor4G(level) {
-        if (level >= -80) return '#27ae60'; // Xanh lục (Rất tốt)
-        if (level >= -90) return '#2980b9'; // Xanh lam (Tốt)
-        if (level >= -100) return '#f1c40f'; // Vàng (Trung bình)
-        if (level >= -110) return '#e67e22'; // Cam (Yếu)
-        return '#c0392b'; // Đỏ (Rất yếu)
+        if (level >= -80) return '#27ae60'; 
+        if (level >= -90) return '#2980b9'; 
+        if (level >= -100) return '#f1c40f'; 
+        if (level >= -110) return '#e67e22'; 
+        return '#c0392b'; 
     }
 
-    // Quy tắc màu RSCP 3G
     function getColor3G(level) {
         if (level >= -75) return '#27ae60'; 
         if (level >= -85) return '#2980b9'; 
@@ -306,18 +367,18 @@
                 div.innerHTML = '<h4>RSRP 4G (dBm)</h4>';
                 const ranges = [ {min: '', max: '-80', color: '#27ae60'}, {min: '-80', max: '-90', color: '#2980b9'}, {min: '-90', max: '-100', color: '#f1c40f'}, {min: '-100', max: '-110', color: '#e67e22'}, {min: '-110', max: '', color: '#c0392b'} ];
                 ranges.forEach(r => {
-                    let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} to ${r.max}`);
+                    let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} đến ${r.max}`);
                     labels.push(`<i style="background:${r.color}"></i> ${text}`);
                 });
             } else if (is3G) {
                 div.innerHTML = '<h4>RSCP 3G (dBm)</h4>';
                 const ranges = [ {min: '', max: '-75', color: '#27ae60'}, {min: '-75', max: '-85', color: '#2980b9'}, {min: '-85', max: '-95', color: '#f1c40f'}, {min: '-95', max: '-105', color: '#e67e22'}, {min: '-105', max: '', color: '#c0392b'} ];
                 ranges.forEach(r => {
-                    let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} to ${r.max}`);
+                    let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} đến ${r.max}`);
                     labels.push(`<i style="background:${r.color}"></i> ${text}`);
                 });
             } else {
-                return div; // Trống nếu k xác định được
+                return div; 
             }
 
             div.innerHTML += labels.join('<br>');
@@ -330,7 +391,6 @@
         const file = event.target.files[0];
         if (!file) return;
 
-        // Reset layer và input
         itsLogLayer.clearLayers();
         document.getElementById('mapLoading').style.display = 'block';
 
@@ -345,7 +405,6 @@
                 return;
             }
 
-            // Phân tích Header để lấy Index động (chống lỗi sai vị trí cột)
             const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
             const idxLat = headers.indexOf('latitude');
             const idxLng = headers.indexOf('longitude');
@@ -363,6 +422,8 @@
 
             let is3G = false, is4G = false;
             let logBounds = [];
+            // Đọc kích thước điểm đo hiện tại từ thanh slider
+            let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
 
             for (let i = 1; i < lines.length; i++) {
                 const cols = lines[i].split('|');
@@ -378,32 +439,30 @@
                 const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
                 const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
 
-                let color = '#95a5a6'; // Màu xám mặc định nếu ko lấy được level
+                let color = '#95a5a6'; 
                 let servingCellObj = null;
 
                 if (tech.includes('3G')) {
                     is3G = true;
                     color = getColor3G(level);
-                    // Thuật toán tìm kiếm Trạm 3G (Ghép theo LAC và CellID/CI)
                     servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId);
                 } else if (tech.includes('4G')) {
                     is4G = true;
                     color = getColor4G(level);
-                    // Thuật toán tìm kiếm Trạm 4G (Ghép theo Node/eNodeBID và CellID/Lcrid)
                     servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId);
                 }
 
                 // 1. Vẽ điểm đo (Point)
                 const marker = L.circleMarker([lat, lng], {
-                    radius: 3.5, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1
+                    radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1
                 });
                 marker.bindPopup(`<b>Công nghệ:</b> ${tech}<br><b>Signal Level:</b> ${level} dBm<br><b>Serving Cell ID:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
                 marker.addTo(itsLogLayer);
 
-                // 2. Vẽ đường nối (Line) tới tâm của Cánh quạt nếu đối chiếu thành công với Database
+                // 2. Vẽ đường nối TỪ ĐIỂM ĐO VÀO THẲNG TÂM CÁNH QUẠT
                 if (servingCellObj) {
                     const line = L.polyline([[lat, lng], [servingCellObj.lat, servingCellObj.lng]], {
-                        color: color, weight: 1.5, opacity: 0.6, dashArray: '5, 5'
+                        color: color, weight: 2, opacity: 0.8, dashArray: '5, 5'
                     });
                     line.addTo(itsLogLayer);
                 }
@@ -411,13 +470,12 @@
                 logBounds.push([lat, lng]);
             }
 
-            // Thêm Bảng Chú Giải (Legend)
             if (is4G) addLegend(false, true);
             else if (is3G) addLegend(true, false);
 
             if (logBounds.length > 0) map.fitBounds(logBounds);
             document.getElementById('mapLoading').style.display = 'none';
-            event.target.value = ''; // Reset file input
+            event.target.value = ''; 
         };
         
         reader.readAsText(file);
