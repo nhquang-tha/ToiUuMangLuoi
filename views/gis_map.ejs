@@ -1,52 +1,225 @@
-const db = require('../models/db');
+<%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
 
-exports.getMapPage = async (req, res) => {
-    const activeUser = res.locals.currentUser || req.session.user || req.user;
-    res.render('gis_map', { title: 'Bản Đồ GIS', page: 'GIS Map', currentUser: activeUser });
-};
+<!-- Load thư viện Bản đồ Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-exports.getMapData = async (req, res) => {
-    const network = req.query.network || '4g';
-    let tableName = `rf_${network}`;
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
-    try {
-        // Lấy TOÀN BỘ dữ liệu của trạm thay vì chỉ lấy tọa độ
-        const query = `
-            SELECT * FROM ${tableName} 
-            WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL 
-              AND Latitude != '' AND Longitude != ''
-        `;
-        const [rows] = await db.query(query);
+    .map-header { background: white; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+    .map-header h1 { margin: 0; font-size: 20px; color: #2c3e50; font-weight: bold; }
+    
+    .map-controls { display: flex; gap: 15px; align-items: center; }
+    .map-controls select { padding: 8px 15px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; }
+    
+    #map { flex: 1; width: 100%; z-index: 1; }
+    
+    /* Loading overlay */
+    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* CSS cho bảng thông tin Popup RF Database */
+    .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .rf-popup-table th, .rf-popup-table td { padding: 6px; border: 1px solid #ecf0f1; text-align: left; }
+    .rf-popup-table th { background: #f8f9fa; color: #34495e; width: 40%; font-weight: bold; }
+    .rf-popup-table tr:hover { background: #f4f6f8; }
+    .rf-popup-container { max-height: 280px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; }
+    
+    /* Tùy chỉnh thanh cuộn cho bảng Popup */
+    .rf-popup-container::-webkit-scrollbar { width: 6px; }
+    .rf-popup-container::-webkit-scrollbar-track { background: #f1f1f1; }
+    .rf-popup-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 3px; }
+</style>
+
+<div class="layout">
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    <main class="main-content">
         
-        // Chuẩn hóa dữ liệu trả về cho Frontend vẽ bản đồ
-        const cleanedData = rows.map(r => {
-            const lat = parseFloat(r.Latitude);
-            const lng = parseFloat(r.Longitude);
-            const azimuth = parseFloat(r.Azimuth) || 0;
-            
-            return {
-                cell: r.Cell_code || r.CELL_NAME || r.SITE_NAME || 'Unknown',
-                site: r.Site_code || r.SITE_NAME || '',
-                lat: lat,
-                lng: lng,
-                azimuth: azimuth,
-                rfData: r // Gói toàn bộ dữ liệu RF Database vào Object này
-            };
-        }).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
+        <!-- Thanh điều khiển công cụ Bản đồ -->
+        <div class="map-header">
+            <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
+            <div class="map-controls">
+                <label style="font-weight: bold; color: #7f8c8d;">Phân tích theo mạng:</label>
+                <select id="networkSelect" onchange="loadMapData()">
+                    <option value="4g" selected>Mạng 4G LTE</option>
+                    <option value="3g">Mạng 3G WCDMA</option>
+                    <option value="5g">Mạng 5G NR</option>
+                </select>
+                <button onclick="loadMapData()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    🔄 Tải Lại Bản Đồ
+                </button>
+            </div>
+        </div>
+        
+        <div style="position: relative; flex: 1;">
+            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang dựng hình ảnh mô phỏng trạm...</div>
+            <div id="map"></div>
+        </div>
 
-        res.json(cleanedData);
-    } catch (error) {
-        console.error("Lỗi lấy dữ liệu GIS:", error);
-        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
-    }
-};
+    </main>
+</div>
 
-exports.getTAData = async (req, res) => {
-    try {
-        const [rows] = await db.query(`SELECT * FROM TA_Query LIMIT 1000`);
-        res.json(rows);
-    } catch (error) {
-        console.error("Lỗi lấy dữ liệu TA:", error);
-        res.status(500).json({ error: "Lỗi truy xuất CSDL TA." });
+<script>
+    // 1. KHỞI TẠO BẢN ĐỒ
+    let map = L.map('map').setView([19.806692, 105.776153], 10); 
+    let layerGroup = L.layerGroup().addTo(map);
+
+    // 2. TÍCH HỢP LỚP BẢN ĐỒ GOOGLE MAPS
+    // Google Map Cơ bản (Street)
+    const googleStreets = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}', {
+        attribution: 'Map data &copy; Google',
+        maxZoom: 20
+    });
+    
+    // Google Map Vệ tinh lai (Satellite + Labels)
+    const googleHybrid = L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}', {
+        attribution: 'Map data &copy; Google',
+        maxZoom: 20
+    });
+
+    // Mặc định hiển thị Google Streets
+    googleStreets.addTo(map); 
+    
+    // Thêm công cụ chọn lớp Bản đồ (Layer Control)
+    L.control.layers({
+        "🌍 Google Map (Cơ bản)": googleStreets,
+        "🛰️ Google Map (Vệ tinh)": googleHybrid
+    }).addTo(map);
+
+    // ====================================================
+    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT VÙNG PHỦ
+    // ====================================================
+    function getDestination(lat, lng, azimuth, distanceMeters) {
+        const R = 6378137; // Bán kính trái đất (m)
+        const brng = azimuth * Math.PI / 180;
+        const lat1 = lat * Math.PI / 180;
+        const lon1 = lng * Math.PI / 180;
+
+        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distanceMeters/R) + Math.cos(lat1) * Math.sin(distanceMeters/R) * Math.cos(brng));
+        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distanceMeters/R) * Math.cos(lat1), Math.cos(distanceMeters/R) - Math.sin(lat1) * Math.sin(lat2));
+
+        return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
     }
-};
+
+    function createSector(lat, lng, azimuth, cellName, networkType, rfData) {
+        // Tùy chỉnh Bán kính cánh quạt theo đặc thù bước sóng từng công nghệ
+        let radius = 250; 
+        if (networkType === '3g') radius = 300; // 3G phủ rộng hơn
+        if (networkType === '5g') radius = 150; // 5G phủ hẹp hơn
+        
+        const beamwidth = 65; // Góc mở phổ biến của Anten Panel là 65 độ
+        
+        // Đổi màu tùy theo mạng
+        let color = '#3498db'; // 4G Xanh dương
+        if (networkType === '3g') color = '#e67e22'; // 3G Cam
+        if (networkType === '5g') color = '#2ecc71'; // 5G Xanh lá
+
+        const center = [lat, lng];
+        const points = [center];
+        const startAngle = azimuth - beamwidth / 2;
+        const endAngle = azimuth + beamwidth / 2;
+
+        // Tính các đỉnh dọc theo đường cong cánh quạt
+        for (let i = startAngle; i <= endAngle; i += 5) { 
+            points.push(getDestination(lat, lng, i, radius));
+        }
+        points.push(getDestination(lat, lng, endAngle, radius));
+        points.push(center);
+        
+        // Khởi tạo đa giác Polygon mô phỏng Cell
+        const polygon = L.polygon(points, {
+            color: color,
+            weight: 1.5,
+            fillColor: color,
+            fillOpacity: 0.55
+        });
+
+        // ----------------------------------------------------
+        // XÂY DỰNG BẢNG HTML CHỨA TOÀN BỘ RF DATABASE CHO POPUP
+        // ----------------------------------------------------
+        let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
+        for (let key in rfData) {
+            // Bỏ qua các cột ID nội bộ hoặc cột rỗng
+            if (key !== 'id' && key !== 'created_at' && rfData[key] !== null && rfData[key] !== '') {
+                tableHtml += `<tr>
+                                <th>${key}</th>
+                                <td>${rfData[key]}</td>
+                              </tr>`;
+            }
+        }
+        tableHtml += `</table></div>`;
+
+        // Gắn Popup vào Cánh quạt
+        polygon.bindPopup(`
+            <div style="font-family: Arial; min-width: 320px;">
+                <h4 style="margin: 0 0 10px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
+                    📡 Cell: ${cellName}
+                </h4>
+                <div style="margin-bottom: 10px; font-size: 12px; color: #7f8c8d;">
+                    <strong>Tọa độ:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} &nbsp;|&nbsp; <strong>Góc phát:</strong> ${azimuth}°
+                </div>
+                ${tableHtml}
+            </div>
+        `, { maxWidth: 500 });
+        
+        return polygon;
+    }
+
+    // ====================================================
+    // HÀM TẢI DỮ LIỆU TỪ MÁY CHỦ
+    // ====================================================
+    async function loadMapData() {
+        const network = document.getElementById('networkSelect').value;
+        const loading = document.getElementById('mapLoading');
+        
+        loading.style.display = 'block';
+        layerGroup.clearLayers();
+
+        try {
+            const response = await fetch(`/api/gis-data?network=${network}`);
+            const data = await response.json();
+
+            if (data.length === 0) {
+                loading.style.display = 'none';
+                alert('Không có dữ liệu tọa độ trạm cho mạng này trong Database!');
+                return;
+            }
+
+            let bounds = [];
+
+            // Vẽ hàng loạt hình quạt lên bản đồ
+            data.forEach(item => {
+                if(item.lat && item.lng) {
+                    const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData);
+                    sector.addTo(layerGroup);
+                    bounds.push([item.lat, item.lng]);
+                }
+            });
+
+            // Tự động căn giữa và Zoom bao quát tất cả các trạm
+            if (bounds.length > 0) {
+                map.fitBounds(bounds);
+            }
+
+            loading.style.display = 'none';
+
+        } catch (error) {
+            console.error(error);
+            loading.style.display = 'none';
+            alert('Lỗi truy xuất dữ liệu từ máy chủ!');
+        }
+    }
+
+    // Tự động load dữ liệu 4G khi vừa mở trang
+    window.onload = loadMapData;
+</script>
+</body>
+</html>
