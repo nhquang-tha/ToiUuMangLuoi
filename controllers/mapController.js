@@ -10,13 +10,16 @@ exports.getMapData = async (req, res) => {
     let tableName = `rf_${network}`;
     
     try {
-        // Lấy TOÀN BỘ dữ liệu của trạm thay vì chỉ lấy tọa độ
+        // Lấy TOÀN BỘ dữ liệu của trạm và lấy cả cấu trúc cột (fields) để giữ đúng thứ tự
         const query = `
             SELECT * FROM ${tableName} 
             WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL 
               AND Latitude != '' AND Longitude != ''
         `;
-        const [rows] = await db.query(query);
+        const [rows, fields] = await db.query(query);
+        
+        // Trích xuất danh sách tên cột đúng y hệt thứ tự trong Database (như lúc Import)
+        const columnOrder = fields.map(f => f.name);
         
         // Chuẩn hóa dữ liệu trả về cho Frontend vẽ bản đồ
         const cleanedData = rows.map(r => {
@@ -24,13 +27,21 @@ exports.getMapData = async (req, res) => {
             const lng = parseFloat(r.Longitude);
             const azimuth = parseFloat(r.Azimuth) || 0;
             
+            // Xây dựng mảng dữ liệu dựa trên thứ tự chuẩn của Database
+            const orderedRfData = [];
+            for (let col of columnOrder) {
+                if (col !== 'id' && col !== 'created_at' && r[col] !== null && r[col] !== '') {
+                    orderedRfData.push({ key: col, value: r[col] });
+                }
+            }
+            
             return {
                 cell: r.Cell_code || r.CELL_NAME || r.SITE_NAME || 'Unknown',
                 site: r.Site_code || r.SITE_NAME || '',
                 lat: lat,
                 lng: lng,
                 azimuth: azimuth,
-                rfData: r // Gói toàn bộ dữ liệu RF Database vào Object này
+                rfData: orderedRfData // Đã gói thành mảng giữ nguyên thứ tự
             };
         }).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
 
