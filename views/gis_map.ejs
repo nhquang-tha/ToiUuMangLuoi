@@ -42,10 +42,9 @@
     .custom-leaflet-btn a { font-size: 18px !important; line-height: 30px !important; text-align: center; text-decoration: none; color: #333; display: block; width: 30px; height: 30px; }
     .custom-leaflet-btn a:hover { background-color: #f4f4f4; color: #2980b9; }
 
-    /* CSS Bảng Chú giải (Legend) */
-    .info.legend { background: white; padding: 10px 15px; border-radius: 5px; box-shadow: 0 1px 5px rgba(0,0,0,0.4); font-size: 12px; line-height: 18px; color: #333; }
-    .info.legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.9; border-radius: 50%; border: 1px solid #7f8c8d;}
-    .info.legend h4 { margin: 0 0 5px 0; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 3px;}
+    /* CSS Bảng Chú giải (Legend) Được Cập Nhật */
+    .info.legend { background: white; padding: 12px 18px; border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,0.3); font-size: 12px; line-height: 20px; color: #333; min-width: 200px; }
+    .info.legend h4 { margin: 0 0 12px 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; font-size: 14px; font-weight: bold;}
 
     /* CSS Thanh trượt cấu hình */
     .slider-control { background: white; padding: 12px 15px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.4); width: 220px; }
@@ -96,6 +95,7 @@
 <script>
     let globalPolygons = []; 
     let defaultBounds = [];  
+    let globalLogLines = []; // Mảng chứa các đường kết nối từ điểm đo tới Cell
     
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
@@ -180,10 +180,18 @@
     document.getElementById('sectorSizeSlider').addEventListener('input', function(e) {
         let scale = parseFloat(e.target.value) / 100;
         document.getElementById('sectorSizeVal').innerText = e.target.value + '%';
-        // Tính toán và vẽ lại đa giác ngay lập tức mà không cần tải lại dữ liệu DB
+        
+        // Cập nhật lại đa giác Cánh Quạt
         globalPolygons.forEach(item => {
             let newPoints = calculateSectorPoints(item.lat, item.lng, item.azimuth, item.baseRadius, scale);
             item.polygon.setLatLngs(newPoints);
+        });
+
+        // TỰ ĐỘNG CẬP NHẬT TỌA ĐỘ ĐƯỜNG NỐI ITS BÁM THEO VÒNG CUNG
+        globalLogLines.forEach(item => {
+            // Lấy điểm đích mới là điểm giữa vòng cung
+            let newArcCenter = getDestination(item.cellObj.lat, item.cellObj.lng, item.cellObj.azimuth, item.cellObj.baseRadius * scale);
+            item.line.setLatLngs([[item.startLat, item.startLng], newArcCenter]);
         });
     });
 
@@ -256,7 +264,9 @@
         layerGroup.clearLayers();
         itsLogLayer.clearLayers(); 
         if (legendControl) map.removeControl(legendControl); 
+        
         globalPolygons = []; 
+        globalLogLines = []; 
         defaultBounds = [];
         document.getElementById('mapSearchInput').value = ''; 
 
@@ -364,24 +374,48 @@
             let labels = [];
             
             if (is4G) {
-                div.innerHTML = '<h4>RSRP 4G (dBm)</h4>';
-                const ranges = [ {min: '', max: '-80', color: '#27ae60'}, {min: '-80', max: '-90', color: '#2980b9'}, {min: '-90', max: '-100', color: '#f1c40f'}, {min: '-100', max: '-110', color: '#e67e22'}, {min: '-110', max: '', color: '#c0392b'} ];
+                div.innerHTML = '<h4>Mức thu RSRP 4G (dBm)</h4>';
+                const ranges = [ 
+                    {min: '', max: '-80', color: '#27ae60', desc: 'Rất tốt'}, 
+                    {min: '-80', max: '-90', color: '#2980b9', desc: 'Tốt'}, 
+                    {min: '-90', max: '-100', color: '#f1c40f', desc: 'Trung bình'}, 
+                    {min: '-100', max: '-110', color: '#e67e22', desc: 'Yếu'}, 
+                    {min: '-110', max: '', color: '#c0392b', desc: 'Rất yếu'} 
+                ];
                 ranges.forEach(r => {
                     let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} đến ${r.max}`);
-                    labels.push(`<i style="background:${r.color}"></i> ${text}`);
+                    labels.push(`
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <i style="background:${r.color}; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #7f8c8d; margin-right: 8px;"></i> 
+                            <b style="width: 65px;">${text}</b> 
+                            <span style="color:#7f8c8d; font-style:italic;">(${r.desc})</span>
+                        </div>
+                    `);
                 });
             } else if (is3G) {
-                div.innerHTML = '<h4>RSCP 3G (dBm)</h4>';
-                const ranges = [ {min: '', max: '-75', color: '#27ae60'}, {min: '-75', max: '-85', color: '#2980b9'}, {min: '-85', max: '-95', color: '#f1c40f'}, {min: '-95', max: '-105', color: '#e67e22'}, {min: '-105', max: '', color: '#c0392b'} ];
+                div.innerHTML = '<h4>Mức thu RSCP 3G (dBm)</h4>';
+                const ranges = [ 
+                    {min: '', max: '-75', color: '#27ae60', desc: 'Rất tốt'}, 
+                    {min: '-75', max: '-85', color: '#2980b9', desc: 'Tốt'}, 
+                    {min: '-85', max: '-95', color: '#f1c40f', desc: 'Trung bình'}, 
+                    {min: '-95', max: '-105', color: '#e67e22', desc: 'Yếu'}, 
+                    {min: '-105', max: '', color: '#c0392b', desc: 'Rất yếu'} 
+                ];
                 ranges.forEach(r => {
                     let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} đến ${r.max}`);
-                    labels.push(`<i style="background:${r.color}"></i> ${text}`);
+                    labels.push(`
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <i style="background:${r.color}; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #7f8c8d; margin-right: 8px;"></i> 
+                            <b style="width: 65px;">${text}</b> 
+                            <span style="color:#7f8c8d; font-style:italic;">(${r.desc})</span>
+                        </div>
+                    `);
                 });
             } else {
                 return div; 
             }
 
-            div.innerHTML += labels.join('<br>');
+            div.innerHTML += labels.join('');
             return div;
         };
         legendControl.addTo(map);
@@ -392,6 +426,7 @@
         if (!file) return;
 
         itsLogLayer.clearLayers();
+        globalLogLines = []; // Reset dữ liệu đường nối cũ
         document.getElementById('mapLoading').style.display = 'block';
 
         const reader = new FileReader();
@@ -422,8 +457,9 @@
 
             let is3G = false, is4G = false;
             let logBounds = [];
-            // Đọc kích thước điểm đo hiện tại từ thanh slider
+            
             let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
+            let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
             for (let i = 1; i < lines.length; i++) {
                 const cols = lines[i].split('|');
@@ -459,12 +495,23 @@
                 marker.bindPopup(`<b>Công nghệ:</b> ${tech}<br><b>Signal Level:</b> ${level} dBm<br><b>Serving Cell ID:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
                 marker.addTo(itsLogLayer);
 
-                // 2. Vẽ đường nối TỪ ĐIỂM ĐO VÀO THẲNG TÂM CÁNH QUẠT
+                // 2. VẼ ĐƯỜNG NỐI VÀO ĐIỂM GIỮA VÒNG CUNG CÁNH QUẠT
                 if (servingCellObj) {
-                    const line = L.polyline([[lat, lng], [servingCellObj.lat, servingCellObj.lng]], {
-                        color: color, weight: 2, opacity: 0.8, dashArray: '5, 5'
+                    // Lấy tọa độ trung tâm của rìa ngoài vòng cung
+                    let arcCenter = getDestination(servingCellObj.lat, servingCellObj.lng, servingCellObj.azimuth, servingCellObj.baseRadius * scale);
+                    
+                    const line = L.polyline([[lat, lng], arcCenter], {
+                        color: color, weight: 1.5, opacity: 0.8, dashArray: '4, 4'
                     });
                     line.addTo(itsLogLayer);
+
+                    // Lưu Object lại để cập nhật khi người dùng kéo Slider thay đổi độ to nhỏ của cell
+                    globalLogLines.push({
+                        line: line,
+                        startLat: lat,
+                        startLng: lng,
+                        cellObj: servingCellObj
+                    });
                 }
                 
                 logBounds.push([lat, lng]);
