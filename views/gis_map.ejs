@@ -1,1030 +1,184 @@
 <%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+
+<!-- Load thư viện Bản đồ Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-    /* Thanh công cụ phía trên bản đồ */
-    .map-top-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px; }
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
-    .search-box { display: flex; gap: 5px; flex: 1; min-width: 200px; }
-    .search-box input { border: 1px solid #bdc3c7; border-radius: 4px; padding: 5px 10px; width: 100%; max-width: 250px; outline: none; font-size: 13px; }
-    .search-box button { padding: 5px 10px; font-size: 12px; }
+    .map-header { background: white; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+    .map-header h1 { margin: 0; font-size: 20px; color: #2c3e50; font-weight: bold; }
     
-    .filter-box { display: flex; align-items: center; gap: 8px; border-left: 1px solid #ecf0f1; padding-left: 10px;}
-    .filter-box select { padding: 5px 10px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer; font-weight: bold; color: #34495e; font-size: 13px; }
-
-    /* Khu vực Import Log */
-    .log-box { display: flex; align-items: center; gap: 8px; border-left: 1px solid #ecf0f1; padding-left: 10px; }
-    .log-box input[type="file"] { font-size: 12px; max-width: 180px; color: #2c3e50; }
-    .log-box button { padding: 4px 8px; font-size: 11px; }
-
-    /* Chỉnh map */
-    #map { width: 100%; height: calc(100vh - 140px); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1;}
+    .map-controls { display: flex; gap: 15px; align-items: center; }
+    .map-controls select { padding: 8px 15px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; }
     
-    /* FIX LỖI DẢI ĐEN KHI BẬT FULLSCREEN */
-    #mapWrapper:fullscreen #map { height: 100vh !important; border-radius: 0 !important; }
-    #mapWrapper:-webkit-full-screen #map { height: 100vh !important; border-radius: 0 !important; }
-    #mapWrapper:-moz-full-screen #map { height: 100vh !important; border-radius: 0 !important; }
-    #mapWrapper:-ms-fullscreen #map { height: 100vh !important; border-radius: 0 !important; }
+    #map { flex: 1; width: 100%; z-index: 1; }
     
-    /* Style Popup */
-    .rf-popup { max-width: 380px; min-width: 250px; }
-    .rf-popup-content { max-height: 300px; overflow-y: auto; padding-right: 5px; }
-    .rf-popup table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px;}
-    .rf-popup th, .rf-popup td { border: 1px solid #ddd; padding: 5px; text-align: left; word-break: break-word;}
-    .rf-popup th { background-color: #f4f6f8; color: #2c3e50; white-space: nowrap; width: 45%;}
-    .rf-popup h3 { margin: 0 0 5px 0; color: #2980b9; font-size: 15px; border-bottom: 2px solid #3498db; padding-bottom: 5px;}
-    
-    /* Loading */
-    #map-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-weight: bold; color: #2980b9;}
-
-    /* Controls Custom */
-    .leaflet-control-custom { background: #fff; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); }
-    .leaflet-control-custom a { width: 30px; height: 30px; line-height: 30px; display: block; text-align: center; text-decoration: none; color: black; font-size: 16px; font-weight: bold; background-color: #fff; border-radius: 4px; }
-    .leaflet-control-custom a:hover { background-color: #f4f4f4; color: #333; }
-
-    /* Chú thích mức tín hiệu cập nhật màu chi tiết */
-    .map-legend { position: absolute; bottom: 80px; right: 10px; background: rgba(255,255,255,0.95); padding: 10px; border-radius: 5px; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2); display: none; border: 1px solid #ccc;}
-    .legend-item { display: flex; align-items: center; margin-bottom: 5px;}
-    .legend-color { width: 16px; height: 16px; margin-right: 8px; border-radius: 3px; border: 1px solid #555;}
-
-    /* Tooltip cho công cụ Azimuth */
-    .azi-tooltip { background: rgba(255,255,255,0.9); border: 1px solid #e74c3c; color: #c0392b; font-weight: bold; font-size: 11px; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 3px;}
-    
-    /* Toolbar chức năng cho Azimuth */
-    .azimuth-toolbar { position: absolute; top: 60px; left: 50px; background: rgba(255,255,255,0.95); padding: 10px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 1000; display: none; flex-direction: column; gap: 8px; border: 1px solid #ccc; }
-    .azimuth-toolbar h4 { margin: 0 0 5px 0; font-size: 13px; color: #c0392b; border-bottom: 1px solid #ccc; padding-bottom: 5px;}
-    .azi-btn { background: #2980b9; color: white; border: none; padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold;}
-    .azi-btn:hover { opacity: 0.9; }
-    .azi-btn-green { background: #27ae60; }
+    /* Loading overlay */
+    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
 
 <div class="layout">
-    <%- include('partials/sidebar') %>
-    <main class="main-content" id="mainMapArea">
-        <header class="topbar">
-            <h1><%= page %></h1>
-        </header>
-        <div class="content-body" style="padding-bottom: 0; padding-top: 10px;">
-            
-            <!-- THANH CÔNG CỤ ĐA NĂNG LÊN PHÍA TRÊN BẢN ĐỒ -->
-            <div class="map-top-panel">
-                <div class="search-box">
-                    <input type="text" id="mapSearchInput" placeholder="Tên Cell, Cell/Site Code...">
-                    <button id="mapSearchBtn" class="btn-primary">🔍 Tìm</button>
-                    <button id="mapClearBtn" class="btn-danger" style="display: none;">✖ Hủy</button>
-                </div>
-                
-                <div class="filter-box">
-                    <label style="font-weight: bold; color: #2c3e50; font-size: 13px;">Hiển thị:</label>
-                    <select id="networkFilter">
-                        <option value="4G" selected>Mạng 4G</option>
-                        <option value="3G">Mạng 3G</option>
-                        <option value="5G">Mạng 5G</option>
-                    </select>
-                    <!-- NÚT KÍCH HOẠT MÔ PHỎNG TA HEATMAP -->
-                    <button id="btnToggleTA" class="btn-primary" style="background-color: #8e44ad; padding: 6px 12px; font-size: 12px; border: none; margin-left: 5px;">📍 Mô phỏng TA 4G</button>
-                </div>
-
-                <div class="log-box">
-                    <label style="font-weight: bold; color: #e67e22; font-size: 13px;">📡 Import Log ITS:</label>
-                    <input type="file" id="logFileInput" accept=".txt,.csv" title="Chọn file Log để mô phỏng tuyến đường đo">
-                    <button id="clearLogBtn" class="btn-danger" style="display: none;">Xóa Log</button>
-                </div>
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    <main class="main-content">
+        
+        <!-- Thanh điều khiển công cụ Bản đồ -->
+        <div class="map-header">
+            <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
+            <div class="map-controls">
+                <label style="font-weight: bold; color: #7f8c8d;">Hiển thị mạng:</label>
+                <select id="networkSelect" onchange="loadMapData()">
+                    <option value="4g" selected>Mạng 4G LTE</option>
+                    <option value="3g">Mạng 3G WCDMA</option>
+                    <option value="5g">Mạng 5G NR</option>
+                </select>
+                <button onclick="loadMapData()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    🔄 Vẽ Lên Bản Đồ
+                </button>
             </div>
-
-            <!-- KHUNG BẢN ĐỒ CHÍNH -->
-            <div style="position: relative;" id="mapWrapper">
-                <div id="map-loading">Đang khởi tạo thư viện và tải dữ liệu...</div>
-                
-                <!-- Bảng chức năng Azimuth (Hiện khi bật tool) -->
-                <div id="azimuthToolbar" class="azimuth-toolbar">
-                    <h4>Công cụ quy hoạch (Azimuth)</h4>
-                    <button id="btnAziGPS" class="azi-btn">📍 Lấy vị trí GPS cho điểm gốc</button>
-                    <button id="btnAziAddDir" class="azi-btn azi-btn-green">➕ Add Direction (Tạo tia hướng)</button>
-                    <div style="font-size: 11px; color: #555; max-width: 220px; line-height: 1.4; margin-top: 5px;">
-                        <i>* Điểm gốc đã được tạo ở giữa bản đồ. Bạn có thể Click để nhập tọa độ hoặc Kéo thả điểm ngọn để đổi hướng.</i>
-                    </div>
-                </div>
-
-                <div id="map"></div>
-                
-                <!-- Bảng Chú Thích Mức Tín Hiệu ITS Chi Tiết (6 Mức độ) -->
-                <div id="logLegend" class="map-legend">
-                    <strong style="display:block; margin-bottom: 5px; font-size:13px; color:#2c3e50;">Mức thu tín hiệu (dBm):</strong>
-                    <div class="legend-item"><div class="legend-color" style="background: #0000FF;"></div><span style="font-size: 12px;">&ge; -75</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #00FFFF;"></div><span style="font-size: 12px;">-75 tới -85</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #00FF00;"></div><span style="font-size: 12px;">-85 tới -95</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FFFF00;"></div><span style="font-size: 12px;">-95 tới -105</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FFA500;"></div><span style="font-size: 12px;">-105 tới -115</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FF0000;"></div><span style="font-size: 12px;">&lt; -115</span></div>
-                </div>
-
-                <!-- Bảng Chú Thích Cường Độ TA UE -->
-                <div id="taLegend" class="map-legend">
-                    <strong style="display:block; margin-bottom: 5px; font-size:13px; color:#2c3e50;">Mật độ UE (TA Heatmap):</strong>
-                    <div class="legend-item"><div class="legend-color" style="background: #c0392b;"></div><span style="font-size: 12px;">Rất Cao (Mở rộng búp sóng)</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div><span style="font-size: 12px;">Cao</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #e67e22;"></div><span style="font-size: 12px;">Trung Bình</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #f1c40f;"></div><span style="font-size: 12px;">Thấp (Co hẹp búp sóng)</span></div>
-                </div>
-            </div>
-
         </div>
+        
+        <div style="position: relative; flex: 1;">
+            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang vẽ tọa độ lên bản đồ...</div>
+            <div id="map"></div>
+        </div>
+
     </main>
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const cssLink = document.createElement('link');
-        cssLink.rel = 'stylesheet';
-        cssLink.href = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuY3Nz');
-        document.head.appendChild(cssLink);
+    // Khởi tạo bản đồ mặc định tại Việt Nam
+    let map = L.map('map').setView([19.806692, 105.776153], 10); 
+    let layerGroup = L.layerGroup().addTo(map);
 
-        const jsScript = document.createElement('script');
-        jsScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20vbGVhZmxldEAxLjkuNC9kaXN0L2xlYWZsZXQuanM=');
-        jsScript.onload = function() { initGISMap(); };
-        jsScript.onerror = function() {
-            document.getElementById('map-loading').textContent = "Không thể tải thư viện bản đồ. Vui lòng kiểm tra mạng!";
-            document.getElementById('map-loading').style.color = "red";
-        };
-        document.head.appendChild(jsScript);
+    // Lớp Bản đồ 1: Google Đường phố (Dễ nhìn đường)
+    const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    });
+    
+    // Lớp Bản đồ 2: Vệ tinh (Esri World Imagery)
+    const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
     });
 
-    // =====================================================================
-    // HÀM KHỞI TẠO BẢN ĐỒ VÀ CÁC THÀNH PHẦN
-    // =====================================================================
-    function initGISMap() {
-        var map = L.map('map').setView([19.806692, 105.77611], 12); 
-
-        var strGoogleSat = atob('aHR0cHM6Ly9tdDEuZ29vZ2xlLmNvbS92dC9seXJzPXMmeD17eH0meT17eX0mej17en0=');
-        var strGoogleMap = atob('aHR0cHM6Ly9tdDEuZ29vZ2xlLmNvbS92dC9seXJzPW0meD17eH0meT17eX0mej17en0=');
-        var strOSM = atob('aHR0cHM6Ly9hLnRpbGUub3BlbnN0cmVldG1hcC5vcmcve3p9L3t4fS9reX0ucG5n');
-
-        var osmLayer = L.tileLayer(strOSM, { maxZoom: 19, attribution: '© OpenStreetMap' });
-        var googleSat = L.tileLayer(strGoogleSat, { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google Satellite' });
-        var googleStreets = L.tileLayer(strGoogleMap, { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google Map' });
-
-        googleStreets.addTo(map); 
-
-        var baseMaps = {
-            "Google Streets (Cơ bản)": googleStreets,
-            "Google Satellite (Vệ tinh)": googleSat,
-            "OpenStreetMap": osmLayer
-        };
-        L.control.layers(baseMaps).addTo(map);
-        
-        // TẠO PANE ĐỂ LỚP MÔ PHỎNG TA LUÔN NẰM TRÊN CÙNG
-        map.createPane('taPane');
-        map.getPane('taPane').style.zIndex = 450; 
-
-        // =========================================================
-        // ĐẢM BẢO LEAFLET TÍNH TOÁN LẠI SIZE KHI ĐÓNG/MỞ FULLSCREEN
-        // =========================================================
-        document.addEventListener('fullscreenchange', function() { setTimeout(function() { map.invalidateSize(); }, 200); });
-        document.addEventListener('webkitfullscreenchange', function() { setTimeout(function() { map.invalidateSize(); }, 200); });
-
-        // Nút Full Screen
-        var fullscreenControl = L.control({position: 'topleft'});
-        fullscreenControl.onAdd = function () {
-            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-            div.innerHTML = '<a href="#" title="Phóng to Toàn màn hình" onclick="toggleFullScreen(); return false;">⛶</a>';
-            return div;
-        };
-        fullscreenControl.addTo(map);
-
-        window.toggleFullScreen = function() {
-            var elem = document.getElementById('mapWrapper');
-            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                if(elem.requestFullscreen) elem.requestFullscreen().catch(err => { console.log(err); });
-                else if(elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-            } else { 
-                if(document.exitFullscreen) document.exitFullscreen();
-                else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
-            }
-        };
-
-        // Nút GPS Định Vị
-        var gpsControl = L.control({position: 'topleft'});
-        gpsControl.onAdd = function () {
-            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-            div.innerHTML = `
-                <a href="#" title="Định vị trí của bạn" onclick="locateUser(); return false;" style="display: flex; justify-content: center; align-items: center;">
-                    <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="7"></circle>
-                        <line x1="12" y1="1" x2="12" y2="5"></line>
-                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                        <line x1="1" y1="12" x2="5" y2="12"></line>
-                        <line x1="19" y1="12" x2="23" y2="12"></line>
-                    </svg>
-                </a>
-            `;
-            return div;
-        };
-        gpsControl.addTo(map);
-
-        var userMarker, userCircle;
-        window.locateUser = function() { map.locate({setView: true, maxZoom: 16}); };
-        map.on('locationfound', function(e) {
-            if (userMarker) map.removeLayer(userMarker);
-            if (userCircle) map.removeLayer(userCircle);
-            userMarker = L.circleMarker(e.latlng, { radius: 7, fillColor: "#4285F4", color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 1 }).addTo(map).bindPopup("Vị trí của bạn").openPopup();
-            userCircle = L.circle(e.latlng, { radius: e.accuracy / 2, color: "#4285F4", fillColor: "#4285F4", weight: 1, fillOpacity: 0.15 }).addTo(map);
-        });
-        map.on('locationerror', function(e) { alert("Không thể lấy vị trí. Hãy bật Location cho trình duyệt."); });
-
-        // =========================================================
-        // NÚT CÔNG CỤ AZIMUTH (QUY HOẠCH CELL PLANNING)
-        // =========================================================
-        var azimuthControlLayer = L.featureGroup().addTo(map);
-        var originPointMarker = null;
-        window.directionLines = []; // Lưu trữ mảng các tia hướng
-        window.currentOriginName = "Điểm Gốc";
-        var isAzimuthMode = false;
-
-        var azimuthControl = L.control({position: 'topleft'});
-        azimuthControl.onAdd = function () {
-            var div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-            div.innerHTML = `
-                <a href="#" id="btnAzimuthTool" title="Công cụ Azimuth" style="display: flex; justify-content: center; align-items: center;">
-                    <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.03 8.28l-8.75 8.75a2.83 2.83 0 0 1-4 0l-5-5a2.83 2.83 0 0 1 0-4l8.75-8.75a2.83 2.83 0 0 1 4 0l5 5a2.83 2.83 0 0 1 0 4z"></path>
-                        <path d="M12 18l-2 2"></path>
-                        <path d="M16 14l-2 2"></path>
-                        <path d="M8 10l-2 2"></path>
-                    </svg>
-                </a>
-            `;
-            return div;
-        };
-        azimuthControl.addTo(map);
-
-        document.getElementById('btnAzimuthTool').addEventListener('click', function(e) {
-            e.preventDefault();
-            isAzimuthMode = !isAzimuthMode;
-            
-            if (isAzimuthMode) {
-                // BẬT CHẾ ĐỘ AZIMUTH
-                this.style.backgroundColor = '#e74c3c';
-                this.innerHTML = '<span style="color:white; font-size:14px; font-weight:bold;">✖</span>';
-                
-                // Hiện thanh công cụ nhỏ
-                document.getElementById('azimuthToolbar').style.display = 'flex';
-                
-                // Tự động tạo điểm gốc ở giữa bản đồ hiện tại
-                createAzimuthOrigin(map.getCenter());
-            } else {
-                // TẮT CHẾ ĐỘ
-                this.style.backgroundColor = '#fff';
-                this.innerHTML = `
-                    <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.03 8.28l-8.75 8.75a2.83 2.83 0 0 1-4 0l-5-5a2.83 2.83 0 0 1 0-4l8.75-8.75a2.83 2.83 0 0 1 4 0l5 5a2.83 2.83 0 0 1 0 4z"></path>
-                        <path d="M12 18l-2 2"></path>
-                        <path d="M16 14l-2 2"></path>
-                        <path d="M8 10l-2 2"></path>
-                    </svg>
-                `;
-                document.getElementById('azimuthToolbar').style.display = 'none';
-                azimuthControlLayer.clearLayers();
-                originPointMarker = null;
-                window.directionLines = [];
-            }
-        });
-
-        // Xử lý nút Lấy GPS trên Toolbar Azimuth
-        document.getElementById('btnAziGPS').addEventListener('click', function() {
-            var btn = this;
-            if (navigator.geolocation) {
-                btn.innerText = "Đang tìm tín hiệu GPS...";
-                navigator.geolocation.getCurrentPosition(function(pos) {
-                    var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-                    if (originPointMarker) {
-                        originPointMarker.setLatLng(latlng);
-                        map.setView(latlng, 16);
-                        updateAllDirectionLines(latlng);
-                        originPointMarker.setPopupContent(getOriginPopupHtml(latlng, window.currentOriginName));
-                    }
-                    btn.innerText = "📍 Lấy vị trí GPS cho điểm gốc";
-                }, function() {
-                    alert("Lỗi: Không thể lấy vị trí GPS. Hãy kiểm tra quyền truy cập vị trí của trình duyệt.");
-                    btn.innerText = "📍 Lấy vị trí GPS cho điểm gốc";
-                }, {timeout: 10000});
-            } else {
-                alert("Trình duyệt không hỗ trợ tính năng định vị.");
-            }
-        });
-
-        // Xử lý nút Add Direction trên Toolbar
-        document.getElementById('btnAziAddDir').addEventListener('click', function() {
-            window.addAzimuthDirection();
-        });
-
-        // Hàm tạo điểm gốc
-        function createAzimuthOrigin(latlng) {
-            if (originPointMarker) azimuthControlLayer.removeLayer(originPointMarker);
-            
-            originPointMarker = L.marker(latlng, {
-                draggable: true,
-                icon: L.divIcon({className: 'custom-origin-icon', html: '<div style="font-size:24px; text-shadow: 0 2px 2px rgba(0,0,0,0.5);">📍</div>', iconSize: [24, 24], iconAnchor: [12, 24]})
-            }).addTo(azimuthControlLayer);
-
-            originPointMarker.bindPopup(getOriginPopupHtml(latlng, window.currentOriginName)).openPopup();
-
-            originPointMarker.on('drag', function(e) {
-                var newLatLng = e.target.getLatLng();
-                updateAllDirectionLines(newLatLng);
-                originPointMarker.setPopupContent(getOriginPopupHtml(newLatLng, window.currentOriginName));
-            });
-        }
-
-        // HTML Popup Điểm Gốc (Đã bỏ nút Add Direction vì đã mang ra ngoài Toolbar)
-        function getOriginPopupHtml(latlng, name) {
-            return `
-                <div style="width: 180px;">
-                    <h4 style="margin:0 0 10px 0; color:#c0392b; border-bottom:1px solid #ccc; padding-bottom:5px;">Cấu hình Điểm Gốc</h4>
-                    <label style="font-weight:bold; font-size:12px;">Tên điểm:</label>
-                    <input type="text" id="aziOrigName" value="${name}" style="width:100%; margin-bottom:5px; padding:3px; border:1px solid #bdc3c7;">
-                    <label style="font-weight:bold; font-size:12px;">Vĩ độ (Latitude):</label>
-                    <input type="number" id="aziOrigLat" value="${latlng.lat.toFixed(6)}" style="width:100%; margin-bottom:5px; padding:3px; border:1px solid #bdc3c7;">
-                    <label style="font-weight:bold; font-size:12px;">Kinh độ (Longitude):</label>
-                    <input type="number" id="aziOrigLng" value="${latlng.lng.toFixed(6)}" style="width:100%; margin-bottom:10px; padding:3px; border:1px solid #bdc3c7;">
-                    <button onclick="saveAzimuthOrigin()" style="background:#2980b9; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer; width:100%;">Cập nhật tọa độ</button>
-                </div>
-            `;
-        }
-
-        // Hàm được gọi khi bấm "Cập nhật" ở điểm gốc
-        window.saveAzimuthOrigin = function() {
-            var name = document.getElementById('aziOrigName').value;
-            var lat = parseFloat(document.getElementById('aziOrigLat').value);
-            var lng = parseFloat(document.getElementById('aziOrigLng').value);
-
-            if (!isNaN(lat) && !isNaN(lng)) {
-                window.currentOriginName = name;
-                var newLatLng = L.latLng(lat, lng);
-                originPointMarker.setLatLng(newLatLng);
-                map.setView(newLatLng); // Dịch map về điểm vừa nhập
-                updateAllDirectionLines(newLatLng);
-                originPointMarker.setPopupContent(getOriginPopupHtml(newLatLng, name));
-                originPointMarker.closePopup();
-            } else { alert("Tọa độ không hợp lệ!"); }
-        };
-
-        // Hàm Add Direction
-        window.addAzimuthDirection = function() {
-            if (!originPointMarker) return;
-            var startLatLng = originPointMarker.getLatLng();
-            var distance = 100; // Mặc định 100m
-            var azimuth = 0;    // Mặc định Bắc
-            var endLatLng = calculateDestination(startLatLng.lat, startLatLng.lng, azimuth, distance);
-
-            var id = Date.now();
-            var name = "Sector " + (window.directionLines.length + 1);
-
-            var line = L.polyline([startLatLng, endLatLng], {color: '#e74c3c', weight: 2, dashArray: '5,5'}).addTo(azimuthControlLayer);
-
-            var endMarker = L.marker(endLatLng, {
-                draggable: true,
-                icon: L.divIcon({className: 'custom-end-icon', html: '<div style="width:12px; height:12px; background:#e74c3c; border-radius:50%; border:2px solid white; box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>', iconSize: [12, 12], iconAnchor: [6, 6]})
-            }).addTo(azimuthControlLayer);
-
-            var dirObj = { id: id, line: line, marker: endMarker, name: name, azimuth: azimuth, distance: distance };
-            window.directionLines.push(dirObj);
-
-            updateEndMarkerTooltip(dirObj);
-            endMarker.bindPopup(getEndPopupHtml(dirObj));
-
-            // Bắt sự kiện Drag Real-time
-            endMarker.on('drag', function(e) {
-                var currentStart = originPointMarker.getLatLng();
-                var currentEnd = e.target.getLatLng();
-                line.setLatLngs([currentStart, currentEnd]);
-
-                var stats = calculateDistanceAndAzimuth(currentStart, currentEnd);
-                dirObj.distance = stats.distance;
-                dirObj.azimuth = stats.azimuth;
-
-                updateEndMarkerTooltip(dirObj);
-                endMarker.setPopupContent(getEndPopupHtml(dirObj));
-            });
-        };
-
-        // Cập nhật lại các tia khi Điểm gốc bị kéo đi
-        function updateAllDirectionLines(newStartLatLng) {
-            window.directionLines.forEach(function(dir) {
-                var currentEnd = dir.marker.getLatLng();
-                dir.line.setLatLngs([newStartLatLng, currentEnd]);
-                var stats = calculateDistanceAndAzimuth(newStartLatLng, currentEnd);
-                dir.distance = stats.distance;
-                dir.azimuth = stats.azimuth;
-                updateEndMarkerTooltip(dir);
-                dir.marker.setPopupContent(getEndPopupHtml(dir));
-            });
-        }
-
-        // HTML Popup Điểm Ngọn
-        function getEndPopupHtml(dirObj) {
-            return `
-                <div style="width: 180px;">
-                    <label style="font-weight:bold; font-size:12px;">Tên Hướng:</label>
-                    <input type="text" id="dirName_${dirObj.id}" value="${dirObj.name}" style="width:100%; margin-bottom:5px; padding:3px;">
-                    <label style="font-weight:bold; font-size:12px;">Góc Azimuth (°):</label>
-                    <input type="number" id="dirAzi_${dirObj.id}" value="${dirObj.azimuth.toFixed(1)}" style="width:100%; margin-bottom:5px; padding:3px;">
-                    <label style="font-weight:bold; font-size:12px;">Độ dài tuyến (m):</label>
-                    <input type="number" id="dirDist_${dirObj.id}" value="${dirObj.distance.toFixed(1)}" style="width:100%; margin-bottom:10px; padding:3px;">
-                    <button onclick="saveDirection(${dirObj.id})" style="background:#2980b9; color:white; border:none; padding:6px 10px; border-radius:3px; cursor:pointer; width:100%;">Lưu Thay Đổi</button>
-                </div>
-            `;
-        }
-
-        // Cập nhật điểm ngọn khi nhập số liệu thủ công
-        window.saveDirection = function(id) {
-            var dirObj = window.directionLines.find(d => d.id === id);
-            if (!dirObj) return;
-
-            var newName = document.getElementById('dirName_' + id).value;
-            var newAzi = parseFloat(document.getElementById('dirAzi_' + id).value);
-            var newDist = parseFloat(document.getElementById('dirDist_' + id).value);
-
-            if (!isNaN(newAzi) && !isNaN(newDist)) {
-                dirObj.name = newName;
-                dirObj.azimuth = newAzi;
-                dirObj.distance = newDist;
-
-                var startLatLng = originPointMarker.getLatLng();
-                var newEndLatLng = calculateDestination(startLatLng.lat, startLatLng.lng, newAzi, newDist);
-
-                dirObj.marker.setLatLng(newEndLatLng);
-                dirObj.line.setLatLngs([startLatLng, newEndLatLng]);
-
-                updateEndMarkerTooltip(dirObj);
-                dirObj.marker.setPopupContent(getEndPopupHtml(dirObj));
-                dirObj.marker.closePopup();
-            } else { alert("Thông số không hợp lệ!"); }
-        };
-
-        // Render Tooltip nổi cho điểm ngọn
-        function updateEndMarkerTooltip(dirObj) {
-            var content = `<b>${dirObj.name}</b><br>Azimuth: ${dirObj.azimuth.toFixed(1)}°<br>Khoảng cách: ${dirObj.distance.toFixed(1)}m`;
-            if (dirObj.marker.getTooltip()) {
-                dirObj.marker.setTooltipContent(content);
-            } else {
-                dirObj.marker.bindTooltip(content, {permanent: true, direction: 'top', className: 'azi-tooltip', offset: [0, -10]}).openTooltip();
-            }
-        }
-
-        // =========================================================
-        // HÀM TOÁN HỌC CHO AZIMUTH
-        // =========================================================
-        function calculateDestination(lat, lng, azimuth, radiusMeters) {
-            var R = 6378137;
-            var angleRad = azimuth * Math.PI / 180;
-            var dx = radiusMeters * Math.sin(angleRad);
-            var dy = radiusMeters * Math.cos(angleRad);
-            var dLat = dy / R * (180 / Math.PI);
-            var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-            return L.latLng(lat + dLat, lng + dLng);
-        }
-
-        function calculateDistanceAndAzimuth(p1, p2) {
-            var distance = p1.distanceTo(p2);
-            var lat1 = p1.lat * Math.PI / 180;
-            var lon1 = p1.lng * Math.PI / 180;
-            var lat2 = p2.lat * Math.PI / 180;
-            var lon2 = p2.lng * Math.PI / 180;
-            var y = Math.sin(lon2 - lon1) * Math.cos(lat2);
-            var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-            var brng = Math.atan2(y, x);
-            var azimuth = (((brng * 180 / Math.PI) + 360) % 360);
-            return { distance: distance, azimuth: azimuth };
-        }
-
-
-        // Thanh Kéo Thay Đổi Độ Dài Cell (Bán Kính) và Kích Thước Điểm Đo
-        var globalRadius = 200; 
-        var globalDotRadius = 3.5; 
-
-        var slidersControl = L.control({position: 'bottomleft'});
-        slidersControl.onAdd = function() {
-            var div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
-            div.style.backgroundColor = 'white';
-            div.style.padding = '8px 12px';
-            div.style.display = 'flex';
-            div.style.flexDirection = 'column';
-            div.style.gap = '8px';
-            div.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <label for="radiusSlider" style="font-size: 12px; font-weight: bold; color: #2c3e50; margin:0; width: 110px;">
-                        Độ vươn Cell: <span id="radiusValue">200</span>m
-                    </label>
-                    <input type="range" id="radiusSlider" min="50" max="1500" step="50" value="200" style="width: 120px; cursor: pointer; accent-color: #3498db;">
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <label for="dotSlider" style="font-size: 12px; font-weight: bold; color: #2c3e50; margin:0; width: 110px;">
-                        Kích thước Điểm: <span id="dotValue">3.5</span>
-                    </label>
-                    <input type="range" id="dotSlider" min="1" max="10" step="0.5" value="3.5" style="width: 120px; cursor: pointer; accent-color: #e67e22;">
-                </div>
-            `;
-            L.DomEvent.disableClickPropagation(div);
-            return div;
-        };
-        slidersControl.addTo(map);
-
-        // =========================================================
-        // CÁC HÀM TOÁN HỌC VẼ RF: SECTOR (CÁNH QUẠT GỐC) VÀ DONUT SLICE (LÁT CẮT TA)
-        // =========================================================
-        
-        function calculateSectorArcCenter(lat, lng, azimuth, radiusMeters) {
-            var R = 6378137;
-            var angleRad = azimuth * Math.PI / 180;
-            var dx = radiusMeters * Math.sin(angleRad);
-            var dy = radiusMeters * Math.cos(angleRad);
-            var dLat = dy / R * (180 / Math.PI);
-            var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-            return { lat: lat + dLat, lng: lng + dLng };
-        }
-
-        // Vẽ cánh quạt thông thường
-        function createSectorPolygon(lat, lng, azimuth, radiusMeters, beamwidth) {
-            var R = 6378137; 
-            var center = [lat, lng];
-            var points = [center];
-            var startAngle = azimuth - beamwidth / 2;
-            var endAngle = azimuth + beamwidth / 2;
-
-            for (var i = startAngle; i <= endAngle; i += 3) {
-                var angleRad = i * Math.PI / 180;
-                var dx = radiusMeters * Math.sin(angleRad);
-                var dy = radiusMeters * Math.cos(angleRad);
-                var dLat = dy / R * (180 / Math.PI);
-                var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-                points.push([lat + dLat, lng + dLng]);
-            }
-            points.push(center);
-            return points;
-        }
-
-        // Vẽ Lát cắt hình Vành Khăn Đồng Tâm (Donut Slice) cho chức năng TA Heatmap
-        function createDonutSlice(lat, lng, azimuth, innerRadius, outerRadius, beamwidth) {
-            var R = 6378137;
-            var points = [];
-            var startAngle = azimuth - beamwidth / 2;
-            var endAngle = azimuth + beamwidth / 2;
-
-            // Vẽ viền cung ngoài (Outer arc)
-            for (var i = startAngle; i <= endAngle; i += 2) {
-                var angleRad = i * Math.PI / 180;
-                var dx = outerRadius * Math.sin(angleRad);
-                var dy = outerRadius * Math.cos(angleRad);
-                var dLat = dy / R * (180 / Math.PI);
-                var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-                points.push([lat + dLat, lng + dLng]);
-            }
-
-            // Vẽ viền cung trong ngược chiều (Inner arc)
-            if (innerRadius > 0) {
-                for (var i = endAngle; i >= startAngle; i -= 2) {
-                    var angleRad = i * Math.PI / 180;
-                    var dx = innerRadius * Math.sin(angleRad);
-                    var dy = innerRadius * Math.cos(angleRad);
-                    var dLat = dy / R * (180 / Math.PI);
-                    var dLng = dx / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-                    points.push([lat + dLat, lng + dLng]);
-                }
-            } else {
-                points.push([lat, lng]); // Trạm gốc nếu innerRadius = 0
-            }
-            return points;
-        }
-
-        // Quy ước màu Tín Hiệu Drive Test (6 Mức chi tiết)
-        function getColorByLevel(level) {
-            if (level >= -75) return '#0000FF';   // Xanh lam (Blue)
-            if (level >= -85) return '#00FFFF';   // Xanh lơ (Cyan)
-            if (level >= -95) return '#00FF00';   // Xanh lá (Green)
-            if (level >= -105) return '#FFFF00';  // Vàng (Yellow)
-            if (level >= -115) return '#FFA500';  // Cam (Orange)
-            return '#FF0000';                     // Đỏ (Red)
-        }
-
-        // =========================================================
-        // KHAI BÁO CÁC LAYER GROUPS VÀ BIẾN STATE
-        // =========================================================
-        var allMapData = [];
-        var allTAData = [];
-        var sectorLayerGroup = L.layerGroup().addTo(map);
-        var taLayerGroup = L.layerGroup().addTo(map); 
-        var currentSearchQuery = "";
-        var cachedLogPoints = []; 
-        var isTAMode = false; 
-
-        // =========================================================
-        // TÍNH NĂNG 1: RENDER BẢN ĐỒ CELL GỐC
-        // =========================================================
-        function renderMap(filterType) {
-            sectorLayerGroup.clearLayers(); 
-
-            var filteredData = allMapData.filter(cell => cell.network === filterType);
-            var searchBounds = [];
-
-            filteredData.forEach(cell => {
-                var lat = parseFloat(cell.Latitude);
-                var lon = parseFloat(cell.Longitude);
-                var azi = parseFloat(cell.Azimuth) || 0;
-                
-                if(isNaN(lat) || isNaN(lon)) return; 
-
-                var baseColor, baseFillColor;
-                if (cell.network === '4G') {
-                    baseColor = '#c0392b'; baseFillColor = '#e74c3c'; // Đỏ
-                } else if (cell.network === '3G') {
-                    baseColor = '#f39c12'; baseFillColor = '#f1c40f'; // Vàng
-                } else if (cell.network === '5G') {
-                    baseColor = '#2980b9'; baseFillColor = '#3498db'; // Xanh Dương
-                }
-
-                var isMatch = false;
-                if (currentSearchQuery) {
-                    let q = currentSearchQuery.toUpperCase();
-                    let cName = String(cell.CELL_NAME || cell.SITE_NAME || cell.cell_name || '').toUpperCase();
-                    let cCode = String(cell.Cell_code || '').toUpperCase();
-                    let sCode = String(cell.Site_code || '').toUpperCase();
-                    
-                    if (cName.includes(q) || cCode.includes(q) || sCode.includes(q)) isMatch = true;
-                }
-
-                var finalColor = baseColor;
-                var finalFillColor = baseFillColor;
-                var finalWeight = 1;
-                var finalOpacity = 0.6;
-                var isDimmed = false;
-
-                if (currentSearchQuery) {
-                    if (isMatch) {
-                        finalWeight = 3; finalOpacity = 0.95; finalColor = '#000';    
-                        searchBounds.push([lat, lon]); 
-                    } else {
-                        finalWeight = 1; finalOpacity = 0.15; isDimmed = true;
-                    }
-                }
-
-                var sectorPoints = createSectorPolygon(lat, lon, azi, globalRadius, 65);
-                var sector = L.polygon(sectorPoints, {
-                    color: finalColor, weight: finalWeight, fillColor: finalFillColor, fillOpacity: finalOpacity
-                });
-
-                var tableRows = '';
-                for (let key in cell) {
-                    if (cell.hasOwnProperty(key) && key !== 'network') {
-                        let val = cell[key];
-                        if (val === null || val === undefined) val = '';
-                        tableRows += `<tr><th>${key}</th><td>${val}</td></tr>`;
-                    }
-                }
-
-                var popupHtml = `<div class="rf-popup"><h3>Trạm ${cell.Site_code || ''} - Mạng ${cell.network}</h3><div class="rf-popup-content"><table>${tableRows}</table></div></div>`;
-                sector.bindPopup(popupHtml);
-                
-                sector.on('mouseover', function () { if (!isDimmed) this.setStyle({fillOpacity: 0.95, weight: 3}); });
-                sector.on('mouseout', function () { this.setStyle({fillOpacity: finalOpacity, weight: finalWeight}); });
-
-                cell._arcCenter = calculateSectorArcCenter(lat, lon, azi, globalRadius);
-
-                sector.addTo(sectorLayerGroup);
-            });
-
-            if (currentSearchQuery && !isTAMode) {
-                if (searchBounds.length > 0) {
-                    map.fitBounds(L.latLngBounds(searchBounds), { padding: [50, 50], maxZoom: 16 });
-                } else {
-                    alert(`Không tìm thấy Cell/Site nào chứa từ khóa "${currentSearchQuery}" trong mạng ${filterType}!`);
-                }
-            }
-
-            if(cachedLogPoints.length > 0) {
-                renderLogPoints();
-            }
-        }
-
-        // =========================================================
-        // TÍNH NĂNG 2: MÔ PHỎNG TA HEATMAP (TIMING ADVANCE) NẰM ĐÈ LÊN TRÊN CELL
-        // =========================================================
-        document.getElementById('btnToggleTA').addEventListener('click', function() {
-            isTAMode = !isTAMode;
-            if (isTAMode) {
-                // Bật chế độ TA: Đổi màu nút, BẬT LAYER TA LÊN TRÊN CELL
-                this.style.backgroundColor = '#e74c3c';
-                this.innerHTML = '✖ Thoát TA 4G';
-                document.getElementById('taLegend').style.display = 'block';
-                loadAndRenderTA();
-            } else {
-                // Thoát chế độ TA: Xóa Layer TA, giữ nguyên Cell Gốc
-                this.style.backgroundColor = '#8e44ad';
-                this.innerHTML = '📍 Mô phỏng TA 4G';
-                taLayerGroup.clearLayers();
-                document.getElementById('taLegend').style.display = 'none';
-            }
-        });
-
-        function loadAndRenderTA() {
-            if (allTAData.length > 0) {
-                renderTAHeatmap();
-                return;
-            }
-            document.getElementById('map-loading').textContent = "Đang tải dữ liệu Timing Advance...";
-            document.getElementById('map-loading').style.display = 'block';
-
-            fetch('/api/ta-data')
-                .then(res => res.json())
-                .then(data => {
-                    allTAData = data;
-                    document.getElementById('map-loading').style.display = 'none';
-                    
-                    if (allTAData.length === 0) {
-                        alert("Không có dữ liệu TA trong Database. Vui lòng vào Import Data để tải lên file TA_Query.");
-                        document.getElementById('btnToggleTA').click(); 
-                        return;
-                    }
-                    renderTAHeatmap();
-                }).catch(err => {
-                    console.error(err);
-                    document.getElementById('map-loading').textContent = "Lỗi tải TA. Kiểm tra kết nối.";
-                });
-        }
-
-        function renderTAHeatmap() {
-            taLayerGroup.clearLayers();
-            let taStepRadius = 150; // Giả định mỗi Index TA cách nhau 150 mét
-            let searchBounds = [];
-
-            allTAData.forEach(cell => {
-                let lat = parseFloat(cell.Latitude);
-                let lon = parseFloat(cell.Longitude);
-                let azi = parseFloat(cell.Azimuth) || 0;
-
-                if(isNaN(lat) || isNaN(lon)) return;
-
-                // Tìm Max UE
-                let maxUE = 0;
-                for(let i = 0; i <= 11; i++) {
-                    let val = parseInt(cell['Index' + i]) || 0;
-                    if(val > maxUE) maxUE = val;
-                }
-                if (maxUE === 0) return; 
-
-                // TÍNH NĂNG TÌM KIẾM THEO TÊN TRÊN LỚP TA
-                if (currentSearchQuery) {
-                    let q = currentSearchQuery.toUpperCase();
-                    let cCode = String(cell.Cell_Code || '').toUpperCase();
-                    let cName = String(cell.CELL_NAME || cell.eNodeB_Name || '').toUpperCase();
-                    let sCode = String(cell.Site_code || '').toUpperCase();
-                    
-                    // Nếu người dùng đang tìm kiếm thì LỚP TA chỉ vẽ những trạm khớp kết quả tìm kiếm
-                    if (!(cCode.includes(q) || cName.includes(q) || sCode.includes(q))) {
-                        return; 
-                    }
-                    searchBounds.push([lat, lon]);
-                }
-
-                // Vẽ các dải phân đoạn đồng tâm
-                for(let i = 0; i <= 11; i++) {
-                    let ueCount = parseInt(cell['Index' + i]) || 0;
-                    if (ueCount === 0) continue; 
-
-                    let ratio = ueCount / maxUE; 
-
-                    // Ánh xạ Heatmap Color
-                    let color = '#f1c40f'; // Ít UE: Vàng
-                    if (ratio >= 0.8) color = '#c0392b'; // Rất nhiều: Đỏ đậm
-                    else if (ratio >= 0.5) color = '#e74c3c'; // Nhiều: Đỏ nhạt
-                    else if (ratio >= 0.2) color = '#e67e22'; // Trung bình: Cam
-
-                    let innerRadius = i * taStepRadius;
-                    let outerRadius = (i + 1) * taStepRadius;
-
-                    // Phân đoạn ít người, góc thu hẹp
-                    let dynamicBeamwidth = 5 + (60 * ratio);
-
-                    let points = createDonutSlice(lat, lon, azi, innerRadius, outerRadius, dynamicBeamwidth);
-
-                    // Sử dụng Pane đặc biệt "taPane" để Lớp TA luôn đè lên Cell Gốc
-                    let poly = L.polygon(points, {
-                        color: '#333', weight: 0.5, fillColor: color, fillOpacity: 0.85, pane: 'taPane'
-                    });
-
-                    poly.bindPopup(`
-                        <div style="font-family: Arial;">
-                            <strong style="color:#2980b9;font-size:14px;">Cell: ${cell.Cell_Code}</strong><br/>
-                            <b>Chỉ số TA:</b> Index ${i}<br/>
-                            <b>Khoảng cách giả định:</b> ${innerRadius}m - ${outerRadius}m<br/>
-                            <b style="color:red;">Lượng thiết bị (UE):</b> ${ueCount} (Max: ${maxUE})
-                        </div>
-                    `);
-                    
-                    poly.on('mouseover', function () { this.setStyle({weight: 2}); });
-                    poly.on('mouseout', function () { this.setStyle({weight: 0.5}); });
-
-                    poly.addTo(taLayerGroup);
-                }
-            });
-
-            // Tự động thu phóng (Zoom) nếu đang ở chế độ tìm kiếm
-            if (currentSearchQuery && searchBounds.length > 0) {
-                map.fitBounds(L.latLngBounds(searchBounds), { padding: [50, 50], maxZoom: 16 });
-            }
-        }
-
-        // =========================================================
-        // TÍNH NĂNG 3: MÔ PHỎNG DRIVE TEST ITS LOG
-        // =========================================================
-        var logLayerGroup = L.layerGroup().addTo(map);
-
-        document.getElementById('logFileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            document.getElementById('map-loading').textContent = "Đang xử lý Log và vẽ tia...";
-            document.getElementById('map-loading').style.display = 'block';
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                processLogData(event.target.result);
-            };
-            reader.readAsText(file);
-        });
-
-        document.getElementById('clearLogBtn').addEventListener('click', function() {
-            logLayerGroup.clearLayers();
-            document.getElementById('logLegend').style.display = 'none';
-            document.getElementById('logFileInput').value = '';
-            cachedLogPoints = []; 
-            this.style.display = 'none';
-        });
-
-        function processLogData(csvText) {
-            cachedLogPoints = []; 
-            const lines = csvText.split(/\r?\n/);
-            if (lines.length < 2) {
-                alert("File log rỗng hoặc không đúng định dạng!");
-                document.getElementById('map-loading').style.display = 'none';
-                return;
-            }
-
-            const headers = lines[0].split('|').map(h => h.trim());
-            const latIdx = headers.indexOf('Latitude');
-            const lonIdx = headers.indexOf('Longitude');
-            const levelIdx = headers.indexOf('Level');
-            const techIdx = headers.indexOf('NetworkTech');
-            const nodeIdx = headers.indexOf('Node');
-            const cellIdIdx = headers.indexOf('CellID');
-            const lacIdx = headers.indexOf('LAC'); 
-
-            if (latIdx === -1 || lonIdx === -1) {
-                alert("File log ITS không hợp lệ. Không tìm thấy cột Latitude/Longitude phân cách bằng dấu '|'.");
-                document.getElementById('map-loading').style.display = 'none';
-                return;
-            }
-
-            for (let i = 1; i < lines.length; i++) {
-                const parts = lines[i].split('|');
-                if (parts.length < Math.max(latIdx, lonIdx, levelIdx)) continue;
-
-                const lat = parseFloat(parts[latIdx]);
-                const lon = parseFloat(parts[lonIdx]);
-                if (isNaN(lat) || isNaN(lon)) continue;
-
-                const level = parseFloat(parts[levelIdx]);
-                const tech = parts[techIdx] ? parts[techIdx].trim() : '';
-                const node = parts[nodeIdx] ? parts[nodeIdx].trim() : '';
-                const cellId = parts[cellIdIdx] ? parts[cellIdIdx].trim() : '';
-                const lac = (lacIdx !== -1 && parts[lacIdx]) ? parts[lacIdx].trim() : '';
-
-                cachedLogPoints.push({ lat, lon, level, tech, node, cellId, lac });
-            }
-            
-            renderLogPoints(true); 
-            document.getElementById('map-loading').style.display = 'none';
-        }
-
-        function renderLogPoints(shouldZoom = false) {
-            logLayerGroup.clearLayers();
-            if(cachedLogPoints.length === 0) return;
-
-            document.getElementById('logLegend').style.display = 'block';
-            document.getElementById('clearLogBtn').style.display = 'inline-block';
-            
-            let logBounds = [];
-
-            cachedLogPoints.forEach(p => {
-                logBounds.push([p.lat, p.lon]);
-                const pointColor = getColorByLevel(p.level);
-
-                L.circleMarker([p.lat, p.lon], {
-                    radius: globalDotRadius, fillColor: pointColor, color: '#000', weight: 0.5, fillOpacity: 1
-                }).addTo(logLayerGroup).bindPopup(`<b>Tech:</b> ${p.tech}<br><b>Level:</b> ${p.level} dBm<br><b>LAC/Node:</b> ${p.tech === '3G' ? p.lac : p.node}<br><b>CellID:</b> ${p.cellId}`);
-
-                let matchedCell = null;
-                
-                if (p.tech === '3G') {
-                    matchedCell = allMapData.find(c => 
-                        c.network === '3G' && 
-                        (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId) && 
-                        String(c.BSC_LAC) === p.lac
-                    );
-                    if (!matchedCell) {
-                        matchedCell = allMapData.find(c => c.network === '3G' && (String(c.CI) === p.cellId || String(c.Cell_code) === p.cellId));
-                    }
-                } else if (p.tech === '4G') {
-                    matchedCell = allMapData.find(c => 
-                        c.network === '4G' && 
-                        (String(c.ENodeBID) === p.node || String(c.Site_code) === p.node) &&
-                        (String(c.Cell_code) === p.cellId || String(c.Lcrid) === p.cellId)
-                    );
-                    if (!matchedCell) {
-                        matchedCell = allMapData.find(c => c.network === '4G' && String(c.Cell_code) === p.cellId);
-                    }
-                }
-
-                if (matchedCell) {
-                    let cellLat = parseFloat(matchedCell.Latitude);
-                    let cellLon = parseFloat(matchedCell.Longitude);
-                    let cellAzi = parseFloat(matchedCell.Azimuth) || 0;
-                    
-                    let arcCenter = calculateSectorArcCenter(cellLat, cellLon, cellAzi, globalRadius);
-
-                    L.polyline([[p.lat, p.lon], [arcCenter.lat, arcCenter.lng]], {
-                        color: pointColor, weight: 1.5, opacity: 0.6, dashArray: '4, 5' 
-                    }).addTo(logLayerGroup);
-                }
-            });
-
-            if (shouldZoom && logBounds.length > 0) {
-                map.fitBounds(L.latLngBounds(logBounds), { padding: [30, 30] });
-            }
-        }
-
-        // =========================================================
-        // GẮN SỰ KIỆN CHO CÁC CONTROL BÊN NGOÀI
-        // =========================================================
-        
-        document.getElementById('radiusSlider').addEventListener('input', function(e) {
-            globalRadius = parseInt(e.target.value);
-            document.getElementById('radiusValue').innerText = globalRadius;
-            
-            // Cập nhật lại bản đồ Cell và cập nhật Lớp TA (nếu đang bật)
-            renderMap(document.getElementById('networkFilter').value); 
-            if(isTAMode) renderTAHeatmap();
-        });
-
-        document.getElementById('dotSlider').addEventListener('input', function(e) {
-            globalDotRadius = parseFloat(e.target.value);
-            document.getElementById('dotValue').innerText = globalDotRadius;
-            renderLogPoints(false); 
-        });
-
-        document.getElementById('networkFilter').addEventListener('change', function(e) {
-            renderMap(e.target.value);
-        });
-
-        document.getElementById('mapSearchBtn').addEventListener('click', function() {
-            var val = document.getElementById('mapSearchInput').value.trim();
-            if (val) {
-                currentSearchQuery = val;
-                document.getElementById('mapClearBtn').style.display = 'inline-block';
-                
-                // Đồng bộ tìm kiếm cho cả 2 lớp Cell gốc và TA
-                renderMap(document.getElementById('networkFilter').value);
-                if(isTAMode) renderTAHeatmap(); 
-            }
-        });
-
-        document.getElementById('mapSearchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') document.getElementById('mapSearchBtn').click();
-        });
-
-        document.getElementById('mapClearBtn').addEventListener('click', function() {
-            document.getElementById('mapSearchInput').value = '';
-            currentSearchQuery = '';
-            this.style.display = 'none';
-            renderMap(document.getElementById('networkFilter').value);
-            if(isTAMode) renderTAHeatmap();
-        });
-
-        // TẢI DỮ LIỆU RF MỘT LẦN VÀ BẬT BỘ LỌC
-        fetch('/api/gis-data')
-            .then(res => {
-                if(!res.ok) throw new Error("Lỗi HTTP: " + res.status);
-                return res.json();
-            })
-            .then(data => {
-                document.getElementById('map-loading').style.display = 'none'; 
-                if (!data || data.length === 0) return;
-                allMapData = data; 
-                renderMap('4G'); 
-            })
-            .catch(err => {
-                console.error("Lỗi lấy dữ liệu GIS:", err);
-                document.getElementById('map-loading').textContent = "Lỗi tải dữ liệu. Bạn hãy kiểm tra lại kết nối Database.";
-                document.getElementById('map-loading').style.color = "red";
-            });
+    streetMap.addTo(map); // Hiển thị đường phố mặc định
+    
+    // Bộ điều khiển cho phép đổi nền bản đồ ở góc trên bên phải
+    L.control.layers({
+        "Bản đồ Đường phố": streetMap,
+        "Bản đồ Vệ tinh": satelliteMap
+    }).addTo(map);
+
+    // ====================================================
+    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT VÙNG PHỦ
+    // ====================================================
+    function getDestination(lat, lng, azimuth, distanceMeters) {
+        const R = 6378137; // Bán kính trái đất tính bằng mét
+        const brng = azimuth * Math.PI / 180;
+        const lat1 = lat * Math.PI / 180;
+        const lon1 = lng * Math.PI / 180;
+
+        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distanceMeters/R) + Math.cos(lat1) * Math.sin(distanceMeters/R) * Math.cos(brng));
+        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distanceMeters/R) * Math.cos(lat1), Math.cos(distanceMeters/R) - Math.sin(lat1) * Math.sin(lat2));
+
+        return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
     }
+
+    function createSector(lat, lng, azimuth, cellName, networkType) {
+        const radius = 250; // Bán kính quạt (250 mét)
+        const beamwidth = 65; // Góc mở cánh quạt Anten (Độ)
+        
+        // Đổi màu tùy theo mạng
+        let color = '#3498db'; // 4G Xanh dương
+        if (networkType === '3g') color = '#e67e22'; // 3G Cam
+        if (networkType === '5g') color = '#2ecc71'; // 5G Xanh lá
+
+        const center = [lat, lng];
+        const points = [center];
+        const startAngle = azimuth - beamwidth / 2;
+        const endAngle = azimuth + beamwidth / 2;
+
+        // Vẽ các đỉnh của rìa cánh quạt
+        for (let i = startAngle; i <= endAngle; i += 5) { 
+            points.push(getDestination(lat, lng, i, radius));
+        }
+        points.push(getDestination(lat, lng, endAngle, radius));
+        points.push(center);
+        
+        // Khởi tạo Polygon
+        const polygon = L.polygon(points, {
+            color: color,
+            weight: 1,
+            fillColor: color,
+            fillOpacity: 0.5
+        });
+
+        // Click vào hình quạt sẽ hiện thông tin
+        polygon.bindPopup(`
+            <div style="font-family: Arial;">
+                <b style="color: ${color};">Cell: ${cellName}</b><br>
+                <b>Góc phát (Azimuth):</b> ${azimuth}°
+            </div>
+        `);
+        return polygon;
+    }
+
+    // ====================================================
+    // HÀM TẢI DỮ LIỆU TỪ MÁY CHỦ
+    // ====================================================
+    async function loadMapData() {
+        const network = document.getElementById('networkSelect').value;
+        const loading = document.getElementById('mapLoading');
+        
+        loading.style.display = 'block';
+        layerGroup.clearLayers();
+
+        try {
+            const response = await fetch(`/api/gis-data?network=${network}`);
+            const data = await response.json();
+
+            if (data.length === 0) {
+                loading.style.display = 'none';
+                alert('Không có dữ liệu trạm (Tọa độ/Azimuth) cho mạng này trong Database!');
+                return;
+            }
+
+            let bounds = [];
+
+            // Vẽ hàng loạt hình quạt lên bản đồ
+            data.forEach(item => {
+                if(item.lat && item.lng) {
+                    const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network);
+                    sector.addTo(layerGroup);
+                    bounds.push([item.lat, item.lng]);
+                }
+            });
+
+            // Tự động căn giữa và Zoom bao quát tất cả các trạm
+            if (bounds.length > 0) {
+                map.fitBounds(bounds);
+            }
+
+            loading.style.display = 'none';
+
+        } catch (error) {
+            console.error(error);
+            loading.style.display = 'none';
+            alert('Lỗi truy xuất dữ liệu từ máy chủ!');
+        }
+    }
+
+    // Tự động load dữ liệu 4G khi vừa mở trang
+    window.onload = loadMapData;
 </script>
+</body>
+</html>
