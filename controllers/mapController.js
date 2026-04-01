@@ -10,23 +10,29 @@ exports.getMapData = async (req, res) => {
     let tableName = `rf_${network}`;
     
     try {
-        // Lấy tọa độ, góc azimuth và thông tin cơ bản để vẽ cánh quạt
+        // Lấy TOÀN BỘ dữ liệu của trạm thay vì chỉ lấy tọa độ
         const query = `
-            SELECT Cell_code, Site_code, Latitude, Longitude, Azimuth 
-            FROM ${tableName} 
+            SELECT * FROM ${tableName} 
             WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL 
               AND Latitude != '' AND Longitude != ''
         `;
         const [rows] = await db.query(query);
         
-        // Chuẩn hóa kiểu dữ liệu
-        const cleanedData = rows.map(r => ({
-            cell: r.Cell_code || r.CELL_NAME || 'Unknown',
-            site: r.Site_code || r.SITE_NAME || '',
-            lat: parseFloat(r.Latitude),
-            lng: parseFloat(r.Longitude),
-            azimuth: parseFloat(r.Azimuth) || 0
-        })).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
+        // Chuẩn hóa dữ liệu trả về cho Frontend vẽ bản đồ
+        const cleanedData = rows.map(r => {
+            const lat = parseFloat(r.Latitude);
+            const lng = parseFloat(r.Longitude);
+            const azimuth = parseFloat(r.Azimuth) || 0;
+            
+            return {
+                cell: r.Cell_code || r.CELL_NAME || r.SITE_NAME || 'Unknown',
+                site: r.Site_code || r.SITE_NAME || '',
+                lat: lat,
+                lng: lng,
+                azimuth: azimuth,
+                rfData: r // Gói toàn bộ dữ liệu RF Database vào Object này
+            };
+        }).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
 
         res.json(cleanedData);
     } catch (error) {
@@ -37,7 +43,6 @@ exports.getMapData = async (req, res) => {
 
 exports.getTAData = async (req, res) => {
     try {
-        // Dành cho tính năng mô phỏng Timing Advance sau này
         const [rows] = await db.query(`SELECT * FROM TA_Query LIMIT 1000`);
         res.json(rows);
     } catch (error) {
