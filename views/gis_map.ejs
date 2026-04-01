@@ -20,7 +20,9 @@
     .map-controls { display: flex; gap: 15px; align-items: center; }
     .map-controls select { padding: 8px 15px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; }
     
-    #map { flex: 1; width: 100%; z-index: 1; }
+    /* FIX CHIỀU CAO BẢN ĐỒ: Bao bọc bằng Flexbox chuẩn */
+    .map-wrapper { position: relative; flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; }
+    #map { flex: 1; height: 100%; width: 100%; z-index: 1; }
     
     /* Loading overlay */
     #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; }
@@ -60,7 +62,8 @@
             </div>
         </div>
         
-        <div style="position: relative; flex: 1;">
+        <!-- Wrapper bản đồ đã được sửa lỗi xẹp chiều cao -->
+        <div class="map-wrapper">
             <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang dựng hình ảnh mô phỏng trạm...</div>
             <div id="map"></div>
         </div>
@@ -94,6 +97,9 @@
         "🌍 Google Map (Cơ bản)": googleStreets,
         "🛰️ Google Map (Vệ tinh)": googleHybrid
     }).addTo(map);
+
+    // FIX LỖI BẢN ĐỒ KHÔNG RENDER ĐẦY ĐỦ (Kích hoạt lại size sau 500ms)
+    setTimeout(() => { map.invalidateSize(); }, 500);
 
     // ====================================================
     // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT VÙNG PHỦ
