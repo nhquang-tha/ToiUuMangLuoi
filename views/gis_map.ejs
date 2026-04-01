@@ -29,9 +29,9 @@
     /* CSS cho bảng thông tin Popup RF Database */
     .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .rf-popup-table th, .rf-popup-table td { padding: 6px; border: 1px solid #ecf0f1; text-align: left; }
-    .rf-popup-table th { background: #f8f9fa; color: #34495e; width: 40%; font-weight: bold; }
+    .rf-popup-table th { background: #f8f9fa; color: #34495e; width: 45%; font-weight: bold; }
     .rf-popup-table tr:hover { background: #f4f6f8; }
-    .rf-popup-container { max-height: 280px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; }
+    .rf-popup-container { max-height: 280px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; margin-top: 10px;}
     
     /* Tùy chỉnh thanh cuộn cho bảng Popup */
     .rf-popup-container::-webkit-scrollbar { width: 6px; }
@@ -48,6 +48,7 @@
             <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
             <div class="map-controls">
                 <label style="font-weight: bold; color: #7f8c8d;">Phân tích theo mạng:</label>
+                <!-- Mặc định chọn 4G, chỉ tải dữ liệu mạng được chọn -->
                 <select id="networkSelect" onchange="loadMapData()">
                     <option value="4g" selected>Mạng 4G LTE</option>
                     <option value="3g">Mạng 3G WCDMA</option>
@@ -68,7 +69,7 @@
 </div>
 
 <script>
-    // 1. KHỞI TẠO BẢN ĐỒ
+    // 1. KHỞI TẠO BẢN ĐỒ TÂM VIỆT NAM
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
 
@@ -146,24 +147,25 @@
         // XÂY DỰNG BẢNG HTML CHỨA TOÀN BỘ RF DATABASE CHO POPUP
         // ----------------------------------------------------
         let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
-        for (let key in rfData) {
-            // Bỏ qua các cột ID nội bộ hoặc cột rỗng
-            if (key !== 'id' && key !== 'created_at' && rfData[key] !== null && rfData[key] !== '') {
+        
+        // Duyệt qua mảng rfData đã được cấu trúc chặt chẽ từ Backend
+        if (Array.isArray(rfData)) {
+            rfData.forEach(item => {
                 tableHtml += `<tr>
-                                <th>${key}</th>
-                                <td>${rfData[key]}</td>
+                                <th>${item.key}</th>
+                                <td>${item.value}</td>
                               </tr>`;
-            }
+            });
         }
         tableHtml += `</table></div>`;
 
         // Gắn Popup vào Cánh quạt
         polygon.bindPopup(`
             <div style="font-family: Arial; min-width: 320px;">
-                <h4 style="margin: 0 0 10px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
+                <h4 style="margin: 0 0 5px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
                     📡 Cell: ${cellName}
                 </h4>
-                <div style="margin-bottom: 10px; font-size: 12px; color: #7f8c8d;">
+                <div style="font-size: 12px; color: #7f8c8d;">
                     <strong>Tọa độ:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} &nbsp;|&nbsp; <strong>Góc phát:</strong> ${azimuth}°
                 </div>
                 ${tableHtml}
