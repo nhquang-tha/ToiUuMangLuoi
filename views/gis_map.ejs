@@ -14,13 +14,19 @@
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
-    .map-header { background: white; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
-    .map-header h1 { margin: 0; font-size: 20px; color: #2c3e50; font-weight: bold; }
+    .map-header { background: white; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
+    .map-header h1 { margin: 0; font-size: 20px; color: #2c3e50; font-weight: bold; white-space: nowrap;}
     
-    .map-controls { display: flex; gap: 15px; align-items: center; }
-    .map-controls select { padding: 8px 15px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; }
+    .map-controls { display: flex; gap: 15px; align-items: center; flex-wrap: wrap;}
+    .map-controls select { padding: 9px 15px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; }
     
-    /* FIX CHIỀU CAO BẢN ĐỒ: Bao bọc bằng Flexbox chuẩn */
+    /* Ô TÌM KIẾM MỚI */
+    .search-box { display: flex; align-items: center; border: 2px solid #3498db; border-radius: 6px; overflow: hidden; background: white;}
+    .search-box input { border: none; padding: 9px 15px; width: 250px; outline: none; font-size: 14px; }
+    .search-box button { border: none; background: #3498db; color: white; padding: 9px 15px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .search-box button:hover { background: #2980b9; }
+
+    /* FIX CHIỀU CAO BẢN ĐỒ */
     .map-wrapper { position: relative; flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; }
     #map { flex: 1; height: 100%; width: 100%; z-index: 1; background: #e5e3df; }
     
@@ -28,29 +34,18 @@
     #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
-    /* CSS cho bảng thông tin Popup RF Database */
+    /* CSS Bảng Popup */
     .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .rf-popup-table th, .rf-popup-table td { padding: 6px; border: 1px solid #ecf0f1; text-align: left; }
     .rf-popup-table th { background: #f8f9fa; color: #34495e; width: 45%; font-weight: bold; }
     .rf-popup-table tr:hover { background: #f4f6f8; }
     .rf-popup-container { max-height: 280px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; margin-top: 10px;}
-    
-    /* Tùy chỉnh thanh cuộn cho bảng Popup */
     .rf-popup-container::-webkit-scrollbar { width: 6px; }
     .rf-popup-container::-webkit-scrollbar-track { background: #f1f1f1; }
     .rf-popup-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 3px; }
 
-    /* Style cho các nút điều khiển mới trên bản đồ */
-    .custom-leaflet-btn a {
-        font-size: 18px !important;
-        line-height: 30px !important;
-        text-align: center;
-        text-decoration: none;
-        color: #333;
-        display: block;
-        width: 30px;
-        height: 30px;
-    }
+    /* Style Nút điều khiển Bản đồ */
+    .custom-leaflet-btn a { font-size: 18px !important; line-height: 30px !important; text-align: center; text-decoration: none; color: #333; display: block; width: 30px; height: 30px; }
     .custom-leaflet-btn a:hover { background-color: #f4f4f4; color: #2980b9; }
 </style>
 
@@ -61,20 +56,26 @@
         <div class="map-header">
             <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
             <div class="map-controls">
-                <label style="font-weight: bold; color: #7f8c8d;">Phân tích theo mạng:</label>
+                <!-- KHU VỰC TÌM KIẾM CELL/SITE -->
+                <div class="search-box">
+                    <input type="text" id="mapSearchInput" placeholder="Nhập Cell Code, Site Code..." onkeypress="if(event.key === 'Enter') searchMap()">
+                    <button onclick="searchMap()">🔍 Tìm kiếm</button>
+                </div>
+
+                <label style="font-weight: bold; color: #7f8c8d; margin-left: 10px;">Lớp mạng:</label>
                 <select id="networkSelect" onchange="loadMapData()">
                     <option value="4g" selected>Mạng 4G LTE</option>
                     <option value="3g">Mạng 3G WCDMA</option>
                     <option value="5g">Mạng 5G NR</option>
                 </select>
-                <button onclick="loadMapData()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">
-                    🔄 Tải Lại Bản Đồ
+                <button onclick="loadMapData()" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 9px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    🔄 Tải Lại
                 </button>
             </div>
         </div>
         
         <div class="map-wrapper" id="mapWrapper">
-            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang dựng hình ảnh mô phỏng trạm...</div>
+            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang xử lý dữ liệu bản đồ...</div>
             <div id="map"></div>
         </div>
 
@@ -82,30 +83,29 @@
 </div>
 
 <script>
-    // 1. KHỞI TẠO BẢN ĐỒ TÂM VIỆT NAM (Thanh Hóa)
+    // BIẾN TOÀN CỤC ĐỂ QUẢN LÝ TÌM KIẾM
+    let globalPolygons = []; // Mảng chứa toàn bộ dữ liệu kèm Object Polygon của Leaflet
+    let defaultBounds = [];  // Lưu lại khung hình gốc để reset khi xóa tìm kiếm
+
+    // 1. KHỞI TẠO BẢN ĐỒ TÂM VIỆT NAM
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
 
     // 2. TÍCH HỢP LỚP BẢN ĐỒ GOOGLE MAPS
     const googleStreets = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}', {
-        attribution: 'Map data &copy; Google',
-        maxZoom: 20
+        attribution: 'Map data &copy; Google', maxZoom: 20
     });
-    
     const googleHybrid = L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}', {
-        attribution: 'Map data &copy; Google',
-        maxZoom: 20
+        attribution: 'Map data &copy; Google', maxZoom: 20
     });
 
     googleStreets.addTo(map); 
-    
     L.control.layers({
         "🌍 Google Map (Cơ bản)": googleStreets,
         "🛰️ Google Map (Vệ tinh)": googleHybrid
     }).addTo(map);
 
-    // 3. THÊM NÚT FULL SCREEN VÀ GPS VÀO BẢN ĐỒ
-    // Nút Full Screen
+    // 3. THÊM NÚT FULL SCREEN VÀ GPS
     L.Control.FullScreen = L.Control.extend({
         options: { position: 'topleft' },
         onAdd: function(map) {
@@ -116,16 +116,13 @@
                 let mapElement = document.getElementById('mapWrapper');
                 if (!document.fullscreenElement) {
                     mapElement.requestFullscreen().catch(err => console.log(err));
-                } else {
-                    document.exitFullscreen();
-                }
+                } else { document.exitFullscreen(); }
             }
             return container;
         }
     });
     map.addControl(new L.Control.FullScreen());
 
-    // Nút GPS (Vị trí hiện tại)
     let userMarker = null;
     L.Control.GPS = L.Control.extend({
         options: { position: 'topleft' },
@@ -141,25 +138,17 @@
     });
     map.addControl(new L.Control.GPS());
 
-    // Xử lý sự kiện khi tìm thấy GPS
     map.on('locationfound', function(e) {
         if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.circleMarker(e.latlng, {
-            radius: 8, fillColor: "#2980b9", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8
-        }).addTo(map).bindPopup("📍 Bạn đang ở đây!").openPopup();
+        userMarker = L.circleMarker(e.latlng, { radius: 8, fillColor: "#2980b9", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8 }).addTo(map).bindPopup("📍 Bạn đang ở đây!").openPopup();
     });
-    map.on('locationerror', function(e) {
-        alert("Không thể lấy định vị GPS. Vui lòng cho phép trình duyệt truy cập vị trí.");
-    });
+    map.on('locationerror', function(e) { alert("Không thể lấy định vị GPS."); });
 
-    // Fix lỗi bản đồ xẹp khi đổi chế độ toàn màn hình
-    document.addEventListener('fullscreenchange', () => {
-        setTimeout(() => map.invalidateSize(), 200);
-    });
+    document.addEventListener('fullscreenchange', () => { setTimeout(() => map.invalidateSize(), 200); });
     setTimeout(() => { map.invalidateSize(); }, 500);
 
     // ====================================================
-    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT VÙNG PHỦ
+    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT
     // ====================================================
     function getDestination(lat, lng, azimuth, distanceMeters) {
         const R = 6378137; 
@@ -180,8 +169,7 @@
         
         const beamwidth = 65; 
         
-        // CẬP NHẬT MÀU SẮC THEO YÊU CẦU: 4G(Đỏ), 3G(Vàng), 5G(Xanh dương)
-        let color = '#e74c3c'; // Mặc định 4G: Đỏ
+        let color = '#e74c3c'; // 4G: Đỏ
         if (networkType === '3g') color = '#f1c40f'; // 3G: Vàng
         if (networkType === '5g') color = '#3498db'; // 5G: Xanh Dương
 
@@ -203,14 +191,11 @@
             fillOpacity: 0.55
         });
 
-        // TẠO BẢNG POPUP DATABASE
+        // Bảng dữ liệu RF
         let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
         if (Array.isArray(rfData)) {
             rfData.forEach(item => {
-                tableHtml += `<tr>
-                                <th>${item.key}</th>
-                                <td>${item.value}</td>
-                              </tr>`;
+                tableHtml += `<tr><th>${item.key}</th><td>${item.value}</td></tr>`;
             });
         }
         tableHtml += `</table></div>`;
@@ -231,7 +216,7 @@
     }
 
     // ====================================================
-    // HÀM TẢI DỮ LIỆU TỪ MÁY CHỦ
+    // TẢI DỮ LIỆU (LƯU VÀO BIẾN GLOBAL ĐỂ TÌM KIẾM)
     // ====================================================
     async function loadMapData() {
         const network = document.getElementById('networkSelect').value;
@@ -239,6 +224,9 @@
         
         loading.style.display = 'block';
         layerGroup.clearLayers();
+        globalPolygons = []; // Reset dữ liệu cũ
+        defaultBounds = [];
+        document.getElementById('mapSearchInput').value = ''; // Reset ô tìm kiếm
 
         try {
             const response = await fetch(`/api/gis-data?network=${network}`);
@@ -250,18 +238,26 @@
                 return;
             }
 
-            let bounds = [];
-
             data.forEach(item => {
                 if(item.lat && item.lng) {
                     const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData);
                     sector.addTo(layerGroup);
-                    bounds.push([item.lat, item.lng]);
+                    defaultBounds.push([item.lat, item.lng]);
+                    
+                    // Lưu lại để tìm kiếm
+                    globalPolygons.push({
+                        cellStr: String(item.cell).toLowerCase(),
+                        siteStr: String(item.site).toLowerCase(),
+                        polygon: sector,
+                        lat: item.lat,
+                        lng: item.lng,
+                        baseColor: sector.options.color
+                    });
                 }
             });
 
-            if (bounds.length > 0) {
-                map.fitBounds(bounds);
+            if (defaultBounds.length > 0) {
+                map.fitBounds(defaultBounds);
             }
 
             loading.style.display = 'none';
@@ -273,6 +269,74 @@
         }
     }
 
+    // ====================================================
+    // THUẬT TOÁN TÌM KIẾM & HIGHLIGHT CELL BẢN ĐỒ
+    // ====================================================
+    function searchMap() {
+        let keyword = document.getElementById('mapSearchInput').value.trim().toLowerCase();
+        
+        // Nếu ô tìm kiếm rỗng -> Khôi phục lại trạng thái mặc định của toàn bộ trạm
+        if (!keyword) {
+            globalPolygons.forEach(item => {
+                item.polygon.setStyle({
+                    weight: 1.5,
+                    fillOpacity: 0.55,
+                    color: item.baseColor,
+                    fillColor: item.baseColor
+                });
+            });
+            if (defaultBounds.length > 0) map.fitBounds(defaultBounds);
+            return;
+        }
+
+        let matchedBounds = [];
+        let matchCount = 0;
+
+        // Quét mảng RAM để tìm Cell / Site khớp
+        globalPolygons.forEach(item => {
+            let isMatch = item.cellStr.includes(keyword) || item.siteStr.includes(keyword);
+            
+            if (isMatch) {
+                // HIGHLIGHT: Đậm hơn, viền đen, Opacity cao
+                item.polygon.setStyle({
+                    weight: 3,
+                    fillOpacity: 0.9,
+                    color: '#000000', // Đổi viền thành màu đen để cực kỳ nổi bật
+                    fillColor: item.baseColor
+                });
+                item.polygon.bringToFront(); // Mang lên trên cùng
+                matchedBounds.push([item.lat, item.lng]);
+                
+                // Tự động bật Popup nếu chỉ tìm ra đúng 1 Cell
+                if(matchCount === 0) item.polygon.openPopup();
+                
+                matchCount++;
+            } else {
+                // DIM (LÀM MỜ): Hạ Opacity và mỏng viền các Cell không khớp
+                item.polygon.setStyle({
+                    weight: 0.5,
+                    fillOpacity: 0.15,
+                    color: item.baseColor,
+                    fillColor: item.baseColor
+                });
+            }
+        });
+
+        // Xử lý Thu phóng (Zoom in)
+        if (matchedBounds.length > 0) {
+            if (matchedBounds.length === 1) {
+                // Nếu chỉ có 1 cell (cell_code), zoom cực gần (level 16)
+                map.setView(matchedBounds[0], 16);
+            } else {
+                // Nếu có nhiều cell (site_code hoặc tên gợi nhớ), fitBounds để lấy trọn khung
+                map.fitBounds(matchedBounds, { padding: [50, 50], maxZoom: 16 });
+            }
+        } else {
+            alert(`Không tìm thấy Cell hoặc Site nào chứa từ khóa "${keyword}".`);
+        }
+    }
+
+    // Khởi động bản đồ lúc mới vào trang
     window.onload = loadMapData;
 </script>
 </body>
