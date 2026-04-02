@@ -52,12 +52,19 @@ router.use(async (req, res, next) => {
 // --- ROUTES CƠ BẢN (TRANG TĨNH) ---
 const pages = [
     { path: '/', name: 'Dashboard' },
+    { path: '/poi-report', name: 'POI Report' },
+    { path: '/worst-cells', name: 'Worst Cells' },
+    { path: '/congestion-3g', name: 'Congestion 3G' },
+    { path: '/traffic-down', name: 'Traffic Down' },
     { path: '/scrip', name: 'Scrip' }
 ];
 
 pages.forEach(page => {
     router.get(page.path, isAuthenticated, safeCtrl(dashboardController.renderPage(page.name)));
 });
+
+// THÊM API MỚI CHO TRANG CHỦ DASHBOARD NGAY TẠI ĐÂY
+router.get('/api/dashboard-data', isAuthenticated, safeCtrl(dashboardController.getDashboardData));
 
 // --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA ---
 router.get('/gis-map', isAuthenticated, safeCtrl(mapController.getMapPage));
