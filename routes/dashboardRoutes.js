@@ -11,12 +11,11 @@ const dashboardController = require('../controllers/dashboardController');
 const rfController = require('../controllers/rfController'); 
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
-
-// ĐÃ MỞ KHÓA MAP CONTROLLER ĐỂ CHẠY BẢN ĐỒ GIS
 const mapController = require('../controllers/mapController'); 
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Hàm bảo vệ chống sập Server
 const safeCtrl = (handler) => {
     if (typeof handler === 'function') return handler;
     return (req, res) => {
@@ -60,10 +59,11 @@ pages.forEach(page => {
     router.get(page.path, isAuthenticated, safeCtrl(dashboardController.renderPage(page.name)));
 });
 
-// --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA (ĐÃ HOẠT ĐỘNG) ---
+// --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA ---
 router.get('/gis-map', isAuthenticated, safeCtrl(mapController.getMapPage));
 router.get('/api/gis-data', isAuthenticated, safeCtrl(mapController.getMapData));
 router.get('/api/ta-data', isAuthenticated, safeCtrl(mapController.getTAData)); 
+router.post('/ta-data/reset', isAuthenticated, isAdmin, safeCtrl(mapController.resetTAData)); // Tuyến API Xóa TA
 
 // --- ROUTES CHO KPI ANALYTICS & CÁC CẢNH BÁO CHẤT LƯỢNG ---
 router.get('/kpi-analytics', isAuthenticated, safeCtrl(kpiController.getKpiAnalyticsPage));
