@@ -50,8 +50,20 @@
     .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: #bdc3c7; border-radius: 3px; }
     .slider-control input[type=range]::-webkit-slider-thumb { height: 16px; width: 16px; border-radius: 50%; background: #3498db; cursor: pointer; -webkit-appearance: none; margin-top: -5px; }
 
-    /* Custom Icon cho Tool Azimuth */
+    /* Custom CSS cho Tool Azimuth */
+    .azi-tool-container { position: relative; }
+    .azi-sub-menu {
+        display: none; position: absolute; left: 36px; top: 0; background: white; border-radius: 6px; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 220px; z-index: 1000; flex-direction: column; border: 1px solid #bdc3c7; overflow: hidden;
+    }
+    .azi-sub-menu.show { display: flex; }
+    .azi-menu-item { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; cursor: pointer; font-size: 13px; font-weight: bold; color: #2c3e50; transition: 0.2s;}
+    .azi-menu-item:hover { background: #f4f6f8; color: #2980b9; }
+    .azi-menu-item:last-child { border-bottom: none; }
+    
     .azi-end-icon { background: #e74c3c; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+    .azi-permanent-label { background: rgba(255,255,255,0.9); border: 2px solid #8e44ad; border-radius: 6px; font-size: 11px; padding: 4px 8px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.2);}
+    .leaflet-tooltip.azi-permanent-label::before { border-right-color: #8e44ad; }
 </style>
 
 <div class="layout">
@@ -95,12 +107,13 @@
     let globalPolygons = []; 
     let defaultBounds = [];  
     let globalLogLines = []; 
-    let azimuthOrigins = {}; // Quản lý các đối tượng của công cụ Azimuth
+    let azimuthOrigins = {}; 
+    let latestOriginId = null; // Lưu ID của điểm gốc mới nhất để nút Add Direction trên menu hoạt động
     
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
     let itsLogLayer = L.layerGroup().addTo(map); 
-    let azimuthLayer = L.layerGroup().addTo(map); // Layer riêng cho công cụ vẽ tia
+    let azimuthLayer = L.layerGroup().addTo(map); 
     let legendControl = null; 
 
     const googleStreets = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}', {
@@ -146,20 +159,37 @@
     });
     map.addControl(new L.Control.GPS());
 
-    // --- NÚT AZIMUTH TOOL ---
+    // --- NÚT AZIMUTH TOOL (MENU DROPDOWN) ---
     L.Control.AzimuthTool = L.Control.extend({
         options: { position: 'topleft' },
         onAdd: function(map) {
-            let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn');
-            container.innerHTML = '<a href="#" title="Công cụ vẽ tia Azimuth">🧭</a>';
-            container.onclick = function(e) { 
-                e.preventDefault(); 
-                createAzimuthOrigin(); 
-            }
+            let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn azi-tool-container');
+            container.innerHTML = `
+                <a href="#" title="Công cụ vẽ tia Azimuth" onclick="toggleAziMenu(event)">🧭</a>
+                <div id="aziSubMenu" class="azi-sub-menu">
+                    <div class="azi-menu-item" onclick="createAzimuthOrigin('gps')">📍 Lấy điểm gốc trùng GPS</div>
+                    <div class="azi-menu-item" onclick="createAzimuthOrigin('center')">🎯 Lấy gốc giữa màn hình</div>
+                    <div class="azi-menu-item" style="color: #27ae60;" onclick="addDirectionToLatest()">➕ Add Direction</div>
+                </div>
+            `;
+            // Ngăn chặn sự kiện click lọt xuống bản đồ
+            L.DomEvent.disableClickPropagation(container);
             return container;
         }
     });
     map.addControl(new L.Control.AzimuthTool());
+
+    // Đóng/Mở menu Azimuth
+    window.toggleAziMenu = function(e) {
+        e.preventDefault();
+        let menu = document.getElementById('aziSubMenu');
+        menu.classList.toggle('show');
+    };
+    // Đóng menu khi click ra ngoài bản đồ
+    map.on('click', function() {
+        let menu = document.getElementById('aziSubMenu');
+        if(menu && menu.classList.contains('show')) menu.classList.remove('show');
+    });
 
     // --- SLIDER ĐIỀU CHỈNH ---
     L.Control.Sliders = L.Control.extend({
@@ -219,7 +249,6 @@
     // CÔNG CỤ AZIMUTH ĐỘNG (INTERACTIVE AZIMUTH TOOL)
     // ====================================================
     
-    // Tính góc phương vị (Azimuth/Bearing) giữa 2 tọa độ
     function getBearing(startLat, startLng, destLat, destLng) {
         startLat = startLat * Math.PI / 180;
         startLng = startLng * Math.PI / 180;
@@ -233,11 +262,25 @@
         return (brng + 360) % 360;
     }
 
-    // Khởi tạo điểm Gốc
-    function createAzimuthOrigin() {
-        let center = userMarker ? userMarker.getLatLng() : map.getCenter();
+    // Khởi tạo điểm Gốc từ Menu
+    window.createAzimuthOrigin = function(type) {
+        document.getElementById('aziSubMenu').classList.remove('show'); // Đóng menu
+        
+        let center;
+        if (type === 'gps') {
+            if (userMarker) {
+                center = userMarker.getLatLng();
+            } else {
+                alert("Chưa có tín hiệu GPS! Hãy bấm biểu tượng Định Vị 📍 trước để lấy GPS.");
+                return;
+            }
+        } else {
+            center = map.getCenter();
+        }
+
         let marker = L.marker(center, {draggable: true}).addTo(azimuthLayer);
         let id = marker._leaflet_id;
+        latestOriginId = id; // Lưu ID để dùng cho nút Add Direction chung
 
         azimuthOrigins[id] = { marker: marker, lines: [], name: "Trạm Gốc " + id };
 
@@ -271,6 +314,26 @@
             redrawLines(id); 
         });
         marker.openPopup();
+    };
+
+    // Hàm gọi Add Direction từ Sub Menu
+    window.addDirectionToLatest = function() {
+        document.getElementById('aziSubMenu').classList.remove('show');
+        if (latestOriginId && azimuthOrigins[latestOriginId]) {
+            addDirection(latestOriginId);
+        } else {
+            alert("Vui lòng tạo một Điểm Gốc (Trùng GPS hoặc Giữa bản đồ) trước khi Add Direction!");
+        }
+    };
+
+    // Hàm cập nhật chữ hiển thị trực tiếp trên map
+    function updatePermanentLabel(marker, name, az) {
+        marker.setTooltipContent(`
+            <div style="text-align:center; line-height:1.2;">
+                <b style="color:#8e44ad; font-size:12px;">${name}</b><br>
+                <span style="color:#e74c3c; font-weight:bold;">${az.toFixed(1)}°</span>
+            </div>
+        `);
     }
 
     // Thêm Tia hướng phát (Direction)
@@ -278,7 +341,6 @@
         let originObj = azimuthOrigins[originId];
         let origPos = originObj.marker.getLatLng();
 
-        // Mặc định tạo ra 1 điểm cách 100m hướng 0 độ (Bắc)
         let destCoords = getDestination(origPos.lat, origPos.lng, 0, 100);
         let endLatLng = L.latLng(destCoords[0], destCoords[1]);
 
@@ -292,10 +354,14 @@
 
         let endId = endMarker._leaflet_id;
 
+        // HIỂN THỊ NHÃN PERMANENT (LUÔN LUÔN HIỆN)
+        endMarker.bindTooltip("", {permanent: true, direction: "right", className: "azi-permanent-label", offset: [10, 0]}).openTooltip();
+        updatePermanentLabel(endMarker, lineObj.name, lineObj.azimuth);
+
         function updateEndPopup() {
             let html = `
                 <div style="min-width: 200px; font-family: Arial;">
-                    <h4 style="margin-top:0; color:#8e44ad; border-bottom:1px solid #ddd; padding-bottom:5px;">🎯 Cấu Hình Tia (Sector)</h4>
+                    <h4 style="margin-top:0; color:#8e44ad; border-bottom:1px solid #ddd; padding-bottom:5px;">🎯 Cấu Hình Tia</h4>
                     <div style="margin-bottom: 8px;">
                         <label style="font-size:12px; font-weight:bold;">Tên Sector:</label>
                         <input type="text" id="endName_${endId}" value="${lineObj.name}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
@@ -327,11 +393,11 @@
             lineObj.distance = dist;
             lineObj.azimuth = az;
 
-            endMarker.bindTooltip(`<div style="font-weight:bold; color:#8e44ad;">${lineObj.name}</div>Azimuth: <b style="color:#e74c3c">${az.toFixed(1)}°</b><br>Dài: <b>${dist.toFixed(1)}m</b>`, {permanent: false, direction:"top", opacity: 0.9}).openTooltip();
+            // Cập nhật nhãn permanent liên tục khi kéo
+            updatePermanentLabel(endMarker, lineObj.name, az);
         });
 
         endMarker.on('dragend', function() {
-            endMarker.closeTooltip();
             updateEndPopup();
         });
     };
@@ -349,7 +415,7 @@
         let newLatLng = L.latLng(lat, lng);
         obj.marker.setLatLng(newLatLng);
         
-        map.setView(newLatLng, 17); // Tự động đưa màn hình đến điểm vừa chỉnh
+        map.setView(newLatLng, 17); 
         redrawLines(id);
     };
 
@@ -364,7 +430,8 @@
             
             lObj.endMarker.setLatLng(newLatLng);
             lObj.line.setLatLngs([origPos, newLatLng]);
-            // Re-bind popup html to update inputs internally
+            updatePermanentLabel(lObj.endMarker, lObj.name, lObj.azimuth);
+
             let currentHtml = lObj.endMarker.getPopup().getContent();
             lObj.endMarker.setPopupContent(currentHtml);
         });
@@ -386,6 +453,8 @@
 
         lObj.endMarker.setLatLng(newLatLng);
         lObj.line.setLatLngs([origPos, newLatLng]);
+        
+        updatePermanentLabel(lObj.endMarker, lObj.name, lObj.azimuth);
         lObj.endMarker.closePopup();
     };
 
@@ -450,8 +519,9 @@
         loading.style.display = 'block';
         layerGroup.clearLayers();
         itsLogLayer.clearLayers(); 
-        azimuthLayer.clearLayers(); // Xóa cả các công cụ vẽ khi tải mạng mới
+        azimuthLayer.clearLayers(); 
         azimuthOrigins = {};
+        latestOriginId = null;
         if (legendControl) map.removeControl(legendControl); 
         
         globalPolygons = []; 
