@@ -475,6 +475,9 @@
         const points = calculateSectorPoints(lat, lng, azimuth, baseRadius, scale);
         const polygon = L.polygon(points, { color: color, weight: 1, fillColor: color, fillOpacity: 0.65 });
 
+        // Ghi lại style mặc định để dễ Reset khi bỏ tìm kiếm
+        polygon.originalStyle = { color: color, weight: 1, fillColor: color, fillOpacity: 0.65 };
+
         let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
         if (Array.isArray(rfData)) {
             rfData.forEach(item => tableHtml += `<tr><th>${item.key}</th><td>${item.value}</td></tr>`);
@@ -513,7 +516,6 @@
     // MÔ PHỎNG TA (BIỂU ĐỒ NHIỆT ĐA SẮC - MULTICOLOR HEATMAP)
     // ====================================================
 
-    // Hàm trả về màu sắc chuẩn biểu đồ nhiệt từ Xanh lam tới Đỏ theo tỷ lệ 0..1
     function getHeatmapColor(ratio) {
         if (ratio >= 0.8) return { fill: '#e74c3c', border: '#c0392b' }; // Đỏ (Rất cao)
         if (ratio >= 0.6) return { fill: '#e67e22', border: '#d35400' }; // Cam (Cao)
@@ -541,15 +543,22 @@
             points.push([lat, lng]);
         }
 
-        // Lấy màu sắc biểu đồ nhiệt tương ứng với tỷ lệ UE
         const colors = getHeatmapColor(ratio);
 
         let polygon = L.polygon(points, {
             color: colors.border, 
             weight: 0.5,
             fillColor: colors.fill, 
-            fillOpacity: 0.75 // Tăng độ hiển thị đậm nét cho biểu đồ nhiệt
+            fillOpacity: 0.75 
         });
+
+        // Ghi lại style gốc để Reset tìm kiếm TA
+        polygon.originalStyle = {
+            color: colors.border,
+            weight: 0.5,
+            fillColor: colors.fill,
+            fillOpacity: 0.75
+        };
 
         polygon.bindPopup(`
             <div style="font-family:Arial; min-width:200px;">
@@ -702,7 +711,9 @@
                     }
                 } else {
                     let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.rawData.cell, '4g', cellItem.rawData.rfData, 250, scale);
-                    fallback.setStyle({fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3});
+                    let styleObj = {fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3, weight: 1.5};
+                    fallback.setStyle(styleObj);
+                    fallback.originalStyle = styleObj;
                     fallback.addTo(taLayer);
                     cellItem.taSegments = [fallback];
                 }
@@ -785,14 +796,20 @@
     }
 
     // ====================================================
-    // TÌM KIẾM ĐỒNG BỘ
+    // TÌM KIẾM ĐỒNG BỘ: ẨN CÁC TRẠM KHÁC KHI TÌM KIẾM TA
     // ====================================================
     function searchMap() {
         let keyword = document.getElementById('mapSearchInput').value.trim().toLowerCase();
         
         if (!keyword) {
             globalPolygons.forEach(item => {
-                if(!isTAMode || !item.taSegments) {
+                if (isTAMode && item.taSegments) {
+                    item.taSegments.forEach(seg => {
+                        if (!taLayer.hasLayer(seg)) taLayer.addLayer(seg);
+                        if (seg.originalStyle) seg.setStyle(seg.originalStyle);
+                    });
+                } else {
+                    if (!layerGroup.hasLayer(item.polygon)) layerGroup.addLayer(item.polygon);
                     item.polygon.setStyle({ weight: 1, fillOpacity: 0.65, color: item.baseColor, fillColor: item.baseColor });
                 }
             });
@@ -807,12 +824,14 @@
             let isMatch = item.cellStr.includes(keyword) || item.siteStr.includes(keyword);
             
             if (isMatch) {
-                if(isTAMode && item.taSegments) {
+                if (isTAMode && item.taSegments) {
                     item.taSegments.forEach(seg => {
+                        if (!taLayer.hasLayer(seg)) taLayer.addLayer(seg);
                         seg.setStyle({ weight: 3, color: '#000000' });
                         seg.bringToFront();
                     });
                 } else {
+                    if (!layerGroup.hasLayer(item.polygon)) layerGroup.addLayer(item.polygon);
                     item.polygon.setStyle({ weight: 3, fillOpacity: 0.9, color: '#000000', fillColor: item.baseColor });
                     item.polygon.bringToFront(); 
                 }
@@ -821,9 +840,14 @@
                 if(matchCount === 0 && !isTAMode) item.polygon.openPopup();
                 matchCount++;
             } else {
-                if(isTAMode && item.taSegments) {
-                    item.taSegments.forEach(seg => seg.setStyle({ weight: 0.5, color: '#95a5a6' }));
+                if (isTAMode && item.taSegments) {
+                    // XÓA HOÀN TOÀN CÁC CELL KHÔNG KHỚP KHỎI BẢN ĐỒ TA
+                    item.taSegments.forEach(seg => {
+                        if (taLayer.hasLayer(seg)) taLayer.removeLayer(seg);
+                    });
                 } else {
+                    // LÀM MỜ CELL KHÔNG KHỚP Ở BẢN ĐỒ THƯỜNG
+                    if (!layerGroup.hasLayer(item.polygon)) layerGroup.addLayer(item.polygon);
                     item.polygon.setStyle({ weight: 0.5, fillOpacity: 0.15, color: item.baseColor, fillColor: item.baseColor });
                 }
             }
