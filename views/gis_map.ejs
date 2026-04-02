@@ -476,24 +476,24 @@
     }
 
     // ====================================================
-    // THUẬT TOÁN ĐỐI CHIẾU THÔNG MINH (CORE EXTRACTOR)
+    // THUẬT TOÁN ĐỐI CHIẾU THÔNG MINH (CORE EXTRACTOR) - ĐỂ MATCH TA
     // ====================================================
     function extractCoreName(name) {
         if (!name) return '';
         return String(name).toLowerCase()
-                   .replace(/['"]/g, '')   // Loại bỏ ngoặc kép nếu có
-                   .replace(/^4g-/i, '')   // Loại bỏ tiền tố mạng
+                   .replace(/['"]/g, '')   
+                   .replace(/^4g-/i, '')   
                    .replace(/^3g-/i, '')
                    .replace(/^5g-/i, '')
-                   .replace(/^ul-/i, '')   // Loại bỏ tiền tố vendor (vd: UL-TPO)
+                   .replace(/^ul-/i, '')   
                    .replace(/^gl-/i, '')
-                   .replace(/-tha$/i, '')  // Loại bỏ hậu tố Tỉnh
+                   .replace(/-tha$/i, '')  
                    .replace(/-th$/i, '')
                    .trim();
     }
 
     // ====================================================
-    // MÔ PHỎNG TA (HEATMAP CHOROPLETH) 
+    // MÔ PHỎNG TA (HEATMAP CHOROPLETH) TỐI ƯU HÓA GHÉP DATA
     // ====================================================
 
     function createTASegment(lat, lng, azimuth, innerRadius, outerRadius, beamwidth, ratio, cellCode, taIndex, ueCount) {
@@ -608,7 +608,6 @@
 
             globalPolygons.forEach(cellItem => {
                 
-                // 1. Trích xuất Tên Lõi từ cơ sở dữ liệu Map/RF
                 let rfCellName = '';
                 let rfCellCode = '';
                 if (cellItem.rawData && cellItem.rawData.rfData) {
@@ -623,17 +622,20 @@
                 let coreRfCode = extractCoreName(rfCellCode);
                 let coreStr = extractCoreName(cellItem.cellStr);
 
-                // 2. So sánh xuyên thấu với file TA
                 const taRecord = taDataCache.find(t => {
-                    let rawTaCell = t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '';
-                    let coreTaCell = extractCoreName(rawTaCell);
+                    let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
+                    let rawRfCellCode = String(rfCellCode).trim();
+                    
+                    // Ưu tiên 1: Khớp chính xác hoàn toàn Cell_Code giữa bảng TA_Query và bảng rf_4g
+                    if (rawTaCell && rawRfCellCode && rawTaCell.toLowerCase() === rawRfCellCode.toLowerCase()) return true;
 
+                    let coreTaCell = extractCoreName(rawTaCell);
                     if (!coreTaCell) return false;
 
                     // Match tuyệt đối theo tên Lõi
                     if (coreTaCell === coreRfName || coreTaCell === coreRfCode || coreTaCell === coreStr) return true;
 
-                    // Match tương đối nếu Tên Lõi TA chứa Tên Lõi RF (hoặc ngược lại) để bù đắp các sai lệch dị biệt
+                    // Match tương đối
                     if (coreRfName.length > 4 && coreTaCell.includes(coreRfName)) return true;
                     if (coreRfCode.length > 4 && coreTaCell.includes(coreRfCode)) return true;
 
@@ -642,7 +644,6 @@
 
                 if (taRecord) {
                     let ues = [];
-                    // Đọc chuẩn cấu trúc JSON trả về (Index0 -> Index11)
                     for(let i = 0; i <= 11; i++) {
                         let keyUpperCase = 'Index' + i;
                         let keyLowerCase = 'index' + i;
@@ -672,7 +673,6 @@
                         }
                     }
                 } else {
-                    // Cell không có trong file TA -> Vẽ màu xám nhạt
                     let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.rawData.cell, '4g', cellItem.rawData.rfData, 250, scale);
                     fallback.setStyle({fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3});
                     fallback.addTo(taLayer);
