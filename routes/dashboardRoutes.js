@@ -24,7 +24,7 @@ const safeCtrl = (handler) => {
                 <h2 style="color: #e74c3c; font-size: 24px;">⚠️ Tính Năng Đang Được Cập Nhật</h2>
                 <p style="font-size: 16px; line-height: 1.6;">Hệ thống không tìm thấy đoạn mã xử lý cho chức năng này.</p>
                 <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #f39c12; text-align: left; margin: 20px 0;">
-                    <strong>Nguyên nhân:</strong> File trên GitHub chưa được cập nhật đầy đủ mã nguồn mới nhất. Hãy kiểm tra lại.
+                    <strong>Nguyên nhân:</strong> Controller chưa được gắn đúng luồng.
                 </div>
                 <a href="/" style="display: inline-block; padding: 12px 25px; background: #3498db; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; transition: 0.2s;">⬅ Quay lại Trang Chủ</a>
             </div>
@@ -49,30 +49,18 @@ router.use(async (req, res, next) => {
     next();
 });
 
-// --- ROUTES CƠ BẢN (TRANG TĨNH) ---
-const pages = [
-    { path: '/', name: 'Dashboard' },
-    { path: '/poi-report', name: 'POI Report' },
-    { path: '/worst-cells', name: 'Worst Cells' },
-    { path: '/congestion-3g', name: 'Congestion 3G' },
-    { path: '/traffic-down', name: 'Traffic Down' },
-    { path: '/scrip', name: 'Scrip' }
-];
-
-pages.forEach(page => {
-    router.get(page.path, isAuthenticated, safeCtrl(dashboardController.renderPage(page.name)));
-});
-
-// THÊM API MỚI CHO TRANG CHỦ DASHBOARD NGAY TẠI ĐÂY
+// --- ROUTES CƠ BẢN (TRANG TĨNH & DASHBOARD) ---
+router.get('/', isAuthenticated, safeCtrl(dashboardController.renderPage('Dashboard')));
+router.get('/scrip', isAuthenticated, safeCtrl(dashboardController.renderPage('Scrip')));
 router.get('/api/dashboard-data', isAuthenticated, safeCtrl(dashboardController.getDashboardData));
 
 // --- BẢN ĐỒ GIS VÀ MÔ PHỎNG TA ---
 router.get('/gis-map', isAuthenticated, safeCtrl(mapController.getMapPage));
 router.get('/api/gis-data', isAuthenticated, safeCtrl(mapController.getMapData));
 router.get('/api/ta-data', isAuthenticated, safeCtrl(mapController.getTAData)); 
-router.post('/ta-data/reset', isAuthenticated, isAdmin, safeCtrl(mapController.resetTAData)); // Tuyến API Xóa TA
+router.post('/ta-data/reset', isAuthenticated, isAdmin, safeCtrl(mapController.resetTAData));
 
-// --- ROUTES CHO KPI ANALYTICS & CÁC CẢNH BÁO CHẤT LƯỢNG ---
+// --- ROUTES CHO KPI ANALYTICS & CÁC CẢNH BÁO CHẤT LƯỢNG (ĐÃ ĐƯỢC TÁCH LUỒNG ĐÚNG) ---
 router.get('/kpi-analytics', isAuthenticated, safeCtrl(kpiController.getKpiAnalyticsPage));
 router.get('/api/kpi-data', isAuthenticated, safeCtrl(kpiController.getKpiData));
 router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, safeCtrl(kpiController.resetData));
