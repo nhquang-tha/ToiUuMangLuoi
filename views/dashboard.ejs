@@ -1,17 +1,275 @@
 <%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    body { font-family: 'Roboto', sans-serif; background-color: #f4f7f6; margin: 0; }
+    .layout { display: flex; height: 100vh; overflow: hidden; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; }
+    
+    .dashboard-header { margin-bottom: 25px; border-bottom: 2px solid #e0e6ed; padding-bottom: 10px; }
+    .dashboard-header h1 { margin: 0; color: #2c3e50; font-size: 24px; font-weight: 700; }
+    .dashboard-header p { margin: 5px 0 0 0; color: #7f8c8d; font-size: 14px; }
+
+    .network-section { margin-bottom: 40px; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border-top: 4px solid #3498db; }
+    .network-section.n5g { border-top-color: #9b59b6; }
+    .network-title { font-size: 18px; color: #34495e; margin-top: 0; margin-bottom: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px;}
+    .network-title span { padding: 4px 10px; background: #ecf0f1; border-radius: 20px; font-size: 12px; color: #7f8c8d; }
+
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
+    @media (max-width: 1200px) { .charts-grid { grid-template-columns: 1fr; } }
+
+    .chart-box { height: 350px; position: relative; border: 1px solid #edf2f7; border-radius: 8px; padding: 15px; }
+    
+    /* Loading and Empty State */
+    .loading-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.8); display: flex; justify-content: center; align-items: center; font-weight: bold; color: #2980b9; z-index: 10; border-radius: 12px; }
+    .empty-state { padding: 40px; text-align: center; color: #95a5a6; font-size: 15px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
 <div class="layout">
-    <%- include('partials/sidebar') %>
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
-        <header class="topbar">
-            <h1><%= page %></h1>
-        </header>
-        <div class="content-body">
-            <div class="card">
-                <h3>Nội dung của <%= page %></h3>
-                <p>Khu vực này sẽ hiển thị bảng dữ liệu, biểu đồ hoặc form tương ứng với menu bạn chọn.</p>
-            </div>
+        
+        <div class="dashboard-header">
+            <h1>Tổng Quan Hệ Thống (Network Dashboard)</h1>
+            <p>Dữ liệu tự động tổng hợp từ tất cả các trạm dựa trên phân tích KPI mới nhất.</p>
         </div>
+
+        <div id="loadingIndicator" class="loading-overlay">
+            <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px; font-size: 20px;">⏳</span> Đang đồng bộ và vẽ biểu đồ...
+        </div>
+
+        <div id="dashboardContent" style="display: none;">
+            
+            <!-- KHU VỰC 4G -->
+            <div class="network-section">
+                <h3 class="network-title">📡 Hiệu Năng Toàn Mạng 4G LTE <span>Tự động cập nhật</span></h3>
+                <div class="charts-grid">
+                    <!-- Biểu đồ 1: Traffic & Throughput 4G (Trục kép) -->
+                    <div class="chart-box">
+                        <canvas id="chart4g_TrafficThput"></canvas>
+                    </div>
+                    <!-- Biểu đồ 2: PRB & CQI 4G -->
+                    <div class="chart-box">
+                        <canvas id="chart4g_Quality"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KHU VỰC 5G -->
+            <div class="network-section n5g">
+                <h3 class="network-title">🚀 Hiệu Năng Toàn Mạng 5G NR <span>Tự động cập nhật</span></h3>
+                <div class="charts-grid">
+                    <!-- Biểu đồ 3: Traffic & Throughput 5G (Trục kép) -->
+                    <div class="chart-box">
+                        <canvas id="chart5g_TrafficThput"></canvas>
+                    </div>
+                    <!-- Biểu đồ 4: CQI 5G -->
+                    <div class="chart-box">
+                        <canvas id="chart5g_Quality"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="emptyIndicator" class="empty-state" style="display: none;">
+            <p style="font-size: 40px; margin-bottom: 10px;">📉</p>
+            Chưa có dữ liệu tổng hợp. Vui lòng chuyển đến tab <b>Import Data</b> và tải lên file Báo cáo KPI 4G/5G để hệ thống kích hoạt biểu đồ.
+        </div>
+
     </main>
 </div>
+
+<script>
+    // Hàm chuyển đổi chuỗi ngày DD/MM/YYYY thành số để Sắp xếp
+    function parseDateForSort(dateStr) {
+        if (!dateStr) return 0;
+        let parts = dateStr.split('/');
+        if (parts.length === 3) {
+            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+        }
+        return 0;
+    }
+
+    async function loadDashboard() {
+        try {
+            const res = await fetch('/api/dashboard-data');
+            if (!res.ok) throw new Error('API Error');
+            let data = await res.json();
+
+            document.getElementById('loadingIndicator').style.display = 'none';
+
+            if (!data || data.length === 0) {
+                document.getElementById('emptyIndicator').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('dashboardContent').style.display = 'block';
+
+            // 1. Sắp xếp mảng dữ liệu theo thời gian tăng dần (từ trái qua phải trên biểu đồ)
+            data.sort((a, b) => parseDateForSort(a.thoi_gian) - parseDateForSort(b.thoi_gian));
+
+            // 2. Tách dữ liệu thành các trục
+            const labels = data.map(d => d.thoi_gian);
+            
+            // --- DATA 4G ---
+            const traf4g = data.map(d => d.sum_TRAFFIC_4G);
+            const thput4g = data.map(d => d.AVG_USER_DL_AVG_THPUT_4G);
+            const prb4g = data.map(d => d.AVG_RES_BLK_DL_4G);
+            const cqi4g = data.map(d => d.AVG_CQI_4G);
+
+            // --- DATA 5G ---
+            const traf5g = data.map(d => d.sum_TRAFFIC_5G);
+            const thput5g = data.map(d => d.AVG_USER_DL_AVG_THPUT_5G);
+            const cqi5g = data.map(d => d.AVG_CQI_5G);
+
+            // 3. VẼ BIỂU ĐỒ
+            Chart.defaults.font.family = "'Roboto', sans-serif";
+            Chart.defaults.color = '#7f8c8d';
+
+            // BIỂU ĐỒ 1: 4G Traffic & Throughput (Mixed Chart - Dual Axis)
+            new Chart(document.getElementById('chart4g_TrafficThput').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Avg User DL Throughput (Kbps)',
+                            type: 'line',
+                            data: thput4g,
+                            borderColor: '#e74c3c',
+                            backgroundColor: '#e74c3c',
+                            borderWidth: 3,
+                            yAxisID: 'y_thput',
+                            tension: 0.4,
+                            pointRadius: 4
+                        },
+                        {
+                            label: 'Total Traffic (GB)',
+                            type: 'bar',
+                            data: traf4g,
+                            backgroundColor: 'rgba(52, 152, 219, 0.7)',
+                            borderColor: '#2980b9',
+                            borderWidth: 1,
+                            yAxisID: 'y_traf',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        title: { display: true, text: 'Tổng Lưu Lượng & Tốc Độ Trải Nghiệm (4G)', font: { size: 15, weight: 'bold' }, color: '#2c3e50' },
+                        legend: { position: 'bottom' },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y_traf: { type: 'linear', position: 'left', title: { display: true, text: 'Traffic (GB)' } },
+                        y_thput: { type: 'linear', position: 'right', title: { display: true, text: 'Throughput (Kbps)' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+
+            // BIỂU ĐỒ 2: 4G PRB & CQI (Line Chart)
+            new Chart(document.getElementById('chart4g_Quality').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Avg CQI 4G (%)', data: cqi4g, borderColor: '#27ae60', backgroundColor: 'rgba(39, 174, 96, 0.1)', borderWidth: 3, fill: true, tension: 0.4 },
+                        { label: 'Avg RB Util DL (%)', data: prb4g, borderColor: '#f39c12', backgroundColor: 'transparent', borderWidth: 3, borderDash: [5, 5], tension: 0.4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        title: { display: true, text: 'Chỉ Tiêu Chất Lượng Vô Tuyến (CQI & PRB 4G)', font: { size: 15, weight: 'bold' }, color: '#2c3e50' },
+                        legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: { x: { grid: { display: false } }, y: { title: { display: true, text: 'Percentage (%)' }, min: 0, max: 100 } }
+                }
+            });
+
+            // BIỂU ĐỒ 3: 5G Traffic & Throughput
+            new Chart(document.getElementById('chart5g_TrafficThput').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Avg User DL Throughput (Kbps)',
+                            type: 'line',
+                            data: thput5g,
+                            borderColor: '#8e44ad',
+                            backgroundColor: '#8e44ad',
+                            borderWidth: 3,
+                            yAxisID: 'y_thput',
+                            tension: 0.4,
+                            pointRadius: 4
+                        },
+                        {
+                            label: 'Total Traffic (GB)',
+                            type: 'bar',
+                            data: traf5g,
+                            backgroundColor: 'rgba(26, 188, 156, 0.7)',
+                            borderColor: '#16a085',
+                            borderWidth: 1,
+                            yAxisID: 'y_traf',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        title: { display: true, text: 'Tổng Lưu Lượng & Tốc Độ Trải Nghiệm (5G)', font: { size: 15, weight: 'bold' }, color: '#2c3e50' },
+                        legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y_traf: { type: 'linear', position: 'left', title: { display: true, text: 'Traffic (GB)' } },
+                        y_thput: { type: 'linear', position: 'right', title: { display: true, text: 'Throughput (Kbps)' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+
+            // BIỂU ĐỒ 4: 5G CQI
+            new Chart(document.getElementById('chart5g_Quality').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Avg CQI 5G (%)', data: cqi5g, borderColor: '#d35400', backgroundColor: 'rgba(211, 84, 0, 0.1)', borderWidth: 3, fill: true, tension: 0.4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        title: { display: true, text: 'Chất Lượng Kênh Truyền (CQI 5G)', font: { size: 15, weight: 'bold' }, color: '#2c3e50' },
+                        legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: { x: { grid: { display: false } }, y: { title: { display: true, text: 'CQI (%)' }, min: 0, max: 100 } }
+                }
+            });
+
+        } catch (error) {
+            console.error("Lỗi vẽ đồ thị trang chủ:", error);
+            document.getElementById('loadingIndicator').innerHTML = "❌ Lỗi không thể tải dữ liệu từ máy chủ.";
+            document.getElementById('loadingIndicator').style.color = "#e74c3c";
+        }
+    }
+
+    window.onload = loadDashboard;
+</script>
 </body>
 </html>
