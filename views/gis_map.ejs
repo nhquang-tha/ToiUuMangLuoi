@@ -13,42 +13,47 @@
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
-    .map-header { background: white; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;}
-    .map-header h1 { margin: 0; font-size: 20px; color: #2c3e50; font-weight: bold; white-space: nowrap;}
+    /* Giao diện Header gọn gàng hơn */
+    .map-header { background: white; padding: 10px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
+    .map-header h1 { margin: 0; font-size: 18px; color: #2c3e50; font-weight: bold; white-space: nowrap;}
     
-    .map-controls { display: flex; gap: 15px; align-items: center; flex-wrap: wrap;}
-    .map-controls select { padding: 9px 15px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; }
+    .map-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
+    .map-controls select { padding: 6px 12px; height: 34px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; font-size: 13px; }
     
-    .search-box { display: flex; align-items: center; border: 2px solid #3498db; border-radius: 6px; overflow: hidden; background: white;}
-    .search-box input { border: none; padding: 9px 15px; width: 250px; outline: none; font-size: 14px; }
-    .search-box button { border: none; background: #3498db; color: white; padding: 9px 15px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    /* Box Tìm kiếm được thu gọn */
+    .search-box { display: flex; align-items: center; border: 1px solid #bdc3c7; border-radius: 4px; overflow: hidden; background: white; height: 34px;}
+    .search-box input { border: none; padding: 6px 12px; width: 220px; outline: none; font-size: 13px; height: 100%; box-sizing: border-box; }
+    .search-box button { border: none; background: #3498db; color: white; padding: 0 15px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 13px; height: 100%; }
     .search-box button:hover { background: #2980b9; }
 
     .map-wrapper { position: relative; flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; }
     #map { flex: 1; height: 100%; width: 100%; z-index: 1; background: #e5e3df; }
     
-    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; }
+    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; font-size: 15px;}
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
-    .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .rf-popup-table th, .rf-popup-table td { padding: 6px; border: 1px solid #ecf0f1; text-align: left; }
-    .rf-popup-table th { background: #f8f9fa; color: #34495e; width: 45%; font-weight: bold; }
+    /* CSS Popup Gọn, tinh tế hơn */
+    .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .rf-popup-table th, .rf-popup-table td { padding: 5px; border: 1px solid #ecf0f1; text-align: left; }
+    .rf-popup-table th { background: #f8f9fa; color: #2c3e50; width: 45%; font-weight: bold; text-transform: uppercase;}
     .rf-popup-table tr:hover { background: #f4f6f8; }
-    .rf-popup-container { max-height: 280px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; margin-top: 10px;}
-    .rf-popup-container::-webkit-scrollbar { width: 6px; }
+    .rf-popup-container { max-height: 250px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; margin-top: 10px;}
+    .rf-popup-container::-webkit-scrollbar { width: 4px; }
     .rf-popup-container::-webkit-scrollbar-track { background: #f1f1f1; }
-    .rf-popup-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 3px; }
+    .rf-popup-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 2px; }
 
-    .custom-leaflet-btn a { font-size: 18px !important; line-height: 30px !important; text-align: center; text-decoration: none; color: #333; display: block; width: 30px; height: 30px; }
+    /* Custom CSS Nút Leaflet */
+    .custom-leaflet-btn a { font-size: 16px !important; display: flex !important; justify-content: center; align-items: center; text-decoration: none; color: #333; width: 30px; height: 30px; line-height: 1 !important;}
     .custom-leaflet-btn a:hover { background-color: #f4f4f4; color: #2980b9; }
 
-    .info.legend { background: white; padding: 12px 18px; border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,0.3); font-size: 12px; line-height: 20px; color: #333; min-width: 200px; }
-    .info.legend h4 { margin: 0 0 12px 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; font-size: 14px; font-weight: bold;}
+    /* Bảng Legend */
+    .info.legend { background: rgba(255,255,255,0.95); padding: 10px 15px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); color: #333; min-width: 180px; }
 
-    .slider-control { background: white; padding: 12px 15px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.4); width: 220px; }
-    .slider-control input[type=range] { -webkit-appearance: none; width: 100%; margin: 8px 0; background: transparent; }
-    .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: #bdc3c7; border-radius: 3px; }
-    .slider-control input[type=range]::-webkit-slider-thumb { height: 16px; width: 16px; border-radius: 50%; background: #3498db; cursor: pointer; -webkit-appearance: none; margin-top: -5px; }
+    /* Thanh trượt gọn */
+    .slider-control { background: rgba(255,255,255,0.95); padding: 10px 15px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); width: 200px; }
+    .slider-control input[type=range] { -webkit-appearance: none; width: 100%; margin: 6px 0; background: transparent; }
+    .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 5px; cursor: pointer; background: #bdc3c7; border-radius: 2.5px; }
+    .slider-control input[type=range]::-webkit-slider-thumb { height: 14px; width: 14px; border-radius: 50%; background: #3498db; cursor: pointer; -webkit-appearance: none; margin-top: -4.5px; }
 
     .azi-tool-container { position: relative; }
     .azi-sub-menu {
@@ -56,12 +61,12 @@
         box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 220px; z-index: 1000; flex-direction: column; border: 1px solid #bdc3c7; overflow: hidden;
     }
     .azi-sub-menu.show { display: flex; }
-    .azi-menu-item { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; cursor: pointer; font-size: 13px; font-weight: bold; color: #2c3e50; transition: 0.2s;}
+    .azi-menu-item { padding: 10px 15px; border-bottom: 1px solid #ecf0f1; cursor: pointer; font-size: 13px; font-weight: bold; color: #2c3e50; transition: 0.2s;}
     .azi-menu-item:hover { background: #f4f6f8; color: #2980b9; }
     .azi-menu-item:last-child { border-bottom: none; }
     
     .azi-end-icon { background: #e74c3c; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-    .azi-permanent-label { background: rgba(255,255,255,0.9); border: 2px solid #8e44ad; border-radius: 6px; font-size: 11px; padding: 4px 8px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.2);}
+    .azi-permanent-label { background: rgba(255,255,255,0.9); border: 2px solid #8e44ad; border-radius: 4px; font-size: 11px; padding: 2px 6px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.2);}
     .leaflet-tooltip.azi-permanent-label::before { border-right-color: #8e44ad; }
 </style>
 
@@ -73,35 +78,35 @@
             <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
             <div class="map-controls">
                 
-                <!-- NÚT MÔ PHỎNG TA -->
-                <button id="btnTAMode" onclick="toggleTAMode()" class="btn-primary" style="background: #9b59b6; color: white; border: none; padding: 9px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s;">
+                <button id="btnTAMode" onclick="toggleTAMode()" style="background: #9b59b6; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📶 Mô Phỏng TA
                 </button>
 
                 <input type="file" id="itsLogInput" accept=".txt,.csv" style="display: none;" onchange="processItsLog(event)">
-                <button onclick="document.getElementById('itsLogInput').click()" class="btn-primary" style="background: #e67e22; color: white; border: none; padding: 9px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                <button onclick="document.getElementById('itsLogInput').click()" style="background: #e67e22; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📥 Import Log ITS
                 </button>
 
                 <div class="search-box">
-                    <input type="text" id="mapSearchInput" placeholder="Nhập Cell Code, Site Code..." onkeypress="if(event.key === 'Enter') searchMap()">
+                    <input type="text" id="mapSearchInput" placeholder="Nhập Cell/Site cần tìm..." onkeypress="if(event.key === 'Enter') searchMap()">
                     <button onclick="searchMap()">🔍 Tìm kiếm</button>
                 </div>
 
-                <label style="font-weight: bold; color: #7f8c8d; margin-left: 10px;">Lớp mạng:</label>
                 <select id="networkSelect" onchange="loadMapData()">
                     <option value="4g" selected>Mạng 4G LTE</option>
                     <option value="3g">Mạng 3G WCDMA</option>
                     <option value="5g">Mạng 5G NR</option>
                 </select>
-                <button onclick="loadMapData()" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 9px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                <button onclick="loadMapData()" style="background: #27ae60; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     🔄 Tải Lại
                 </button>
             </div>
         </div>
         
         <div class="map-wrapper" id="mapWrapper">
-            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang xử lý dữ liệu...</div>
+            <div id="mapLoading">
+                <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 8px;">⏳</span> Đang xử lý dữ liệu...
+            </div>
             <div id="map"></div>
         </div>
 
@@ -117,8 +122,8 @@
     
     // BIẾN QUẢN LÝ TÍNH NĂNG TA
     let isTAMode = false;
-    let taDataCache = []; // Lưu đệm dữ liệu TA
-    let taLayer = null; // Layer riêng cho Heatmap TA
+    let taDataCache = []; 
+    let taLayer = null; 
 
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
@@ -145,7 +150,10 @@
         options: { position: 'topleft' },
         onAdd: function(map) {
             let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn');
-            container.innerHTML = '<a href="#" title="Toàn màn hình">⛶</a>';
+            // Cập nhật SVG Icon cho FullScreen
+            container.innerHTML = `<a href="#" title="Toàn màn hình">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            </a>`;
             container.onclick = function(e) {
                 e.preventDefault();
                 let mapElement = document.getElementById('mapWrapper');
@@ -157,13 +165,22 @@
     });
     map.addControl(new L.Control.FullScreen());
 
-    // --- NÚT GPS ---
+    // --- NÚT GPS CROSSHAIR CHUẨN GOOGLE MAPS ---
     let userMarker = null;
     L.Control.GPS = L.Control.extend({
         options: { position: 'topleft' },
         onAdd: function(map) {
             let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn');
-            container.innerHTML = '<a href="#" title="Vị trí của tôi">📍</a>';
+            // SVG Crosshair Locator
+            container.innerHTML = `<a href="#" title="Vị trí của tôi">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="6"></circle>
+                    <line x1="12" y1="2" x2="12" y2="5"></line>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                    <line x1="2" y1="12" x2="5" y2="12"></line>
+                    <line x1="19" y1="12" x2="22" y2="12"></line>
+                </svg>
+            </a>`;
             container.onclick = function(e) { e.preventDefault(); map.locate({setView: true, maxZoom: 15}); }
             return container;
         }
@@ -200,18 +217,18 @@
         latestOriginId = null;
     };
 
-    // --- SLIDER ĐIỀU CHỈNH ---
+    // --- SLIDER ĐIỀU CHỈNH KÍCH THƯỚC GỌN ---
     L.Control.Sliders = L.Control.extend({
         options: { position: 'bottomleft' },
         onAdd: function (map) {
-            let div = L.DomUtil.create('div', 'info legend leaflet-control slider-control');
+            let div = L.DomUtil.create('div', 'slider-control');
             div.innerHTML = `
-                <div style="margin-bottom: 12px;">
-                    <label style="font-size: 13px; font-weight: bold; color: #2c3e50;">Kích thước Điểm Đo ITS: <span id="markerSizeVal" style="color:#e67e22">3.5</span></label><br>
+                <div style="margin-bottom: 8px;">
+                    <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Kích thước Điểm đo ITS: <span id="markerSizeVal" style="color:#e67e22">3.5</span></label>
                     <input type="range" id="markerSizeSlider" min="1" max="10" step="0.5" value="3.5">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: bold; color: #2c3e50;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">100%</span></label><br>
+                    <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">100%</span></label>
                     <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="100">
                 </div>
             `;
@@ -251,7 +268,7 @@
 
     map.on('locationfound', function(e) {
         if (userMarker) map.removeLayer(userMarker);
-        userMarker = L.circleMarker(e.latlng, { radius: 8, fillColor: "#2980b9", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8 }).addTo(map).bindPopup("📍 Bạn đang ở đây!").openPopup();
+        userMarker = L.circleMarker(e.latlng, { radius: 7, fillColor: "#3498db", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.9 }).addTo(map).bindPopup("📍 Bạn đang ở đây!").openPopup();
     });
 
     document.addEventListener('fullscreenchange', () => { setTimeout(() => map.invalidateSize(), 200); });
@@ -288,22 +305,22 @@
         function updatePopup() {
             let pos = marker.getLatLng();
             let html = `
-                <div style="min-width: 220px; font-family: Arial;">
-                    <h4 style="margin-top:0; color:#2980b9; border-bottom:1px solid #ddd; padding-bottom:5px;">📍 Cấu Hình Điểm Gốc</h4>
-                    <div style="margin-bottom: 8px;">
-                        <label style="font-size:12px; font-weight:bold;">Tên gợi nhớ:</label>
-                        <input type="text" id="origName_${id}" value="${azimuthOrigins[id].name}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                <div style="min-width: 200px; font-family: Arial;">
+                    <h4 style="margin-top:0; color:#2980b9; border-bottom:1px solid #ddd; padding-bottom:5px;">📍 Cấu Hình Gốc</h4>
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-size:11px; font-weight:bold;">Tên:</label>
+                        <input type="text" id="origName_${id}" value="${azimuthOrigins[id].name}" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box; font-size:12px;">
                     </div>
-                    <div style="margin-bottom: 8px;">
-                        <label style="font-size:12px; font-weight:bold;">Vĩ độ (Lat):</label>
-                        <input type="number" step="0.000001" id="origLat_${id}" value="${pos.lat.toFixed(6)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-size:11px; font-weight:bold;">Vĩ độ (Lat):</label>
+                        <input type="number" step="0.000001" id="origLat_${id}" value="${pos.lat.toFixed(6)}" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box; font-size:12px;">
                     </div>
-                    <div style="margin-bottom: 12px;">
-                        <label style="font-size:12px; font-weight:bold;">Kinh độ (Lng):</label>
-                        <input type="number" step="0.000001" id="origLng_${id}" value="${pos.lng.toFixed(6)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size:11px; font-weight:bold;">Kinh độ (Lng):</label>
+                        <input type="number" step="0.000001" id="origLng_${id}" value="${pos.lng.toFixed(6)}" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box; font-size:12px;">
                     </div>
-                    <button onclick="updateOrigin(${id})" style="background:#2980b9; color:#fff; border:none; padding:8px; width:100%; border-radius:4px; font-weight:bold; cursor:pointer; margin-bottom:8px;">💾 Áp dụng Tọa độ</button>
-                    <button onclick="addDirection(${id})" style="background:#27ae60; color:#fff; border:none; padding:8px; width:100%; border-radius:4px; font-weight:bold; cursor:pointer;">➕ Add Direction</button>
+                    <button onclick="updateOrigin(${id})" style="background:#2980b9; color:#fff; border:none; padding:6px; width:100%; border-radius:3px; font-weight:bold; cursor:pointer; margin-bottom:6px; font-size:12px;">💾 Lưu Tọa độ</button>
+                    <button onclick="addDirection(${id})" style="background:#27ae60; color:#fff; border:none; padding:6px; width:100%; border-radius:3px; font-weight:bold; cursor:pointer; font-size:12px;">➕ Add Direction</button>
                 </div>
             `;
             marker.bindPopup(html);
@@ -322,8 +339,8 @@
     function updatePermanentLabel(marker, name, az) {
         marker.setTooltipContent(`
             <div style="text-align:center; line-height:1.2;">
-                <b style="color:#8e44ad; font-size:12px;">${name}</b><br>
-                <span style="color:#e74c3c; font-weight:bold;">${az.toFixed(1)}°</span>
+                <b style="color:#8e44ad; font-size:11px;">${name}</b><br>
+                <span style="color:#e74c3c; font-weight:bold; font-size:11px;">${az.toFixed(1)}°</span>
             </div>
         `);
     }
@@ -335,8 +352,8 @@
         let endLatLng = L.latLng(destCoords[0], destCoords[1]);
         let endIcon = L.divIcon({className: 'azi-end-icon', iconSize: [12, 12], iconAnchor: [6, 6]});
         let endMarker = L.marker(endLatLng, {draggable: true, icon: endIcon}).addTo(azimuthLayer);
-        let line = L.polyline([origPos, endLatLng], {color: '#8e44ad', weight: 2.5, opacity: 0.8}).addTo(azimuthLayer);
-        let lineObj = { endMarker: endMarker, line: line, name: "Sector mới", azimuth: 0, distance: 500 };
+        let line = L.polyline([origPos, endLatLng], {color: '#8e44ad', weight: 2, opacity: 0.8}).addTo(azimuthLayer);
+        let lineObj = { endMarker: endMarker, line: line, name: "Sector", azimuth: 0, distance: 500 };
         originObj.lines.push(lineObj);
         let endId = endMarker._leaflet_id;
 
@@ -345,21 +362,21 @@
 
         function updateEndPopup() {
             let html = `
-                <div style="min-width: 200px; font-family: Arial;">
+                <div style="min-width: 180px; font-family: Arial;">
                     <h4 style="margin-top:0; color:#8e44ad; border-bottom:1px solid #ddd; padding-bottom:5px;">🎯 Cấu Hình Tia</h4>
-                    <div style="margin-bottom: 8px;">
-                        <label style="font-size:12px; font-weight:bold;">Tên Sector:</label>
-                        <input type="text" id="endName_${endId}" value="${lineObj.name}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-size:11px; font-weight:bold;">Tên:</label>
+                        <input type="text" id="endName_${endId}" value="${lineObj.name}" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box; font-size:12px;">
                     </div>
-                    <div style="margin-bottom: 8px;">
-                        <label style="font-size:12px; font-weight:bold;">Góc Azimuth (°):</label>
-                        <input type="number" id="endAz_${endId}" value="${lineObj.azimuth.toFixed(1)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-size:11px; font-weight:bold;">Góc Azimuth (°):</label>
+                        <input type="number" id="endAz_${endId}" value="${lineObj.azimuth.toFixed(1)}" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box; font-size:12px;">
                     </div>
-                    <div style="margin-bottom: 12px;">
-                        <label style="font-size:12px; font-weight:bold;">Khoảng cách (m):</label>
-                        <input type="number" id="endDist_${endId}" value="${lineObj.distance.toFixed(1)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size:11px; font-weight:bold;">Độ dài (m):</label>
+                        <input type="number" id="endDist_${endId}" value="${lineObj.distance.toFixed(1)}" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box; font-size:12px;">
                     </div>
-                    <button onclick="updateEndMarker(${originId}, ${endId})" style="background:#8e44ad; color:#fff; border:none; padding:8px; width:100%; border-radius:4px; font-weight:bold; cursor:pointer;">Lưu Thông Số</button>
+                    <button onclick="updateEndMarker(${originId}, ${endId})" style="background:#8e44ad; color:#fff; border:none; padding:6px; width:100%; border-radius:3px; font-weight:bold; cursor:pointer; font-size:12px;">💾 Lưu Thông Số</button>
                 </div>
             `;
             endMarker.bindPopup(html);
@@ -456,7 +473,7 @@
         if (networkType === '5g') color = '#3498db'; 
 
         const points = calculateSectorPoints(lat, lng, azimuth, baseRadius, scale);
-        const polygon = L.polygon(points, { color: color, weight: 1.5, fillColor: color, fillOpacity: 0.55 });
+        const polygon = L.polygon(points, { color: color, weight: 1, fillColor: color, fillOpacity: 0.65 });
 
         let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
         if (Array.isArray(rfData)) {
@@ -465,18 +482,18 @@
         tableHtml += `</table></div>`;
 
         polygon.bindPopup(`
-            <div style="font-family: Arial; min-width: 320px;">
-                <h4 style="margin: 0 0 5px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px;">📡 Cell: ${cellName}</h4>
-                <div style="font-size: 12px; color: #7f8c8d;"><strong>Tọa độ:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} &nbsp;|&nbsp; <strong>Góc phát:</strong> ${azimuth}°</div>
+            <div style="font-family: Arial; min-width: 250px;">
+                <h4 style="margin: 0 0 5px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px; font-size:14px;">📡 Cell: ${cellName}</h4>
+                <div style="font-size: 11px; color: #7f8c8d;"><strong>Tọa độ:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} &nbsp;|&nbsp; <strong>Góc phát:</strong> ${azimuth}°</div>
                 ${tableHtml}
             </div>
-        `, { maxWidth: 500 });
+        `, { maxWidth: 400 });
         
         return polygon;
     }
 
     // ====================================================
-    // THUẬT TOÁN ĐỐI CHIẾU THÔNG MINH (CORE EXTRACTOR) - ĐỂ MATCH TA
+    // THUẬT TOÁN ĐỐI CHIẾU THÔNG MINH (CORE EXTRACTOR)
     // ====================================================
     function extractCoreName(name) {
         if (!name) return '';
@@ -493,8 +510,17 @@
     }
 
     // ====================================================
-    // MÔ PHỎNG TA (HEATMAP CHOROPLETH) TỐI ƯU HÓA GHÉP DATA
+    // MÔ PHỎNG TA (BIỂU ĐỒ NHIỆT ĐA SẮC - MULTICOLOR HEATMAP)
     // ====================================================
+
+    // Hàm trả về màu sắc chuẩn biểu đồ nhiệt từ Xanh lam tới Đỏ theo tỷ lệ 0..1
+    function getHeatmapColor(ratio) {
+        if (ratio >= 0.8) return { fill: '#e74c3c', border: '#c0392b' }; // Đỏ (Rất cao)
+        if (ratio >= 0.6) return { fill: '#e67e22', border: '#d35400' }; // Cam (Cao)
+        if (ratio >= 0.4) return { fill: '#f1c40f', border: '#f39c12' }; // Vàng (Trung bình)
+        if (ratio >= 0.2) return { fill: '#2ecc71', border: '#27ae60' }; // Xanh lá (Thấp)
+        return { fill: '#3498db', border: '#2980b9' }; // Xanh lam (Rất thấp)
+    }
 
     function createTASegment(lat, lng, azimuth, innerRadius, outerRadius, beamwidth, ratio, cellCode, taIndex, ueCount) {
         const points = [];
@@ -515,24 +541,27 @@
             points.push([lat, lng]);
         }
 
-        let opacity = 0.15 + (0.75 * ratio); 
+        // Lấy màu sắc biểu đồ nhiệt tương ứng với tỷ lệ UE
+        const colors = getHeatmapColor(ratio);
 
         let polygon = L.polygon(points, {
-            color: '#c0392b', 
+            color: colors.border, 
             weight: 0.5,
-            fillColor: '#e74c3c', 
-            fillOpacity: opacity
+            fillColor: colors.fill, 
+            fillOpacity: 0.75 // Tăng độ hiển thị đậm nét cho biểu đồ nhiệt
         });
 
         polygon.bindPopup(`
-            <div style="font-family:Arial; min-width:220px;">
-                <h4 style="margin:0 0 5px 0; color:#e74c3c; border-bottom:2px solid #e74c3c; padding-bottom:5px;">📍 Timing Advance (TA)</h4>
-                <div style="font-size:13px; color:#2c3e50; line-height:1.6;">
-                    <b>Cell:</b> ${cellCode}<br>
-                    <b>Chỉ số TA Index:</b> <span style="color:#2980b9; font-weight:bold;">${taIndex}</span><br>
-                    <b>Khoảng cách vật lý:</b> ${innerRadius.toFixed(0)}m - ${outerRadius.toFixed(0)}m<br>
-                    <b>Số lượng UE:</b> <span style="color:#e74c3c; font-size:16px; font-weight:bold;">${ueCount}</span><br>
-                    <b>Độ rộng búp sóng:</b> ${beamwidth.toFixed(1)}°
+            <div style="font-family:Arial; min-width:200px;">
+                <h4 style="margin:0 0 5px 0; color:${colors.fill}; border-bottom:2px solid ${colors.fill}; padding-bottom:5px; font-size:14px;">📍 Mật Độ Timing Advance</h4>
+                <div style="font-size:12px; color:#2c3e50; line-height:1.6;">
+                    <b>Cell:</b> <span style="color:#2980b9; font-weight:bold;">${cellCode}</span><br>
+                    <b>Chỉ số TA Index:</b> <b>${taIndex}</b><br>
+                    <b>Bán kính vùng:</b> ${innerRadius.toFixed(0)}m - ${outerRadius.toFixed(0)}m<br>
+                    <div style="background:#f4f6f8; padding:6px; margin-top:6px; border-radius:4px; text-align:center;">
+                        <span style="display:block; font-size:11px; color:#7f8c8d;">Số lượng người dùng (UE)</span>
+                        <span style="color:${colors.fill}; font-size:18px; font-weight:bold;">${ueCount}</span>
+                    </div>
                 </div>
             </div>
         `);
@@ -545,21 +574,24 @@
         legendControl.onAdd = function(map) {
             let div = L.DomUtil.create('div', 'info legend');
             div.innerHTML = `
-                <h4>Mô phỏng Mật độ UE (TA)</h4>
-                <div style="display:flex; align-items:center; margin-bottom:6px;">
-                    <i style="background:rgba(231,76,60,0.9); width:16px; height:16px; border:1px solid #7f8c8d; margin-right:8px;"></i>
-                    <span>Nhiều UE (Màu đậm, Búp sóng mở rộng)</span>
+                <h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">Biểu đồ Mật độ TA (UE)</h4>
+                <div style="display:flex; align-items:center; margin-bottom:5px;">
+                    <i style="background:#e74c3c; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Rất cao (80 - 100%)</span>
                 </div>
-                <div style="display:flex; align-items:center; margin-bottom:6px;">
-                    <i style="background:rgba(231,76,60,0.5); width:16px; height:16px; border:1px solid #7f8c8d; margin-right:8px;"></i>
-                    <span>Mức Trung bình</span>
+                <div style="display:flex; align-items:center; margin-bottom:5px;">
+                    <i style="background:#e67e22; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Cao (60 - 80%)</span>
+                </div>
+                <div style="display:flex; align-items:center; margin-bottom:5px;">
+                    <i style="background:#f1c40f; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Trung bình (40 - 60%)</span>
+                </div>
+                <div style="display:flex; align-items:center; margin-bottom:5px;">
+                    <i style="background:#2ecc71; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Thấp (20 - 40%)</span>
                 </div>
                 <div style="display:flex; align-items:center;">
-                    <i style="background:rgba(231,76,60,0.2); width:16px; height:16px; border:1px solid #7f8c8d; margin-right:8px;"></i>
-                    <span>Ít UE (Màu nhạt, Búp sóng co hẹp)</span>
+                    <i style="background:#3498db; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Rất thấp (0 - 20%)</span>
                 </div>
                 <hr style="border:0; border-top:1px dashed #ccc; margin:10px 0;">
-                <div style="font-size:11px; color:#7f8c8d;">Cell không có Data TA sẽ hiển thị màu xám.</div>
+                <div style="font-size:10px; color:#7f8c8d; line-height: 1.4;">Cell không có dữ liệu sẽ hiện màu xám.<br>Búp sóng tự động co hẹp theo tỷ lệ UE.</div>
             `;
             return div;
         };
@@ -578,7 +610,7 @@
         isTAMode = !isTAMode;
 
         if (isTAMode) {
-            btn.innerHTML = '🎯 Đang bật Mô phỏng TA';
+            btn.innerHTML = '🎯 Tắt Mô phỏng TA';
             btn.style.background = '#8e44ad';
             
             let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
@@ -626,16 +658,12 @@
                     let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
                     let rawRfCellCode = String(rfCellCode).trim();
                     
-                    // Ưu tiên 1: Khớp chính xác hoàn toàn Cell_Code giữa bảng TA_Query và bảng rf_4g
                     if (rawTaCell && rawRfCellCode && rawTaCell.toLowerCase() === rawRfCellCode.toLowerCase()) return true;
 
                     let coreTaCell = extractCoreName(rawTaCell);
                     if (!coreTaCell) return false;
 
-                    // Match tuyệt đối theo tên Lõi
                     if (coreTaCell === coreRfName || coreTaCell === coreRfCode || coreTaCell === coreStr) return true;
-
-                    // Match tương đối
                     if (coreRfName.length > 4 && coreTaCell.includes(coreRfName)) return true;
                     if (coreRfCode.length > 4 && coreTaCell.includes(coreRfCode)) return true;
 
@@ -765,7 +793,7 @@
         if (!keyword) {
             globalPolygons.forEach(item => {
                 if(!isTAMode || !item.taSegments) {
-                    item.polygon.setStyle({ weight: 1.5, fillOpacity: 0.55, color: item.baseColor, fillColor: item.baseColor });
+                    item.polygon.setStyle({ weight: 1, fillOpacity: 0.65, color: item.baseColor, fillColor: item.baseColor });
                 }
             });
             if (defaultBounds.length > 0) map.fitBounds(defaultBounds);
@@ -807,6 +835,163 @@
         } else {
             alert(`Không tìm thấy Cell hoặc Site nào chứa từ khóa "${keyword}".`);
         }
+    }
+
+    // ====================================================
+    // MODULE: ĐỌC VÀ VẼ LOG FILE ĐO KIỂM (ITS)
+    // ====================================================
+    
+    function getColor4G(level) {
+        if (level >= -80) return '#27ae60'; 
+        if (level >= -90) return '#2980b9'; 
+        if (level >= -100) return '#f1c40f'; 
+        if (level >= -110) return '#e67e22'; 
+        return '#c0392b'; 
+    }
+
+    function getColor3G(level) {
+        if (level >= -75) return '#27ae60'; 
+        if (level >= -85) return '#2980b9'; 
+        if (level >= -95) return '#f1c40f'; 
+        if (level >= -105) return '#e67e22'; 
+        return '#c0392b'; 
+    }
+
+    function addLegend(is3G, is4G) {
+        if (legendControl) map.removeControl(legendControl);
+        
+        legendControl = L.control({position: 'bottomright'});
+        legendControl.onAdd = function (map) {
+            let div = L.DomUtil.create('div', 'info legend');
+            let labels = [];
+            
+            let title = is4G ? 'Mức thu RSRP 4G (dBm)' : 'Mức thu RSCP 3G (dBm)';
+            div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">${title}</h4>`;
+            
+            const ranges = [ 
+                {min: '', max: is4G ? '-80' : '-75', color: '#27ae60', desc: 'Rất tốt'}, 
+                {min: is4G ? '-80' : '-75', max: is4G ? '-90' : '-85', color: '#2980b9', desc: 'Tốt'}, 
+                {min: is4G ? '-90' : '-85', max: is4G ? '-100' : '-95', color: '#f1c40f', desc: 'Trung bình'}, 
+                {min: is4G ? '-100' : '-95', max: is4G ? '-110' : '-105', color: '#e67e22', desc: 'Yếu'}, 
+                {min: is4G ? '-110' : '-105', max: '', color: '#c0392b', desc: 'Rất yếu'} 
+            ];
+            ranges.forEach(r => {
+                let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} đến ${r.max}`);
+                labels.push(`
+                    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                        <i style="background:${r.color}; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px;"></i> 
+                        <span style="width: 70px; font-size: 11px; font-weight: bold;">${text}</span> 
+                        <span style="color:#7f8c8d; font-size: 11px; font-style:italic;">(${r.desc})</span>
+                    </div>
+                `);
+            });
+            div.innerHTML += labels.join('');
+            return div;
+        };
+        legendControl.addTo(map);
+    }
+
+    function processItsLog(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        itsLogLayer.clearLayers();
+        globalLogLines = []; 
+        document.getElementById('mapLoading').style.display = 'block';
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const text = e.target.result;
+            const lines = text.split(/\r?\n/);
+            
+            if (lines.length < 2) {
+                alert("File log không hợp lệ hoặc trống!");
+                document.getElementById('mapLoading').style.display = 'none';
+                return;
+            }
+
+            const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
+            const idxLat = headers.indexOf('latitude');
+            const idxLng = headers.indexOf('longitude');
+            const idxNode = headers.indexOf('node');
+            const idxCellID = headers.indexOf('cellid');
+            const idxLAC = headers.indexOf('lac');
+            const idxTech = headers.indexOf('networktech');
+            const idxLevel = headers.indexOf('level');
+
+            if (idxLat < 0 || idxLng < 0 || idxLevel < 0) {
+                alert("File log thiếu cột chuẩn (Latitude, Longitude, Level).");
+                document.getElementById('mapLoading').style.display = 'none';
+                return;
+            }
+
+            let is3G = false, is4G = false;
+            let logBounds = [];
+            
+            let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
+            let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
+
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split('|');
+                if (cols.length < headers.length) continue;
+
+                const lat = parseFloat(cols[idxLat]);
+                const lng = parseFloat(cols[idxLng]);
+                if (isNaN(lat) || isNaN(lng)) continue;
+
+                const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : '';
+                const level = parseFloat(cols[idxLevel]);
+                const node = cols[idxNode] ? cols[idxNode].trim() : '';
+                const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
+                const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
+
+                let color = '#95a5a6'; 
+                let servingCellObj = null;
+
+                if (tech.includes('3G')) {
+                    is3G = true;
+                    color = getColor3G(level);
+                    servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId);
+                } else if (tech.includes('4G')) {
+                    is4G = true;
+                    color = getColor4G(level);
+                    servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId);
+                }
+
+                const marker = L.circleMarker([lat, lng], {
+                    radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1
+                });
+                marker.bindPopup(`<b>Công nghệ:</b> ${tech}<br><b>Signal Level:</b> ${level} dBm<br><b>Serving Cell ID:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
+                marker.addTo(itsLogLayer);
+
+                if (servingCellObj) {
+                    let arcCenter = getDestination(servingCellObj.lat, servingCellObj.lng, servingCellObj.azimuth, servingCellObj.baseRadius * scale);
+                    
+                    const line = L.polyline([[lat, lng], arcCenter], {
+                        color: color, weight: 1.5, opacity: 0.8, dashArray: '4, 4'
+                    });
+                    line.addTo(itsLogLayer);
+
+                    globalLogLines.push({
+                        line: line,
+                        startLat: lat,
+                        startLng: lng,
+                        cellObj: servingCellObj
+                    });
+                }
+                
+                logBounds.push([lat, lng]);
+            }
+
+            if (is4G) addLegend(false, true);
+            else if (is3G) addLegend(true, false);
+
+            if (logBounds.length > 0) map.fitBounds(logBounds);
+            document.getElementById('mapLoading').style.display = 'none';
+            event.target.value = ''; 
+        };
+        
+        reader.readAsText(file);
     }
 
     window.onload = loadMapData;
