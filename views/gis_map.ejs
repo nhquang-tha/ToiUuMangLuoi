@@ -42,15 +42,16 @@
     .custom-leaflet-btn a { font-size: 18px !important; line-height: 30px !important; text-align: center; text-decoration: none; color: #333; display: block; width: 30px; height: 30px; }
     .custom-leaflet-btn a:hover { background-color: #f4f4f4; color: #2980b9; }
 
-    /* CSS Bảng Chú giải (Legend) Được Cập Nhật */
     .info.legend { background: white; padding: 12px 18px; border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,0.3); font-size: 12px; line-height: 20px; color: #333; min-width: 200px; }
     .info.legend h4 { margin: 0 0 12px 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; font-size: 14px; font-weight: bold;}
 
-    /* CSS Thanh trượt cấu hình */
     .slider-control { background: white; padding: 12px 15px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.4); width: 220px; }
     .slider-control input[type=range] { -webkit-appearance: none; width: 100%; margin: 8px 0; background: transparent; }
     .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: #bdc3c7; border-radius: 3px; }
     .slider-control input[type=range]::-webkit-slider-thumb { height: 16px; width: 16px; border-radius: 50%; background: #3498db; cursor: pointer; -webkit-appearance: none; margin-top: -5px; }
+
+    /* Custom Icon cho Tool Azimuth */
+    .azi-end-icon { background: #e74c3c; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
 </style>
 
 <div class="layout">
@@ -60,8 +61,6 @@
         <div class="map-header">
             <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
             <div class="map-controls">
-                
-                <!-- IMPORT LOG ITS -->
                 <input type="file" id="itsLogInput" accept=".txt,.csv" style="display: none;" onchange="processItsLog(event)">
                 <button onclick="document.getElementById('itsLogInput').click()" class="btn-primary" style="background: #e67e22; color: white; border: none; padding: 9px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
                     📥 Import Log ITS
@@ -85,7 +84,7 @@
         </div>
         
         <div class="map-wrapper" id="mapWrapper">
-            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang xử lý dữ liệu bản đồ...</div>
+            <div id="mapLoading"><span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 10px;">⏳</span> Đang xử lý dữ liệu...</div>
             <div id="map"></div>
         </div>
 
@@ -95,12 +94,14 @@
 <script>
     let globalPolygons = []; 
     let defaultBounds = [];  
-    let globalLogLines = []; // Mảng chứa các đường kết nối từ điểm đo tới Cell
+    let globalLogLines = []; 
+    let azimuthOrigins = {}; // Quản lý các đối tượng của công cụ Azimuth
     
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     let layerGroup = L.layerGroup().addTo(map);
-    let itsLogLayer = L.layerGroup().addTo(map); // Layer riêng cho Log file
-    let legendControl = null; // Quản lý bảng chú giải
+    let itsLogLayer = L.layerGroup().addTo(map); 
+    let azimuthLayer = L.layerGroup().addTo(map); // Layer riêng cho công cụ vẽ tia
+    let legendControl = null; 
 
     const googleStreets = L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}', {
         attribution: 'Map data &copy; Google', maxZoom: 20
@@ -115,6 +116,7 @@
         "🛰️ Google Map (Vệ tinh)": googleHybrid
     }).addTo(map);
 
+    // --- NÚT FULL SCREEN ---
     L.Control.FullScreen = L.Control.extend({
         options: { position: 'topleft' },
         onAdd: function(map) {
@@ -131,6 +133,7 @@
     });
     map.addControl(new L.Control.FullScreen());
 
+    // --- NÚT GPS ---
     let userMarker = null;
     L.Control.GPS = L.Control.extend({
         options: { position: 'topleft' },
@@ -143,7 +146,22 @@
     });
     map.addControl(new L.Control.GPS());
 
-    // THÊM THANH SLIDER ĐIỀU CHỈNH KÍCH THƯỚC Ở GÓC DƯỚI BÊN TRÁI
+    // --- NÚT AZIMUTH TOOL ---
+    L.Control.AzimuthTool = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function(map) {
+            let container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-leaflet-btn');
+            container.innerHTML = '<a href="#" title="Công cụ vẽ tia Azimuth">🧭</a>';
+            container.onclick = function(e) { 
+                e.preventDefault(); 
+                createAzimuthOrigin(); 
+            }
+            return container;
+        }
+    });
+    map.addControl(new L.Control.AzimuthTool());
+
+    // --- SLIDER ĐIỀU CHỈNH ---
     L.Control.Sliders = L.Control.extend({
         options: { position: 'bottomleft' },
         onAdd: function (map) {
@@ -158,7 +176,6 @@
                     <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="100">
                 </div>
             `;
-            // Ngăn sự kiện click/scroll ảnh hưởng đến bản đồ bên dưới
             L.DomEvent.disableClickPropagation(div);
             L.DomEvent.disableScrollPropagation(div);
             return div;
@@ -166,14 +183,11 @@
     });
     map.addControl(new L.Control.Sliders());
 
-    // SỰ KIỆN THANH SLIDER
     document.getElementById('markerSizeSlider').addEventListener('input', function(e) {
         let size = parseFloat(e.target.value);
         document.getElementById('markerSizeVal').innerText = size;
         itsLogLayer.eachLayer(function(layer) {
-            if (layer instanceof L.CircleMarker) {
-                layer.setRadius(size);
-            }
+            if (layer instanceof L.CircleMarker) layer.setRadius(size);
         });
     });
 
@@ -181,15 +195,12 @@
         let scale = parseFloat(e.target.value) / 100;
         document.getElementById('sectorSizeVal').innerText = e.target.value + '%';
         
-        // Cập nhật lại đa giác Cánh Quạt
         globalPolygons.forEach(item => {
             let newPoints = calculateSectorPoints(item.lat, item.lng, item.azimuth, item.baseRadius, scale);
             item.polygon.setLatLngs(newPoints);
         });
 
-        // TỰ ĐỘNG CẬP NHẬT TỌA ĐỘ ĐƯỜNG NỐI ITS BÁM THEO VÒNG CUNG
         globalLogLines.forEach(item => {
-            // Lấy điểm đích mới là điểm giữa vòng cung
             let newArcCenter = getDestination(item.cellObj.lat, item.cellObj.lng, item.cellObj.azimuth, item.cellObj.baseRadius * scale);
             item.line.setLatLngs([[item.startLat, item.startLng], newArcCenter]);
         });
@@ -203,8 +214,184 @@
     document.addEventListener('fullscreenchange', () => { setTimeout(() => map.invalidateSize(), 200); });
     setTimeout(() => { map.invalidateSize(); }, 500);
 
+
     // ====================================================
-    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT
+    // CÔNG CỤ AZIMUTH ĐỘNG (INTERACTIVE AZIMUTH TOOL)
+    // ====================================================
+    
+    // Tính góc phương vị (Azimuth/Bearing) giữa 2 tọa độ
+    function getBearing(startLat, startLng, destLat, destLng) {
+        startLat = startLat * Math.PI / 180;
+        startLng = startLng * Math.PI / 180;
+        destLat = destLat * Math.PI / 180;
+        destLng = destLng * Math.PI / 180;
+
+        let y = Math.sin(destLng - startLng) * Math.cos(destLat);
+        let x = Math.cos(startLat) * Math.sin(destLat) - Math.sin(startLat) * Math.cos(destLat) * Math.cos(destLng - startLng);
+        let brng = Math.atan2(y, x);
+        brng = brng * 180 / Math.PI;
+        return (brng + 360) % 360;
+    }
+
+    // Khởi tạo điểm Gốc
+    function createAzimuthOrigin() {
+        let center = userMarker ? userMarker.getLatLng() : map.getCenter();
+        let marker = L.marker(center, {draggable: true}).addTo(azimuthLayer);
+        let id = marker._leaflet_id;
+
+        azimuthOrigins[id] = { marker: marker, lines: [], name: "Trạm Gốc " + id };
+
+        function updatePopup() {
+            let pos = marker.getLatLng();
+            let html = `
+                <div style="min-width: 220px; font-family: Arial;">
+                    <h4 style="margin-top:0; color:#2980b9; border-bottom:1px solid #ddd; padding-bottom:5px;">📍 Cấu Hình Điểm Gốc</h4>
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-size:12px; font-weight:bold;">Tên gợi nhớ:</label>
+                        <input type="text" id="origName_${id}" value="${azimuthOrigins[id].name}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-size:12px; font-weight:bold;">Vĩ độ (Lat):</label>
+                        <input type="number" step="0.000001" id="origLat_${id}" value="${pos.lat.toFixed(6)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size:12px; font-weight:bold;">Kinh độ (Lng):</label>
+                        <input type="number" step="0.000001" id="origLng_${id}" value="${pos.lng.toFixed(6)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    </div>
+                    <button onclick="updateOrigin(${id})" style="background:#2980b9; color:#fff; border:none; padding:8px; width:100%; border-radius:4px; font-weight:bold; cursor:pointer; margin-bottom:8px;">💾 Áp dụng Tọa độ</button>
+                    <button onclick="addDirection(${id})" style="background:#27ae60; color:#fff; border:none; padding:8px; width:100%; border-radius:4px; font-weight:bold; cursor:pointer;">➕ Add Direction</button>
+                </div>
+            `;
+            marker.bindPopup(html);
+        }
+        
+        updatePopup();
+        marker.on('dragend', function() {
+            updatePopup();
+            redrawLines(id); 
+        });
+        marker.openPopup();
+    }
+
+    // Thêm Tia hướng phát (Direction)
+    window.addDirection = function(originId) {
+        let originObj = azimuthOrigins[originId];
+        let origPos = originObj.marker.getLatLng();
+
+        // Mặc định tạo ra 1 điểm cách 100m hướng 0 độ (Bắc)
+        let destCoords = getDestination(origPos.lat, origPos.lng, 0, 100);
+        let endLatLng = L.latLng(destCoords[0], destCoords[1]);
+
+        let endIcon = L.divIcon({className: 'azi-end-icon', iconSize: [12, 12], iconAnchor: [6, 6]});
+        let endMarker = L.marker(endLatLng, {draggable: true, icon: endIcon}).addTo(azimuthLayer);
+        
+        let line = L.polyline([origPos, endLatLng], {color: '#8e44ad', weight: 2.5, opacity: 0.8}).addTo(azimuthLayer);
+
+        let lineObj = { endMarker: endMarker, line: line, name: "Sector mới", azimuth: 0, distance: 100 };
+        originObj.lines.push(lineObj);
+
+        let endId = endMarker._leaflet_id;
+
+        function updateEndPopup() {
+            let html = `
+                <div style="min-width: 200px; font-family: Arial;">
+                    <h4 style="margin-top:0; color:#8e44ad; border-bottom:1px solid #ddd; padding-bottom:5px;">🎯 Cấu Hình Tia (Sector)</h4>
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-size:12px; font-weight:bold;">Tên Sector:</label>
+                        <input type="text" id="endName_${endId}" value="${lineObj.name}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-size:12px; font-weight:bold;">Góc Azimuth (°):</label>
+                        <input type="number" id="endAz_${endId}" value="${lineObj.azimuth.toFixed(1)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size:12px; font-weight:bold;">Khoảng cách (m):</label>
+                        <input type="number" id="endDist_${endId}" value="${lineObj.distance.toFixed(1)}" style="width:100%; padding:5px; border:1px solid #ccc; border-radius:3px; box-sizing: border-box;">
+                    </div>
+                    <button onclick="updateEndMarker(${originId}, ${endId})" style="background:#8e44ad; color:#fff; border:none; padding:8px; width:100%; border-radius:4px; font-weight:bold; cursor:pointer;">Lưu Thông Số</button>
+                </div>
+            `;
+            endMarker.bindPopup(html);
+        }
+        updateEndPopup();
+
+        // Hiển thị Realtime khi kéo thả
+        endMarker.on('drag', function(e) {
+            let currentPos = e.target.getLatLng();
+            let op = originObj.marker.getLatLng();
+            line.setLatLngs([op, currentPos]);
+
+            let dist = map.distance(op, currentPos);
+            let az = getBearing(op.lat, op.lng, currentPos.lat, currentPos.lng);
+
+            lineObj.distance = dist;
+            lineObj.azimuth = az;
+
+            endMarker.bindTooltip(`<div style="font-weight:bold; color:#8e44ad;">${lineObj.name}</div>Azimuth: <b style="color:#e74c3c">${az.toFixed(1)}°</b><br>Dài: <b>${dist.toFixed(1)}m</b>`, {permanent: false, direction:"top", opacity: 0.9}).openTooltip();
+        });
+
+        endMarker.on('dragend', function() {
+            endMarker.closeTooltip();
+            updateEndPopup();
+        });
+    };
+
+    // Hàm cập nhật điểm gốc
+    window.updateOrigin = function(id) {
+        let name = document.getElementById('origName_'+id).value;
+        let lat = parseFloat(document.getElementById('origLat_'+id).value);
+        let lng = parseFloat(document.getElementById('origLng_'+id).value);
+        
+        if(isNaN(lat) || isNaN(lng)) return alert("Tọa độ không hợp lệ!");
+
+        let obj = azimuthOrigins[id];
+        obj.name = name;
+        let newLatLng = L.latLng(lat, lng);
+        obj.marker.setLatLng(newLatLng);
+        
+        map.setView(newLatLng, 17); // Tự động đưa màn hình đến điểm vừa chỉnh
+        redrawLines(id);
+    };
+
+    // Vẽ lại các tia khi điểm gốc bị di chuyển
+    window.redrawLines = function(originId) {
+        let obj = azimuthOrigins[originId];
+        let origPos = obj.marker.getLatLng();
+        
+        obj.lines.forEach(lObj => {
+            let newCoords = getDestination(origPos.lat, origPos.lng, lObj.azimuth, lObj.distance);
+            let newLatLng = L.latLng(newCoords[0], newCoords[1]);
+            
+            lObj.endMarker.setLatLng(newLatLng);
+            lObj.line.setLatLngs([origPos, newLatLng]);
+            // Re-bind popup html to update inputs internally
+            let currentHtml = lObj.endMarker.getPopup().getContent();
+            lObj.endMarker.setPopupContent(currentHtml);
+        });
+        obj.marker.closePopup(); 
+    };
+
+    // Hàm cập nhật tia từ dữ liệu người dùng nhập
+    window.updateEndMarker = function(originId, endId) {
+        let obj = azimuthOrigins[originId];
+        let lObj = obj.lines.find(l => l.endMarker._leaflet_id === endId);
+        
+        lObj.name = document.getElementById('endName_'+endId).value;
+        lObj.azimuth = parseFloat(document.getElementById('endAz_'+endId).value);
+        lObj.distance = parseFloat(document.getElementById('endDist_'+endId).value);
+
+        let origPos = obj.marker.getLatLng();
+        let newCoords = getDestination(origPos.lat, origPos.lng, lObj.azimuth, lObj.distance);
+        let newLatLng = L.latLng(newCoords[0], newCoords[1]);
+
+        lObj.endMarker.setLatLng(newLatLng);
+        lObj.line.setLatLngs([origPos, newLatLng]);
+        lObj.endMarker.closePopup();
+    };
+
+
+    // ====================================================
+    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC: VẼ CÁNH QUẠT (CELL)
     // ====================================================
     function getDestination(lat, lng, azimuth, distanceMeters) {
         const R = 6378137; 
@@ -263,6 +450,8 @@
         loading.style.display = 'block';
         layerGroup.clearLayers();
         itsLogLayer.clearLayers(); 
+        azimuthLayer.clearLayers(); // Xóa cả các công cụ vẽ khi tải mạng mới
+        azimuthOrigins = {};
         if (legendControl) map.removeControl(legendControl); 
         
         globalPolygons = []; 
@@ -270,7 +459,6 @@
         defaultBounds = [];
         document.getElementById('mapSearchInput').value = ''; 
 
-        // Lấy tỷ lệ scale hiện tại của Slider
         let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
         try {
@@ -426,7 +614,7 @@
         if (!file) return;
 
         itsLogLayer.clearLayers();
-        globalLogLines = []; // Reset dữ liệu đường nối cũ
+        globalLogLines = []; 
         document.getElementById('mapLoading').style.display = 'block';
 
         const reader = new FileReader();
@@ -488,16 +676,13 @@
                     servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId);
                 }
 
-                // 1. Vẽ điểm đo (Point)
                 const marker = L.circleMarker([lat, lng], {
                     radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1
                 });
                 marker.bindPopup(`<b>Công nghệ:</b> ${tech}<br><b>Signal Level:</b> ${level} dBm<br><b>Serving Cell ID:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
                 marker.addTo(itsLogLayer);
 
-                // 2. VẼ ĐƯỜNG NỐI VÀO ĐIỂM GIỮA VÒNG CUNG CÁNH QUẠT
                 if (servingCellObj) {
-                    // Lấy tọa độ trung tâm của rìa ngoài vòng cung
                     let arcCenter = getDestination(servingCellObj.lat, servingCellObj.lng, servingCellObj.azimuth, servingCellObj.baseRadius * scale);
                     
                     const line = L.polyline([[lat, lng], arcCenter], {
@@ -505,7 +690,6 @@
                     });
                     line.addTo(itsLogLayer);
 
-                    // Lưu Object lại để cập nhật khi người dùng kéo Slider thay đổi độ to nhỏ của cell
                     globalLogLines.push({
                         line: line,
                         startLat: lat,
