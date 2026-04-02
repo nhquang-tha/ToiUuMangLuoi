@@ -1,7 +1,6 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// 1. ENGINE TOÁN HỌC: BIẾN CHUỖI VỀ SỐ YYYYMMDD ĐỂ SORT
 function parseDateToSortableInteger(val) {
     if (!val) return 0;
     let str = String(val).replace(/["'\r\n]/g, '').trim().split(' ')[0];
@@ -23,7 +22,6 @@ function parseDateToSortableInteger(val) {
     return 0;
 }
 
-// 2. ENGINE HIỂN THỊ: TỪ SỐ NGUYÊN TRẢ LẠI DD/MM/YYYY
 function integerToDDMMYYYY(num) {
     if (!num || num === 0) return '';
     let s = String(num); 
@@ -59,7 +57,7 @@ async function getKpiHistory() {
 }
 
 // ============================================
-// HÀM MỚI: TỰ ĐỘNG TỔNG HỢP VÀO BẢNG DASHBOARD
+// ENGINE TỔNG HỢP VÀO BẢNG DASHBOARD
 // ============================================
 async function aggregateDashboardData() {
     const sql = `
@@ -114,7 +112,6 @@ exports.getImportPage = async (req, res) => {
     res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole, history: history });
 };
 
-// API lấy dữ liệu cho trang chủ
 exports.getDashboardData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM Dashboard');
@@ -135,7 +132,7 @@ exports.handleImportData = async (req, res) => {
     const networkType = req.body.networkType;
     let totalImported = 0;
     let errorLogs = [];
-    let isKpiImported = false; // Cờ kiểm tra xem có phải import KPI không
+    let isKpiImported = false;
 
     for (let file of req.files) {
         try {
@@ -155,7 +152,7 @@ exports.handleImportData = async (req, res) => {
             let data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false, defval: "", range: headerRowIndex });
 
             if (data.length === 0) {
-                errorLogs.push(`File ${file.originalname} rỗng hoặc không đúng định dạng.`);
+                errorLogs.push(`File ${file.originalname} rỗng.`);
                 continue;
             }
 
@@ -176,29 +173,8 @@ exports.handleImportData = async (req, res) => {
                 });
             }
 
-            const requiredHeaders = {
-                'rf_3g': ['CSHT_code', 'PSC'],
-                'rf_4g': ['CSHT_code', 'ENodeBID'],
-                'rf_5g': ['CSHT_code', 'nrarfcn'],
-                'kpi_3g': ['Tên RNC', 'CSVOICECSSR'],
-                'kpi_4g': ['Traffic Volume UL (GB)'],
-                'kpi_5g': ['CQI_5G'],
-                'ta_query': ['Date', 'Cell Code'],
-                'poi_4g': ['Cell_Code', 'POI'], 
-                'poi_5g': ['Cell_Code', 'POI']  
-            };
-
-            const headersInFile = Object.keys(data[0]);
-            const expectedHeaders = requiredHeaders[networkType];
-            const isValidFile = expectedHeaders.every(header => headersInFile.includes(header));
-            
-            if (!isValidFile) {
-                errorLogs.push(`File ${file.originalname} thiếu các cột chuẩn của ${networkType}.`);
-                continue;
-            }
-
             if (networkType.startsWith('kpi_')) {
-                isKpiImported = true; // Bật cờ KPI
+                isKpiImported = true; 
                 const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
@@ -262,11 +238,10 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error("Lỗi khi xử lý file:", error);
-            errorLogs.push(`File ${file.originalname} bị lỗi: ${error.message}`);
+            errorLogs.push(`File ${file.originalname} bị lỗi.`);
         }
     } 
 
-    // TRIGGER TỰ ĐỘNG TÍNH TOÁN VÀ ĐỔ VÀO BẢNG DASHBOARD NẾU CÓ IMPORT KPI
     if (isKpiImported) {
         await aggregateDashboardData();
     }
