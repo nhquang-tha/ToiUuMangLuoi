@@ -235,10 +235,8 @@
         document.getElementById('sectorSizeVal').innerText = e.target.value + '%';
         
         if (isTAMode) {
-            // NẾU ĐANG Ở CHẾ ĐỘ TA, VẼ LẠI TOÀN BỘ HEATMAP
             renderTAMap(scale);
         } else {
-            // NẾU Ở CHẾ ĐỘ BÌNH THƯỜNG
             globalPolygons.forEach(item => {
                 let newPoints = calculateSectorPoints(item.lat, item.lng, item.azimuth, item.baseRadius, scale);
                 item.polygon.setLatLngs(newPoints);
@@ -479,39 +477,33 @@
 
     // ====================================================
     // MÔ PHỎNG TA (HEATMAP CHOROPLETH) 
-    // VẼ CÁC VÒNG CUNG ĐỒNG TÂM - CO GIÃN BEAMWIDTH
     // ====================================================
 
-    // Hàm tạo 1 phân đoạn (Segment / Donut Slice)
     function createTASegment(lat, lng, azimuth, innerRadius, outerRadius, beamwidth, ratio, cellCode, taIndex, ueCount) {
         const points = [];
         const startAngle = azimuth - beamwidth / 2;
         const endAngle = azimuth + beamwidth / 2;
 
-        // Vẽ đường cong mép ngoài (Từ trái sang phải)
         for (let i = startAngle; i <= endAngle; i += 2) {
             points.push(getDestination(lat, lng, i, outerRadius));
         }
         points.push(getDestination(lat, lng, endAngle, outerRadius));
 
-        // Vẽ đường cong mép trong (Từ phải vòng về trái)
         if (innerRadius > 0) {
             for (let i = endAngle; i >= startAngle; i -= 2) {
                 points.push(getDestination(lat, lng, i, innerRadius));
             }
             points.push(getDestination(lat, lng, startAngle, innerRadius));
         } else {
-            // Nếu là Index 0 (Sát trạm), nối về tâm
             points.push([lat, lng]);
         }
 
-        // Hiệu ứng Heatmap (Màu đậm/nhạt tùy theo lượng UE)
         let opacity = 0.15 + (0.75 * ratio); 
 
         let polygon = L.polygon(points, {
-            color: '#c0392b', // Viền đỏ đậm
+            color: '#c0392b', 
             weight: 0.5,
-            fillColor: '#e74c3c', // Lõi đỏ
+            fillColor: '#e74c3c', 
             fillOpacity: opacity
         });
 
@@ -572,14 +564,12 @@
             btn.innerHTML = '🎯 Đang bật Mô phỏng TA';
             btn.style.background = '#8e44ad';
             
-            // Lấy Scale từ Slider
             let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
             await renderTAMap(scale);
         } else {
             btn.innerHTML = '📶 Mô phỏng TA';
             btn.style.background = '#9b59b6';
             
-            // Tắt TA, Load lại bản đồ bình thường
             loadMapData();
         }
     }
@@ -589,28 +579,34 @@
         loading.style.display = 'block';
 
         try {
-            // Nếu chưa có dữ liệu TA thì gọi API lấy về
             if (taDataCache.length === 0) {
                 const res = await fetch('/api/ta-data');
                 taDataCache = await res.json();
             }
 
-            layerGroup.clearLayers(); // Tắt layer sector 4G thường
+            layerGroup.clearLayers(); 
             taLayer.clearLayers();
 
-            // Khoảng cách ước tính cho từng mốc TA Index (Đơn vị: mét) 
-            // Scale để thu phóng trực quan
             const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
 
             globalPolygons.forEach(cellItem => {
-                // Rút mã Cell để đối chiếu với file TA
-                const cellCode = cellItem.rawData.Cell_code;
-                const taRecord = taDataCache.find(t => t.Cell_Code === cellCode);
+                // CHỈNH SỬA LỖI TÊN CỘT: Sử dụng cellStr đã được format chuẩn để tìm kiếm an toàn tuyệt đối
+                const cellCodeStr = cellItem.cellStr; 
+                
+                const taRecord = taDataCache.find(t => {
+                    // Cố gắng cover tất cả các khả năng viết hoa/thường của tên Cột TiDB Database
+                    let taCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || '').trim().toLowerCase();
+                    return taCell === cellCodeStr;
+                });
 
                 if (taRecord) {
-                    // Lấy số lượng UE của cả 12 Index
                     let ues = [];
-                    for(let i = 0; i <= 11; i++) ues.push(parseInt(taRecord['Index'+i]) || 0);
+                    for(let i = 0; i <= 11; i++) {
+                        let keyUpperCase = 'Index' + i;
+                        let keyLowerCase = 'index' + i;
+                        let val = taRecord[keyUpperCase] !== undefined ? taRecord[keyUpperCase] : taRecord[keyLowerCase];
+                        ues.push(parseInt(val) || 0);
+                    }
                     
                     let maxUE = Math.max(...ues);
                     
@@ -618,29 +614,24 @@
                         for(let i = 0; i <= 11; i++) {
                             let ueCount = ues[i];
                             if (ueCount > 0) {
-                                // Tính tỷ lệ phân bổ của phân đoạn này so với đoạn đông nhất
                                 let ratio = ueCount / maxUE; 
-
-                                // CO RÚT BÚP SÓNG (DYNAMIC BEAMWIDTH)
-                                // Segment ít UE sẽ bị thu hẹp lại (nhỏ nhất là 20% của 65 độ)
                                 let baseBw = 65;
                                 let bw = baseBw * (0.2 + 0.8 * ratio); 
-
                                 let innerR = taBaseDistances[i] * scale;
                                 let outerR = taBaseDistances[i+1] * scale;
-
-                                let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellCode, i, ueCount);
+                                
+                                // Hiển thị tên Cell chuẩn được trích xuất từ dữ liệu Map thay vì tìm undefined
+                                let cellDisplayName = cellItem.rawData.cell || "Unknown";
+                                let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellDisplayName, i, ueCount);
                                 segment.addTo(taLayer);
                                 
-                                // Gán obj để searchMap() có thể tìm thấy
                                 cellItem.taSegments = cellItem.taSegments || [];
                                 cellItem.taSegments.push(segment);
                             }
                         }
                     }
                 } else {
-                    // Nếu Cell này không có log TA, vẽ nó thành màu xám nhạt để làm nền
-                    let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.cell, '4g', cellItem.rawData.rfData, 250, scale);
+                    let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.rawData.cell, '4g', cellItem.rawData.rfData, 250, scale);
                     fallback.setStyle({fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3});
                     fallback.addTo(taLayer);
                     cellItem.taSegments = [fallback];
@@ -665,7 +656,6 @@
         const network = document.getElementById('networkSelect').value;
         const loading = document.getElementById('mapLoading');
         
-        // Reset trạng thái TA nếu đổi mạng
         isTAMode = false;
         document.getElementById('btnTAMode').innerHTML = '📶 Mô phỏng TA';
         document.getElementById('btnTAMode').style.background = '#9b59b6';
@@ -714,11 +704,7 @@
             });
 
             if (defaultBounds.length > 0) map.fitBounds(defaultBounds);
-            
-            // Xử lý Legend chuẩn
             if (legendControl) map.removeControl(legendControl); 
-            // Xóa rỗng nếu không có ITS log
-            
             loading.style.display = 'none';
 
         } catch (error) {
@@ -729,16 +715,14 @@
     }
 
     // ====================================================
-    // TÌM KIẾM ĐỒNG BỘ CHO CẢ CHẾ ĐỘ THƯỜNG & CHẾ ĐỘ TA
+    // TÌM KIẾM ĐỒNG BỘ
     // ====================================================
     function searchMap() {
         let keyword = document.getElementById('mapSearchInput').value.trim().toLowerCase();
         
         if (!keyword) {
             globalPolygons.forEach(item => {
-                if(isTAMode && item.taSegments) {
-                    // Do nothing for TA currently, reset logic can be added
-                } else {
+                if(!isTAMode || !item.taSegments) {
                     item.polygon.setStyle({ weight: 1.5, fillOpacity: 0.55, color: item.baseColor, fillColor: item.baseColor });
                 }
             });
