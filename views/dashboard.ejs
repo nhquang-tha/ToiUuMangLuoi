@@ -27,12 +27,35 @@
     .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
     @media (max-width: 1300px) { .charts-grid { grid-template-columns: 1fr; } }
 
-    .chart-box { height: 280px; position: relative; border: 1px solid #edf2f7; border-radius: 8px; padding: 15px; background: #fff;}
+    /* HIỆU ỨNG BOX VÀ CLICK TƯƠNG TÁC */
+    .chart-box { 
+        height: 280px; position: relative; border: 1px solid #edf2f7; border-radius: 8px; padding: 15px; 
+        background: #fff; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .chart-box:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+    .chart-box:hover .zoom-hint { color: #3498db; font-weight: bold; }
+    
     .chart-title { position: absolute; top: 15px; left: 15px; font-size: 14px; font-weight: bold; color: #34495e; z-index: 2; margin: 0;}
+    .zoom-hint { position: absolute; top: 15px; right: 20px; font-size: 12px; color: #bdc3c7; transition: 0.3s; pointer-events: none; z-index: 5;}
     
     .loading-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.8); display: flex; justify-content: center; align-items: center; font-weight: bold; color: #2980b9; z-index: 10; border-radius: 12px; }
     .empty-state { padding: 40px; text-align: center; color: #95a5a6; font-size: 15px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* CSS MODAL PHÓNG TO */
+    .modal-overlay {
+        display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7);
+        align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;
+    }
+    .modal-overlay.show { display: flex; opacity: 1; }
+    .modal-content {
+        background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 1300px; height: 85vh; position: relative;
+        transform: scale(0.8); transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column;
+    }
+    .modal-overlay.show .modal-content { transform: scale(1); }
+    .close-btn { position: absolute; top: 15px; right: 25px; font-size: 32px; font-weight: bold; color: #7f8c8d; cursor: pointer; transition: 0.2s; z-index: 10; }
+    .close-btn:hover { color: #e74c3c; }
+    .modal-body { flex: 1; position: relative; width: 100%; height: 100%; }
 </style>
 
 <div class="layout">
@@ -54,19 +77,23 @@
             <div class="network-section">
                 <h3 class="network-title">📡 Hiệu Năng Toàn Mạng 4G LTE <span>Tự động cập nhật</span></h3>
                 <div class="charts-grid">
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart4g_Traffic')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Tổng Traffic (GB)</h4>
                         <canvas id="chart4g_Traffic"></canvas>
                     </div>
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart4g_Thput')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Trung bình Throughput DL (Kbps)</h4>
                         <canvas id="chart4g_Thput"></canvas>
                     </div>
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart4g_PRB')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Trung bình PRB DL (%)</h4>
                         <canvas id="chart4g_PRB"></canvas>
                     </div>
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart4g_CQI')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Trung bình CQI (%)</h4>
                         <canvas id="chart4g_CQI"></canvas>
                     </div>
@@ -77,15 +104,18 @@
             <div class="network-section n5g">
                 <h3 class="network-title">🚀 Hiệu Năng Toàn Mạng 5G NR <span>Tự động cập nhật</span></h3>
                 <div class="charts-grid">
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart5g_Traffic')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Tổng Traffic (GB)</h4>
                         <canvas id="chart5g_Traffic"></canvas>
                     </div>
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart5g_Thput')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Trung bình Throughput DL (Mbps)</h4>
                         <canvas id="chart5g_Thput"></canvas>
                     </div>
-                    <div class="chart-box">
+                    <div class="chart-box" onclick="openModal('chart5g_CQI')">
+                        <span class="zoom-hint">🔍 Click để phóng to</span>
                         <h4 class="chart-title">Trung bình CQI (%)</h4>
                         <canvas id="chart5g_CQI"></canvas>
                     </div>
@@ -102,10 +132,24 @@
     </main>
 </div>
 
+<!-- MODAL POPUP PHÓNG TO ĐỒ THỊ -->
+<div id="chartModal" class="modal-overlay">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <div class="modal-body">
+            <canvas id="modalCanvas"></canvas>
+        </div>
+    </div>
+</div>
+
 <script>
     // Cấu hình font chữ chung cho Chart.js
     Chart.defaults.font.family = "'Roboto', sans-serif";
     Chart.defaults.color = '#7f8c8d';
+
+    // Lưu trữ thông tin đồ thị để vẽ lại trên modal popup
+    window.chartDataStore = {};
+    let modalChartInstance = null;
 
     // Hàm chuyển đổi chuỗi ngày DD/MM/YYYY thành số để Sắp xếp
     function parseDateForSort(dateStr) {
@@ -126,7 +170,10 @@
     }
 
     // Hàm vẽ Biểu đồ Line động chuẩn mực
-    function drawLineChart(canvasId, labels, data, colorHex, labelName) {
+    function drawLineChart(canvasId, labels, data, colorHex, labelName, fullTitle) {
+        // Lưu dữ liệu vào biến toàn cục để dùng cho Popup Modal
+        window.chartDataStore[canvasId] = { labels, data, colorHex, labelName, fullTitle };
+        
         const ctx = document.getElementById(canvasId).getContext('2d');
         
         // Tạo Gradient (đổ bóng xuống dưới mượt mà)
@@ -224,21 +271,94 @@
             // 3. VẼ 7 BIỂU ĐỒ LINE ĐỘC LẬP
             
             // Mạng 4G
-            drawLineChart('chart4g_Traffic', labels, traf4g, '#3498db', 'Traffic (GB)');
-            drawLineChart('chart4g_Thput', labels, thput4g, '#9b59b6', 'Throughput (Kbps)');
-            drawLineChart('chart4g_PRB', labels, prb4g, '#e67e22', 'PRB DL (%)');
-            drawLineChart('chart4g_CQI', labels, cqi4g, '#2ecc71', 'CQI (%)');
+            drawLineChart('chart4g_Traffic', labels, traf4g, '#3498db', 'Traffic (GB)', 'Tổng Traffic 4G (GB)');
+            drawLineChart('chart4g_Thput', labels, thput4g, '#9b59b6', 'Throughput (Kbps)', 'Trung bình Throughput DL 4G (Kbps)');
+            drawLineChart('chart4g_PRB', labels, prb4g, '#e67e22', 'PRB DL (%)', 'Trung bình PRB DL 4G (%)');
+            drawLineChart('chart4g_CQI', labels, cqi4g, '#2ecc71', 'CQI (%)', 'Trung bình CQI 4G (%)');
 
             // Mạng 5G
-            drawLineChart('chart5g_Traffic', labels, traf5g, '#2980b9', 'Traffic (GB)');
-            drawLineChart('chart5g_Thput', labels, thput5g, '#8e44ad', 'Throughput (Mbps)');
-            drawLineChart('chart5g_CQI', labels, cqi5g, '#27ae60', 'CQI (%)');
+            drawLineChart('chart5g_Traffic', labels, traf5g, '#2980b9', 'Traffic (GB)', 'Tổng Traffic 5G (GB)');
+            drawLineChart('chart5g_Thput', labels, thput5g, '#8e44ad', 'Throughput (Mbps)', 'Trung bình Throughput DL 5G (Mbps)');
+            drawLineChart('chart5g_CQI', labels, cqi5g, '#27ae60', 'CQI (%)', 'Trung bình CQI 5G (%)');
 
         } catch (error) {
             console.error("Lỗi vẽ đồ thị trang chủ:", error);
             document.getElementById('loadingIndicator').innerHTML = "❌ Lỗi không thể tải dữ liệu từ máy chủ.";
             document.getElementById('loadingIndicator').style.color = "#e74c3c";
         }
+    }
+
+    // =====================================
+    // CÁC HÀM XỬ LÝ MỞ / ĐÓNG MODAL POPUP
+    // =====================================
+    function openModal(canvasId) {
+        const config = window.chartDataStore[canvasId];
+        if (!config) return;
+
+        const modal = document.getElementById('chartModal');
+        modal.classList.add('show'); 
+
+        setTimeout(() => {
+            const ctx = document.getElementById('modalCanvas').getContext('2d');
+            
+            if (modalChartInstance) {
+                modalChartInstance.destroy(); 
+            }
+
+            // Tạo lại Gradient nhưng dài hơn để hợp với kích thước màn hình to
+            let gradient = ctx.createLinearGradient(0, 0, 0, 600);
+            gradient.addColorStop(0, hexToRgba(config.colorHex, 0.5));
+            gradient.addColorStop(1, hexToRgba(config.colorHex, 0.0));
+
+            modalChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: config.labels,
+                    datasets: [{
+                        label: config.labelName,
+                        data: config.data, 
+                        borderColor: config.colorHex,
+                        backgroundColor: gradient,
+                        borderWidth: 4, 
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: config.colorHex,
+                        pointBorderWidth: 3,
+                        pointRadius: 5,
+                        pointHoverRadius: 9,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        title: { display: true, text: config.fullTitle, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, 
+                            padding: 15, cornerRadius: 8, displayColors: false
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 14 } } },
+                        y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 14 } } }
+                    }
+                }
+            });
+        }, 50); 
+    }
+
+    function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
+    
+    // Đóng Modal khi bấm chuột ra vùng nền ngoài
+    window.onclick = function(e) { 
+        if (e.target === document.getElementById('chartModal')) closeModal(); 
     }
 
     window.onload = loadDashboard;
