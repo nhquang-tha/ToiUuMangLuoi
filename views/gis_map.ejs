@@ -170,6 +170,7 @@
                     <div class="azi-menu-item" onclick="createAzimuthOrigin('gps')">📍 Lấy điểm gốc trùng GPS</div>
                     <div class="azi-menu-item" onclick="createAzimuthOrigin('center')">🎯 Lấy gốc giữa màn hình</div>
                     <div class="azi-menu-item" style="color: #27ae60;" onclick="addDirectionToLatest()">➕ Add Direction</div>
+                    <div class="azi-menu-item" style="color: #c0392b; border-top: 1px solid #ecf0f1;" onclick="clearAzimuthTool()">🗑️ Clear Azimuth</div>
                 </div>
             `;
             // Ngăn chặn sự kiện click lọt xuống bản đồ
@@ -190,6 +191,14 @@
         let menu = document.getElementById('aziSubMenu');
         if(menu && menu.classList.contains('show')) menu.classList.remove('show');
     });
+
+    // Xóa toàn bộ các điểm gốc và tia Azimuth
+    window.clearAzimuthTool = function() {
+        document.getElementById('aziSubMenu').classList.remove('show'); // Đóng menu
+        azimuthLayer.clearLayers();
+        azimuthOrigins = {};
+        latestOriginId = null;
+    };
 
     // --- SLIDER ĐIỀU CHỈNH ---
     L.Control.Sliders = L.Control.extend({
@@ -341,7 +350,7 @@
         let originObj = azimuthOrigins[originId];
         let origPos = originObj.marker.getLatLng();
 
-        let destCoords = getDestination(origPos.lat, origPos.lng, 0, 100);
+        let destCoords = getDestination(origPos.lat, origPos.lng, 0, 500); // Khoảng cách mặc định 500m
         let endLatLng = L.latLng(destCoords[0], destCoords[1]);
 
         let endIcon = L.divIcon({className: 'azi-end-icon', iconSize: [12, 12], iconAnchor: [6, 6]});
@@ -349,7 +358,7 @@
         
         let line = L.polyline([origPos, endLatLng], {color: '#8e44ad', weight: 2.5, opacity: 0.8}).addTo(azimuthLayer);
 
-        let lineObj = { endMarker: endMarker, line: line, name: "Sector mới", azimuth: 0, distance: 100 };
+        let lineObj = { endMarker: endMarker, line: line, name: "Sector mới", azimuth: 0, distance: 500 };
         originObj.lines.push(lineObj);
 
         let endId = endMarker._leaflet_id;
