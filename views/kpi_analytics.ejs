@@ -129,6 +129,9 @@
 </div>
 
 <script>
+    Chart.defaults.font.family = "'Roboto', sans-serif";
+    Chart.defaults.color = '#7f8c8d';
+
     // --- KHAI BÁO CẤU HÌNH KPI CHO TỪNG MẠNG ---
     const KPI_CONFIG = {
         '3g': [
@@ -155,6 +158,14 @@
     window.chartDataStore = {}; 
     window.chartInstances = {}; 
     let modalChartInstance = null;
+
+    // Hex to RGBA Converter dùng cho Gradient
+    function hexToRgba(hex, alpha) {
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
 
     // Tự động load danh sách POI và xử lý Deep Link từ các trang Cảnh Báo
     window.onload = async () => {
@@ -317,34 +328,58 @@
                     label: cellName,
                     data: dataPoints,
                     borderColor: color,
-                    backgroundColor: color + '22',
-                    borderWidth: 2,
+                    // Chỉ dùng màu nền nhẹ, gradient sẽ được thêm vào bên dưới ctx
+                    baseColor: color, 
+                    borderWidth: 2.5,
                     pointBackgroundColor: '#fff',
                     pointBorderColor: color,
-                    pointRadius: 4,
+                    pointBorderWidth: 2,
+                    pointRadius: 0,
                     pointHoverRadius: 6,
-                    tension: 0.3,
-                    fill: false, 
+                    tension: 0.4,
+                    fill: true, 
                     spanGaps: true 
                 };
             });
 
             window.chartDataStore[canvasId] = {
                 labels: allDates,
-                datasets: datasets.map(ds => ({ label: ds.label, data: ds.data, borderColor: ds.borderColor, backgroundColor: ds.backgroundColor })),
+                datasets: datasets,
                 title: config.title
             };
 
             const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // Xử lý tạo Gradient fill cho từng bộ dữ liệu
+            datasets.forEach(ds => {
+                let gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0, hexToRgba(ds.baseColor, 0.4));
+                gradient.addColorStop(1, hexToRgba(ds.baseColor, 0.0));
+                ds.backgroundColor = gradient;
+            });
+
             window.chartInstances[canvasId] = new Chart(ctx, {
                 type: 'line',
                 data: { labels: allDates, datasets: datasets },
                 options: {
                     responsive: true, maintainAspectRatio: false,
+                    layout: { padding: { top: 15 } },
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
                         title: { display: true, text: config.title, font: { size: 14, weight: 'bold' }, color: '#34495e', padding: { bottom: 15 } },
                         legend: { display: datasets.length > 1, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                        tooltip: { mode: 'index', intersect: false } 
+                        tooltip: { 
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#2c3e50',
+                            bodyColor: '#2c3e50',
+                            borderColor: '#ecf0f1',
+                            borderWidth: 1,
+                            padding: 10,
+                            boxPadding: 5,
+                            usePointStyle: true,
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 14, weight: 'bold' }
+                        } 
                     },
                     scales: {
                         x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } },
@@ -369,21 +404,28 @@
                 modalChartInstance.destroy(); 
             }
 
-            const zoomedDatasets = dataStore.datasets.map(ds => ({
-                label: ds.label,
-                data: [...ds.data], 
-                borderColor: ds.borderColor,
-                backgroundColor: ds.backgroundColor,
-                borderWidth: 3, 
-                pointBackgroundColor: '#ffffff',
-                pointBorderColor: ds.borderColor,
-                pointBorderWidth: 2,
-                pointRadius: 5,
-                pointHoverRadius: 8,
-                fill: false,
-                tension: 0.3,
-                spanGaps: true
-            }));
+            const zoomedDatasets = dataStore.datasets.map(ds => {
+                // Tạo Gradient cho khung lớn hơn
+                let gradient = ctx.createLinearGradient(0, 0, 0, 600);
+                gradient.addColorStop(0, hexToRgba(ds.baseColor, 0.5));
+                gradient.addColorStop(1, hexToRgba(ds.baseColor, 0.0));
+
+                return {
+                    label: ds.label,
+                    data: [...ds.data], 
+                    borderColor: ds.borderColor,
+                    backgroundColor: gradient,
+                    borderWidth: 3, 
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: ds.borderColor,
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    fill: true,
+                    tension: 0.4,
+                    spanGaps: true
+                };
+            });
 
             modalChartInstance = new Chart(ctx, {
                 type: 'line',
@@ -395,12 +437,13 @@
                     responsive: true, 
                     maintainAspectRatio: false, 
                     animation: { duration: 600, easing: 'easeOutQuart' },
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
                         title: { display: true, text: dataStore.title, font: { size: 22, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
                         legend: { display: zoomedDatasets.length > 1, position: 'bottom', labels: { font: { size: 14 } } },
                         tooltip: {
-                            mode: 'index', intersect: false,
-                            backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, 
+                            backgroundColor: 'rgba(44, 62, 80, 0.95)', titleColor: '#fff', bodyColor: '#fff',
+                            titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, 
                             padding: 15, cornerRadius: 8, displayColors: true
                         }
                     },
