@@ -31,7 +31,6 @@ function integerToDDMMYYYY(num) {
     return `${s.substring(6, 8)}/${s.substring(4, 6)}/${s.substring(0, 4)}`;
 }
 
-// HÀM CHUYỂN ĐỔI SỐ AN TOÀN TRÁNH LỖI DB
 const getFloat = (val) => {
     if (val === undefined || val === null || val === "") return null;
     let n = Number(String(val).replace(/,/g, '').trim());
@@ -60,7 +59,47 @@ async function getKpiHistory() {
 }
 
 // ============================================
-// HÀM QUAN TRỌNG: XỬ LÝ RENDER TRANG (ĐÃ PHỤC HỒI)
+// HÀM MỚI: TỰ ĐỘNG TỔNG HỢP VÀO BẢNG DASHBOARD
+// ============================================
+async function aggregateDashboardData() {
+    const sql = `
+        INSERT INTO Dashboard (
+            thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G,
+            sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G
+        )
+        SELECT 
+            d.Thoi_gian,
+            COALESCE(t4.sum_TRAFFIC_4G, 0), COALESCE(t4.AVG_USER_DL_AVG_THPUT_4G, 0), COALESCE(t4.AVG_RES_BLK_DL_4G, 0), COALESCE(t4.AVG_CQI_4G, 0),
+            COALESCE(t5.sum_TRAFFIC_5G, 0), COALESCE(t5.AVG_USER_DL_AVG_THPUT_5G, 0), COALESCE(t5.AVG_CQI_5G, 0)
+        FROM 
+            (
+                SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''
+                UNION 
+                SELECT DISTINCT Thoi_gian FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''
+            ) d
+        LEFT JOIN 
+            (SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_4G, AVG(User_DL_Avg_Throughput_Kbps) AS AVG_USER_DL_AVG_THPUT_4G, AVG(RB_Util_Rate_DL) AS AVG_RES_BLK_DL_4G, AVG(CQI_4G) AS AVG_CQI_4G FROM kpi_4g GROUP BY Thoi_gian) t4 ON d.Thoi_gian = t4.Thoi_gian
+        LEFT JOIN 
+            (SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_5G, AVG(A_User_DL_Avg_Throughput) AS AVG_USER_DL_AVG_THPUT_5G, AVG(CQI_5G) AS AVG_CQI_5G FROM kpi_5g GROUP BY Thoi_gian) t5 ON d.Thoi_gian = t5.Thoi_gian
+        ON DUPLICATE KEY UPDATE
+            sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G),
+            AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G),
+            AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G),
+            AVG_CQI_4G = VALUES(AVG_CQI_4G),
+            sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G),
+            AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G),
+            AVG_CQI_5G = VALUES(AVG_CQI_5G);
+    `;
+    try {
+        await db.query(sql);
+        console.log("✅ Đã cập nhật ngầm dữ liệu tổng hợp vào bảng Dashboard thành công.");
+    } catch (e) {
+        console.error("❌ Lỗi khi tổng hợp bảng Dashboard:", e);
+    }
+}
+
+// ============================================
+// CÁC HÀM XỬ LÝ RENDER & IMPORT
 // ============================================
 exports.renderPage = (pageName) => {
     return async (req, res) => {
@@ -75,6 +114,16 @@ exports.getImportPage = async (req, res) => {
     res.render('import_data', { title: 'Import Data', page: 'Import Data', message: null, error: null, userRole: userRole, history: history });
 };
 
+// API lấy dữ liệu cho trang chủ
+exports.getDashboardData = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM Dashboard');
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: "Lỗi lấy dữ liệu Dashboard" });
+    }
+};
+
 exports.handleImportData = async (req, res) => {
     const userRole = res.locals.currentUser ? res.locals.currentUser.role : 'user';
     let history = await getKpiHistory(); 
@@ -86,14 +135,13 @@ exports.handleImportData = async (req, res) => {
     const networkType = req.body.networkType;
     let totalImported = 0;
     let errorLogs = [];
+    let isKpiImported = false; // Cờ kiểm tra xem có phải import KPI không
 
-    // VÒNG LẶP XỬ LÝ NHIỀU FILE
     for (let file of req.files) {
         try {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             
-            // THUẬT TOÁN ĐỊNH VỊ HEADER THÔNG MINH
             let rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false });
             let headerRowIndex = 0;
             for (let i = 0; i < Math.min(10, rawData.length); i++) {
@@ -111,7 +159,6 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // CHUẨN HÓA THỜI GIAN
             if (!networkType.startsWith('poi_')) {
                 data.forEach(row => {
                     let timeCol = row['Thời gian'] !== undefined ? 'Thời gian' : (row['Date'] !== undefined ? 'Date' : null);
@@ -150,8 +197,8 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            // XÓA DỮ LIỆU CŨ ĐỂ GHI ĐÈ 
             if (networkType.startsWith('kpi_')) {
+                isKpiImported = true; // Bật cờ KPI
                 const uniqueDates = [...new Set(data.map(row => row['Thời gian']).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
@@ -184,60 +231,15 @@ exports.handleImportData = async (req, res) => {
                 values = data.map(row => [row['STT'], row['Nhà cung cấp'], row['Tỉnh'], row['Tên RNC'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['LAC'], row['CI'], row['Thời gian'], row['CS_SO_ATT'], row['CS_IF_ATT'], row['CS_IR_ATT'], row['PS_IF_ATT'], row['PS_IR_ATT'], row['PS_SO_ATT'], row['CSVOICECSSR'], row['DLTRAFFICPS'], row['CSIRATHOSRWEIGHT'], row['PSHSPACALLDROPRATE'], row['TRAFFIC'], row['CSVIDEODROPCALLRATE'], row['PSTRAFFIC'], row['CSINTERFREQHOSR'], row['ULTRAFFICPS'], row['CSVIDEOTRAFFIC'], row['PSR99CALLSETUPSR'], row['CSVOICEDROPCALLRATE'], row['PSHSDPATPKBPS'], row['SOFTHOSR'], row['PSR99UPLINKTRAFFICGB'], row['TRAFFICACTIVESETCS64'], row['PSR99TRAFFICGB'], row['CALLVOLUME'], row['PSHSPATRAFFICGB'], row['PSCONGES'], row['DCR'], row['PSCSSR'], row['CSSR'], row['IRATHOSR'], row['PSDCR'], row['CSSRVIDEOPHONE'], row['PSIRATHOSR'], row['SOFTHOSRPS'], row['CSCONGES'], row['V2INTERFREQHOSRPS'], row['R99DLTHROUGHPUT'], row['HSDPATHROUGHPUT'], row['PSR99CALLDROPRATE'], row['PSHSUPATPKBPS'], row['PSR99DLTRAFFICGB'], row['PSHSUPATRAFFICGB'], row['PSHSDPATRAFFICGB'], row['PSHSPACSSR'], row['R99ULTHROUGHPUT']]);
             } else if (networkType === 'kpi_4g') {
                 const fileHeaders = Object.keys(data[0]); 
-
                 sql = `INSERT INTO kpi_4g (Site_name, CellType, District_code, Cell_name, MIMO, Thoi_gian, UL_Traffic_VoLTE_GB, Avg_UL_throughput_QCI_1, VoLTE_Traffic_Erl, Total_Traffic_VoLTE_GB, VoLTE_ERAB_Call_Setup_SR, Intra_freq_HO_SR_VoLTE, Inter_freq_HO_SR_VoLTE, DL_Traffic_VoLTE_GB, Avg_DL_throughput_QCI_1, Call_Drop_Rate_VoLTE, SRVCC_SR_LTE_to_WCDMA, User_UL_Avg_Throughput_Kbps, User_DL_Avg_Throughput_Kbps, Traffic_Volume_UL_GB, Traffic_Volumn_DL_GB, Total_Data_Traffic_Volume_GB, Total_UE, Service_Drop_all, RB_Util_Rate_UL, RB_Util_Rate_DL, INTRA_HOSR_ATT, Intra_frequency_HO, Intra_eNB_HO_SR_total, Inter_frequency_HO, Inter_RAT_Total_HO_SR, Inter_RAT_HO_Prep_SR, Inter_RAT_HOSR_LTE_to_WCDMA, Inter_RAT_HO_SR_Exec, eRAB_Setup_SR_All, CS_Call_Setup_SR_Max, Downlink_Latency, Call_Setup_SR, E_UTRAN_Init_Context_Setup_SR_CSFB, CSFB_ATT, CQI_4G, Col42, Col43, Col44, Col45, Col46, Col47) VALUES ?`;
-                
                 values = data.map(row => {
                     let rowVals = [
-                        row['Site name'] || '', 
-                        row['CellType (L900, L1800, L2600..)'] || '', 
-                        row['District code'] || row['Province code'] || '', 
-                        row['Cell name'] || '', 
-                        row['MIMO'] || '', 
-                        row['Thời gian'] || '', 
-                        getFloat(row['UL Traffic VoLTE (GB)']), 
-                        getFloat(row['Average UL throughput of services with a QCI of 1 (kbit/s)']), 
-                        getFloat(row['VoLTE Traffic (Erl)']), 
-                        getFloat(row['Total Traffic VoLTE (GB)']), 
-                        getFloat(row['VoLTE E-RAB Call Setup Success Rate']), 
-                        getFloat(row['Intra-frequency HO Success Rates (VoLTE)']), 
-                        getFloat(row['Inter-frequency HO Success Rates (VoLTE)']), 
-                        getFloat(row['DL Traffic VoLTE (GB)']), 
-                        getFloat(row['Average DL throughput of services with a QCI of 1 (kbit/s)']), 
-                        getFloat(row['Call Drop Rate (VoLTE)']), 
-                        getFloat(row['SRVCC Success Rate (LTE to WCDMA)']), 
-                        getFloat(row['User Uplink Average Throughput (Kbps)']), 
-                        getFloat(row['User Downlink Average Throughput (Kbps)']), 
-                        getFloat(row['Traffic Volume UL (GB)']), 
-                        getFloat(row['Traffic Volumn DL (GB)']), 
-                        getFloat(row['Total Data Traffic Volume (GB)']), 
-                        getFloat(row['Total UE']), 
-                        getFloat(row['Service Drop (all service)']), 
-                        getFloat(row['Resource Block Untilizing Rate Uplink (%)']), 
-                        getFloat(row['Resource Block Untilizing Rate Downlink (%)']), 
-                        getFloat(row['INTRA_HOSR_ATT (Attemp intra hosr (exe phrase))']), 
-                        getFloat(row['Intra-frequency HO (%)']), 
-                        getFloat(row['Intra eNB HO SR total']), 
-                        getFloat(row['Inter-frequency HO (%)']), 
-                        getFloat(row['Inter RAT Total HO SR (from HO preparation start until successful HO execution)']),
-                        getFloat(row['Inter RAT HO Preparation Success Ratio (preparation phase)']),
-                        getFloat(row['Inter-RAT HOSR (LTE to WCDMA) (%)']),
-                        getFloat(row['Inter RAT HO SR (execution phase)']),
-                        getFloat(row['eRAB Setup Success Rate (all services) (%)']),
-                        getFloat(row['CS Call Setup Success Rate max Test']),
-                        getFloat(row['Downlink Latency']),
-                        getFloat(row['Call Setup Success Rate']),
-                        getFloat(row['E-UTRAN Initial Context Setup Success Ratio being Subject for CS Fallback (%)']),
-                        getFloat(row['CSFB_ATT']),
-                        getFloat(row['CQI_4G'])
+                        row['Site name'] || '', row['CellType (L900, L1800, L2600..)'] || '', row['District code'] || row['Province code'] || '', row['Cell name'] || '', row['MIMO'] || '', row['Thời gian'] || '', 
+                        getFloat(row['UL Traffic VoLTE (GB)']), getFloat(row['Average UL throughput of services with a QCI of 1 (kbit/s)']), getFloat(row['VoLTE Traffic (Erl)']), getFloat(row['Total Traffic VoLTE (GB)']), getFloat(row['VoLTE E-RAB Call Setup Success Rate']), getFloat(row['Intra-frequency HO Success Rates (VoLTE)']), getFloat(row['Inter-frequency HO Success Rates (VoLTE)']), getFloat(row['DL Traffic VoLTE (GB)']), getFloat(row['Average DL throughput of services with a QCI of 1 (kbit/s)']), getFloat(row['Call Drop Rate (VoLTE)']), getFloat(row['SRVCC Success Rate (LTE to WCDMA)']), getFloat(row['User Uplink Average Throughput (Kbps)']), getFloat(row['User Downlink Average Throughput (Kbps)']), getFloat(row['Traffic Volume UL (GB)']), getFloat(row['Traffic Volumn DL (GB)']), getFloat(row['Total Data Traffic Volume (GB)']), getFloat(row['Total UE']), getFloat(row['Service Drop (all service)']), getFloat(row['Resource Block Untilizing Rate Uplink (%)']), getFloat(row['Resource Block Untilizing Rate Downlink (%)']), getFloat(row['INTRA_HOSR_ATT (Attemp intra hosr (exe phrase))']), getFloat(row['Intra-frequency HO (%)']), getFloat(row['Intra eNB HO SR total']), getFloat(row['Inter-frequency HO (%)']), getFloat(row['Inter RAT Total HO SR (from HO preparation start until successful HO execution)']), getFloat(row['Inter RAT HO Preparation Success Ratio (preparation phase)']), getFloat(row['Inter-RAT HOSR (LTE to WCDMA) (%)']), getFloat(row['Inter RAT HO SR (execution phase)']), getFloat(row['eRAB Setup Success Rate (all services) (%)']), getFloat(row['CS Call Setup Success Rate max Test']), getFloat(row['Downlink Latency']), getFloat(row['Call Setup Success Rate']), getFloat(row['E-UTRAN Initial Context Setup Success Ratio being Subject for CS Fallback (%)']), getFloat(row['CSFB_ATT']), getFloat(row['CQI_4G'])
                     ];
-
                     for (let i = 41; i < 47; i++) {
-                        if (i < fileHeaders.length) {
-                            rowVals.push(getFloat(row[fileHeaders[i]]));
-                        } else {
-                            rowVals.push(null);
-                        }
+                        if (i < fileHeaders.length) rowVals.push(getFloat(row[fileHeaders[i]]));
+                        else rowVals.push(null);
                     }
                     return rowVals;
                 });
@@ -263,6 +265,11 @@ exports.handleImportData = async (req, res) => {
             errorLogs.push(`File ${file.originalname} bị lỗi: ${error.message}`);
         }
     } 
+
+    // TRIGGER TỰ ĐỘNG TÍNH TOÁN VÀ ĐỔ VÀO BẢNG DASHBOARD NẾU CÓ IMPORT KPI
+    if (isKpiImported) {
+        await aggregateDashboardData();
+    }
 
     history = await getKpiHistory(); 
 
