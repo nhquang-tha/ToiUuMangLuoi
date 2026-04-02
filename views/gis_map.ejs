@@ -476,6 +476,23 @@
     }
 
     // ====================================================
+    // THUẬT TOÁN ĐỐI CHIẾU THÔNG MINH (CORE EXTRACTOR)
+    // ====================================================
+    function extractCoreName(name) {
+        if (!name) return '';
+        return String(name).toLowerCase()
+                   .replace(/['"]/g, '')   // Loại bỏ ngoặc kép nếu có
+                   .replace(/^4g-/i, '')   // Loại bỏ tiền tố mạng
+                   .replace(/^3g-/i, '')
+                   .replace(/^5g-/i, '')
+                   .replace(/^ul-/i, '')   // Loại bỏ tiền tố vendor (vd: UL-TPO)
+                   .replace(/^gl-/i, '')
+                   .replace(/-tha$/i, '')  // Loại bỏ hậu tố Tỉnh
+                   .replace(/-th$/i, '')
+                   .trim();
+    }
+
+    // ====================================================
     // MÔ PHỎNG TA (HEATMAP CHOROPLETH) 
     // ====================================================
 
@@ -590,17 +607,42 @@
             const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
 
             globalPolygons.forEach(cellItem => {
-                // CHỈNH SỬA LỖI TÊN CỘT: Sử dụng cellStr đã được format chuẩn để tìm kiếm an toàn tuyệt đối
-                const cellCodeStr = cellItem.cellStr; 
                 
+                // 1. Trích xuất Tên Lõi từ cơ sở dữ liệu Map/RF
+                let rfCellName = '';
+                let rfCellCode = '';
+                if (cellItem.rawData && cellItem.rawData.rfData) {
+                    let nameItem = cellItem.rawData.rfData.find(x => x.key.toLowerCase() === 'cell_name' || x.key.toLowerCase() === 'site_name');
+                    if (nameItem) rfCellName = nameItem.value;
+                    
+                    let codeItem = cellItem.rawData.rfData.find(x => x.key.toLowerCase() === 'cell_code');
+                    if (codeItem) rfCellCode = codeItem.value;
+                }
+
+                let coreRfName = extractCoreName(rfCellName);
+                let coreRfCode = extractCoreName(rfCellCode);
+                let coreStr = extractCoreName(cellItem.cellStr);
+
+                // 2. So sánh xuyên thấu với file TA
                 const taRecord = taDataCache.find(t => {
-                    // Cố gắng cover tất cả các khả năng viết hoa/thường của tên Cột TiDB Database
-                    let taCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || '').trim().toLowerCase();
-                    return taCell === cellCodeStr;
+                    let rawTaCell = t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '';
+                    let coreTaCell = extractCoreName(rawTaCell);
+
+                    if (!coreTaCell) return false;
+
+                    // Match tuyệt đối theo tên Lõi
+                    if (coreTaCell === coreRfName || coreTaCell === coreRfCode || coreTaCell === coreStr) return true;
+
+                    // Match tương đối nếu Tên Lõi TA chứa Tên Lõi RF (hoặc ngược lại) để bù đắp các sai lệch dị biệt
+                    if (coreRfName.length > 4 && coreTaCell.includes(coreRfName)) return true;
+                    if (coreRfCode.length > 4 && coreTaCell.includes(coreRfCode)) return true;
+
+                    return false;
                 });
 
                 if (taRecord) {
                     let ues = [];
+                    // Đọc chuẩn cấu trúc JSON trả về (Index0 -> Index11)
                     for(let i = 0; i <= 11; i++) {
                         let keyUpperCase = 'Index' + i;
                         let keyLowerCase = 'index' + i;
@@ -620,8 +662,7 @@
                                 let innerR = taBaseDistances[i] * scale;
                                 let outerR = taBaseDistances[i+1] * scale;
                                 
-                                // Hiển thị tên Cell chuẩn được trích xuất từ dữ liệu Map thay vì tìm undefined
-                                let cellDisplayName = cellItem.rawData.cell || "Unknown";
+                                let cellDisplayName = cellItem.rawData.cell || rfCellName || "Unknown";
                                 let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellDisplayName, i, ueCount);
                                 segment.addTo(taLayer);
                                 
@@ -631,6 +672,7 @@
                         }
                     }
                 } else {
+                    // Cell không có trong file TA -> Vẽ màu xám nhạt
                     let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.rawData.cell, '4g', cellItem.rawData.rfData, 250, scale);
                     fallback.setStyle({fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3});
                     fallback.addTo(taLayer);
