@@ -147,7 +147,7 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (MÔ PHỎNG PANDAS FFILL)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (THUẬT TOÁN FFILL ĐỈNH CAO)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
@@ -155,51 +155,52 @@ exports.handleImportData = async (req, res) => {
                 
                 // Quét qua TẤT CẢ các Sheet
                 for (let sheetName of workbook.SheetNames) {
-                    let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: null });
+                    // Cài đặt defval: "" rất quan trọng để mảng giữ nguyên cấu trúc dù ô bị rỗng
+                    let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
                     
-                    // Biến nhớ (State) mô phỏng ffill() của Pandas
-                    let currentProv = null, currentDist = null, currentWard = null, currentSite = null;
-                    let foundHeader = false;
+                    let currentProv = "", currentDist = "", currentWard = "", currentSite = "";
+                    let dataStarted = false;
 
-                    for (let i = 0; i < rawDataArray.length; i++) {
-                        let row = rawDataArray[i];
-                        if (!row || !Array.isArray(row)) continue;
+                    for (let r = 0; r < rawDataArray.length; r++) {
+                        let row = rawDataArray[r];
+                        // Nếu dòng không phải là mảng hoặc quá ngắn -> Bỏ qua
+                        if (!Array.isArray(row) || row.length < 5) continue;
 
-                        let col0 = row[0];
-                        let col1 = row[1];
-                        let col2 = row[2];
-                        let col3 = row[3];
-                        let col4 = row[4]; 
+                        let c0 = String(row[0]).trim();
+                        let c1 = String(row[1]).trim();
+                        let c2 = String(row[2]).trim();
+                        let c3 = String(row[3]).trim();
+                        let c4 = String(row[4]).trim(); 
+                        let c4Lower = c4.toLowerCase();
 
-                        if (col4 === null || col4 === undefined) col4 = '';
-                        let col4Str = String(col4).toLowerCase().trim();
+                        // PHÁT HIỆN TỰ ĐỘNG: Đâu là nơi Dữ Liệu bắt đầu?
+                        // Tên Cell của trạm viễn thông luôn có độ dài > 4 và chứa dấu gạch ngang/dưới (VD: 4G-THA023M, MBF_TH_...)
+                        if (!dataStarted) {
+                            if (c4.length > 4 && (c4.includes('-') || c4.includes('_')) && !c4Lower.includes('tên cell') && !c4Lower.includes('cell name')) {
+                                dataStarted = true;
+                            }
+                        }
 
-                        // 1. Tìm thấy Header -> Mở cổng đọc dữ liệu
-                        if (col4Str === 'tên cell' || col4Str === 'cell name') {
-                            foundHeader = true;
-                            currentProv = null; currentDist = null; currentWard = null; currentSite = null;
+                        if (!dataStarted) continue; // Bỏ qua toàn bộ Header và Sub-header bên trên
+
+                        // Lọc bỏ các dòng tính Tổng (Summary) xen ngang vùng dữ liệu
+                        if (c4 === '' || c0.toLowerCase().includes('tổng') || c1.toLowerCase().includes('tổng') || c4Lower.includes('tổng') || c4Lower.includes('total')) {
                             continue;
                         }
 
-                        if (!foundHeader) continue;
-                        if (col4Str === '') continue; // Bỏ qua dòng hoàn toàn trống ở Cột Tên Cell
+                        // MÔ PHỎNG HÀM ffill() CỦA PANDAS:
+                        // Nếu ô có chứa dữ liệu -> Lưu vào bộ nhớ đệm
+                        // Nếu ô trống (do gộp ô / merge cells) -> Lấy dữ liệu từ bộ nhớ đệm bù vào
+                        if (c0 !== "") currentProv = c0;
+                        if (c1 !== "") currentDist = c1;
+                        if (c2 !== "") currentWard = c2;
+                        if (c3 !== "") currentSite = c3;
 
-                        // 2. Lọc bỏ các dòng Sub-header (Tổng, UXI, SQI...)
-                        if (col4Str.includes('tổng') || col4Str.includes('total') || col4Str.includes('uxi') || col4Str.includes('sqi')) {
-                            continue;
-                        }
-                        
-                        // 3. Lọc bỏ dòng đánh số thứ tự (vd: 1, 2, 4, 5, 6...)
-                        if (!isNaN(col4Str) && col4Str.length < 5) {
-                            continue;
-                        }
+                        row[0] = currentProv;
+                        row[1] = currentDist;
+                        row[2] = currentWard;
+                        row[3] = currentSite;
 
-                        // 4. Mô phỏng Forward Fill (Kéo dữ liệu gộp ô từ trên xuống)
-                        if (col0 !== null && col0 !== '') currentProv = col0; else row[0] = currentProv;
-                        if (col1 !== null && col1 !== '') currentDist = col1; else row[1] = currentDist;
-                        if (col2 !== null && col2 !== '') currentWard = col2; else row[2] = currentWard;
-                        if (col3 !== null && col3 !== '') currentSite = col3; else row[3] = currentSite;
-                        
                         dataRows.push(row);
                     }
                 }
@@ -209,7 +210,7 @@ exports.handleImportData = async (req, res) => {
                     continue;
                 }
 
-                // Cấu hình Nạp vào DB cho QoE / QoS
+                // Cấu hình Nạp vào DB cho QoE / QoS (Căn chuẩn vị trí Index dựa trên File)
                 if (networkType === 'mbb_qoe') {
                     sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
                     
