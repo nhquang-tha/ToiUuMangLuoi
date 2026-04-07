@@ -141,39 +141,45 @@ exports.handleImportData = async (req, res) => {
     for (let file of req.files) {
         try {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
-            const sheetName = workbook.SheetNames[0];
             
-            let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
-
-            if (rawDataArray.length === 0) {
-                errorLogs.push(`File ${file.originalname} rỗng.`);
-                continue;
-            }
-
             let data = []; 
             let sql = '';
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (THUẬT TOÁN X-RAY STRINGIFY)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (QUÉT ĐA SHEET THÔNG MINH)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
-                // Lọc dữ liệu thông qua quét mã nguyên dòng
-                let dataRows = rawDataArray.filter(row => {
-                    if (!row || !Array.isArray(row)) return false;
-                    // Ép toàn bộ mảng thành 1 chuỗi dài để tìm từ khóa
-                    let rowStr = row.join('||').toUpperCase();
+                let dataRows = [];
+                
+                // Quét qua TẤT CẢ các Sheet có trong file (Phòng ngừa trường hợp Sheet 1 là trang bìa)
+                for (let sheetName of workbook.SheetNames) {
+                    let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
                     
-                    // Nếu dòng này chứa "THA", "4G-", "3G-" hoặc "5G-" -> 99% là Data
-                    if (rowStr.includes('THA') || rowStr.includes('4G-') || rowStr.includes('3G-') || rowStr.includes('5G-')) {
-                        // Loại bỏ các dòng Header có chứa những từ khóa cố định
-                        if (!rowStr.includes('TÊN CELL') && !rowStr.includes('CELL NAME') && !rowStr.includes('ĐƠN VỊ') && !rowStr.includes('PHƯỜNG/XÃ')) {
-                            return true;
+                    let sheetDataRows = rawDataArray.filter(row => {
+                        if (!row || !Array.isArray(row) || row.length < 5) return false;
+                        
+                        // Gom 5 cột đầu tiên lại thành 1 chuỗi để đối chiếu
+                        let checkStr = (String(row[0]||'') + ' ' + String(row[1]||'') + ' ' + String(row[2]||'') + ' ' + String(row[3]||'') + ' ' + String(row[4]||'')).toUpperCase();
+                        
+                        // Nếu dòng có chứa mã quy ước (THA, THANH HÓA, 4G-, 5G-)
+                        if (checkStr.includes('THA') || checkStr.includes('THANH H') || checkStr.includes('4G-') || checkStr.includes('5G-') || checkStr.includes('3G-')) {
+                            // Đảm bảo không phải dòng Header bị dính chữ
+                            if (!checkStr.includes('TÊN CELL') && !checkStr.includes('CELL NAME') && !checkStr.includes('ĐƠN VỊ')) {
+                                return true;
+                            }
                         }
-                    }
-                    return false;
-                });
+                        return false;
+                    });
+                    
+                    dataRows = dataRows.concat(sheetDataRows);
+                }
+
+                if (dataRows.length === 0) {
+                    errorLogs.push(`File ${file.originalname} không tìm thấy dữ liệu hợp lệ trên bất kỳ Sheet nào.`);
+                    continue;
+                }
 
                 if (networkType === 'mbb_qoe') {
                     sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
@@ -208,6 +214,9 @@ exports.handleImportData = async (req, res) => {
             // 2. NHÓM ĐỌC DATA RF, KPI, TA, POI (TỰ TÌM HEADER)
             // ============================================
             } else {
+                const sheetName = workbook.SheetNames[0]; // Mặc định RF và KPI lấy Sheet 1
+                let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
+
                 let headerRowIndex = 0;
                 for (let i = 0; i < Math.min(15, rawDataArray.length); i++) {
                     let rowStr = (rawDataArray[i] || []).join('').toLowerCase();
@@ -305,7 +314,7 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error("Lỗi khi xử lý file:", error);
-            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai cấu trúc.`);
+            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai định dạng.`);
         }
     } 
 
