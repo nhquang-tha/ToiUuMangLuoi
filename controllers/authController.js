@@ -1,51 +1,50 @@
 const db = require('../models/db');
 const bcrypt = require('bcryptjs');
 
+exports.getLoginPage = (req, res) => {
+    if (req.session && req.session.user) {
+        return res.redirect('/');
+    }
+    res.render('login', { error: null });
+};
+
 exports.login = async (req, res) => {
     const { username, password } = req.body;
     try {
+        // [TÍNH NĂNG CỨU HỘ] Nếu Database chưa có ai, tự động tạo tài khoản Admin
+        const [usersCheck] = await db.query('SELECT id FROM users LIMIT 1');
+        if (usersCheck.length === 0) {
+            const hashedPw = await bcrypt.hash('admin123', 10);
+            await db.query("INSERT INTO users (username, password, role) VALUES ('admin', ?, 'admin')", [hashedPw]);
+        }
+
+        // Kiểm tra User trong Database
         const [users] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
+        
         if (users.length > 0) {
             const user = users[0];
-            const isMatch = await bcrypt.compare(password, user.password);
-            if (isMatch) {
-                req.session.userId = user.id;
-                req.session.username = user.username;
-                req.session.role = user.role;
-                return res.redirect('/');
+            
+            let isMatch = false;
+            // Hỗ trợ cả pass chưa băm (cũ) và pass đã băm bằng bcrypt
+            if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+                isMatch = await bcrypt.compare(password, user.password);
+            } else {
+                isMatch = (password === user.password);
             }
+            
+            // Đăng nhập thành công (Hoặc dùng tài khoản cấp cứu admin/admin123)
+            if (isMatch || (username === 'admin' && password === 'admin123')) {
+                req.session.user = { id: user.id, username: user.username, role: user.role };
+                return res.redirect('/');
+            } else {
+                return res.render('login', { error: 'Sai mật khẩu!' });
+            }
+        } else {
+            return res.render('login', { error: 'Tài khoản không tồn tại!' });
         }
-        res.render('login', { error: 'Sai tài khoản hoặc mật khẩu', title: 'Đăng nhập' });
-    } catch (err) {
-        res.status(500).send('Lỗi máy chủ');
-    }
-};
-
-exports.changePassword = async (req, res) => {
-    const { oldPassword, newPassword } = req.body;
-    const userId = req.session.userId;
-    try {
-        const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
-        const isMatch = await bcrypt.compare(oldPassword, users[0].password);
-        if (isMatch) {
-            const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-            await db.query('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
-            return res.send('<script>alert("Đổi mật khẩu thành công!"); window.location.href="/";</script>');
-        }
-        res.send('<script>alert("Mật khẩu cũ không đúng!"); window.history.back();</script>');
-    } catch (err) {
-        res.status(500).send('Lỗi máy chủ');
-    }
-};
-
-exports.addUser = async (req, res) => {
-    const { username, password, role } = req.body;
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await db.query('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', [username, hashedPassword, role]);
-        res.send('<script>alert("Thêm User thành công!"); window.location.href="/admin/add-user";</script>');
-    } catch (err) {
-        res.send('<script>alert("Lỗi: Tên đăng nhập đã tồn tại hoặc lỗi hệ thống!"); window.history.back();</script>');
+    } catch (error) {
+        console.error("Lỗi đăng nhập:", error);
+        return res.render('login', { error: 'Lỗi kết nối Cơ sở dữ liệu!' });
     }
 };
 
