@@ -57,11 +57,15 @@ const renderDirectLogin = (res, errorMessage = null) => {
 // HIỂN THỊ TRANG LOGIN
 // ==========================================
 exports.getLoginPage = (req, res) => {
-    // Nếu đã đăng nhập, tự động về trang chủ
-    if (req.session && req.session.user) {
-        return res.redirect('/');
+    // [GIẢI QUYẾT LỖI ERR_TOO_MANY_REDIRECTS]
+    // Bỏ logic tự động redirect. Nếu trình duyệt đẩy user về /login, 
+    // chúng ta sẽ dọn sạch session để đảm bảo bẻ gãy hoàn toàn vòng lặp.
+    if (req.session) {
+        req.session.user = null;
+        req.session.userId = null;
     }
-    // Gọi thẳng hàm vẽ HTML nội bộ (Bỏ qua file views/login.ejs)
+    
+    // Gọi thẳng hàm vẽ HTML nội bộ
     renderDirectLogin(res, null);
 };
 
@@ -112,8 +116,24 @@ exports.login = async (req, res) => {
             
             // Tài khoản admin/admin123 luôn được cấp phép trong trường hợp khẩn cấp
             if (isMatch || (username === 'admin' && password === 'admin123')) {
-                req.session.user = { id: user.id, username: user.username, role: user.role };
-                return res.redirect('/');
+                
+                // Khởi tạo các biến Session
+                const userObj = { id: user.id, username: user.username, role: user.role };
+                req.session.user = userObj;
+                req.session.userId = user.id; // Thêm biến dự phòng cho Middleware khác
+                
+                // [CHỐT CHẶN QUAN TRỌNG NHẤT]
+                // Ép Node.js PHẢI lưu xong Session vào bộ nhớ mới được chạy tiếp.
+                // Tránh tình trạng trình duyệt chạy nhanh hơn máy chủ gây ra lỗi vòng lặp Redirect.
+                req.session.save((err) => {
+                    if (err) {
+                        console.error("Lỗi lưu session:", err);
+                        return renderDirectLogin(res, 'Lỗi hệ thống khi thiết lập phiên làm việc!');
+                    }
+                    // Chỉ khi lưu thành công 100%, mới cho phép chuyển sang Trang chủ
+                    return res.redirect('/');
+                });
+
             } else {
                 return renderDirectLogin(res, 'Sai mật khẩu!');
             }
