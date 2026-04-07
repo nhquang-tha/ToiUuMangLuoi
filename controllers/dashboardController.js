@@ -29,9 +29,24 @@ function integerToDDMMYYYY(num) {
     return `${s.substring(6, 8)}/${s.substring(4, 6)}/${s.substring(0, 4)}`;
 }
 
+// BỘ XỬ LÝ SỐ THỰC THÔNG MINH (Chống lỗi Crash do ký tự rác trong Excel)
 const getFloat = (val) => {
     if (val === undefined || val === null || val === "") return null;
-    let n = Number(String(val).replace(/,/g, '').trim());
+    let str = String(val).trim();
+    
+    // Loại bỏ các ký tự rác phổ biến trong Excel báo cáo Viễn thông
+    if (str === '-' || str === 'N/A' || str === '#N/A' || str === '#DIV/0!' || str.toLowerCase() === 'null') return null;
+    
+    // Xử lý thông minh dấu phẩy:
+    // Nếu chỉ có dấu phẩy mà không có dấu chấm (Kiểu Việt Nam: 98,54) -> Đổi thành dấu chấm
+    if (str.includes(',') && !str.includes('.')) {
+        str = str.replace(/,/g, '.');
+    } else {
+        // Nếu có cả phẩy và chấm (Kiểu Mỹ: 1,000.54) -> Xóa dấu phẩy
+        str = str.replace(/,/g, ''); 
+    }
+    
+    let n = Number(str);
     return isNaN(n) ? null : n;
 };
 
@@ -147,12 +162,11 @@ exports.handleImportData = async (req, res) => {
             // 1. NHÓM ĐỌC DATA QOE VÀ QOS (LỌC THÔNG MINH)
             // ============================================
             if (networkType === 'mbb_qoe') {
-                // Thuật toán quét và nhận diện dòng dữ liệu thay vì cắt tĩnh
+                // Lọc dữ liệu: Chỉ cần cột số 4 (Tên Cell) có nội dung thì lấy toàn bộ
                 let dataRows = rawDataArray.filter(r => {
                     let cellName = String(r[4] || '').trim();
-                    let score = parseFloat(r[6]);
-                    // Điều kiện: Cột 4 có nội dung, không phải Header (Tên cell), Cột 6 là số thực
-                    return cellName.length > 2 && cellName.toLowerCase() !== 'tên cell' && !isNaN(score);
+                    // Bỏ qua dòng Header và các dòng trống
+                    return cellName.length > 3 && !cellName.toLowerCase().includes('tên cell') && !cellName.toLowerCase().includes('cell name');
                 });
                 
                 sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
@@ -170,11 +184,10 @@ exports.handleImportData = async (req, res) => {
                 if(values.length > 0) await db.query('DELETE FROM mbb_qoe WHERE Tuan = ?', [tuanStr]);
 
             } else if (networkType === 'mbb_qos') {
-                // Thuật toán quét và nhận diện dòng dữ liệu cho QoS
+                // Lọc dữ liệu cho QoS
                 let dataRows = rawDataArray.filter(r => {
                     let cellName = String(r[4] || '').trim();
-                    let score = parseFloat(r[6]);
-                    return cellName.length > 2 && cellName.toLowerCase() !== 'cell name' && !isNaN(score);
+                    return cellName.length > 3 && !cellName.toLowerCase().includes('tên cell') && !cellName.toLowerCase().includes('cell name');
                 });
                 
                 sql = `INSERT INTO mbb_qos (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoS_Score, QoS_Rank, Norm_Res, Norm_Acc, Norm_Ret, Norm_Int, Norm_Cov, Point_Res, Point_Acc, Point_Ret, Point_Int, Point_Cov, Out_Res, Out_Acc, Out_Ret, Out_Int, Out_Cov, In_Res, In_Acc, In_Ret, In_Int, In_Cov) VALUES ?`;
