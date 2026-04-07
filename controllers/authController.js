@@ -58,8 +58,6 @@ const renderDirectLogin = (res, errorMessage = null) => {
 // ==========================================
 exports.getLoginPage = (req, res) => {
     // [GIẢI QUYẾT LỖI ERR_TOO_MANY_REDIRECTS]
-    // Bỏ logic tự động redirect. Nếu trình duyệt đẩy user về /login, 
-    // chúng ta sẽ dọn sạch session để đảm bảo bẻ gãy hoàn toàn vòng lặp.
     if (req.session) {
         req.session.user = null;
         req.session.userId = null;
@@ -117,14 +115,23 @@ exports.login = async (req, res) => {
             // Tài khoản admin/admin123 luôn được cấp phép trong trường hợp khẩn cấp
             if (isMatch || (username === 'admin' && password === 'admin123')) {
                 
+                // [GIẢI QUYẾT LỖI MẤT QUYỀN ADMIN]
+                // Hệ thống Python cũ có thể lưu quyền là "ADMIN" hoặc "Admin "
+                // Ta cần chuẩn hóa thành chữ thường và xóa khoảng trắng
+                let cleanRole = user.role ? String(user.role).trim().toLowerCase() : 'user';
+                
+                // Ép quyền Admin tuyệt đối cho tài khoản có username là 'admin'
+                if (username === 'admin') {
+                    cleanRole = 'admin';
+                }
+
                 // Khởi tạo các biến Session
-                const userObj = { id: user.id, username: user.username, role: user.role };
+                const userObj = { id: user.id, username: user.username, role: cleanRole };
                 req.session.user = userObj;
                 req.session.userId = user.id; // Thêm biến dự phòng cho Middleware khác
                 
                 // [CHỐT CHẶN QUAN TRỌNG NHẤT]
                 // Ép Node.js PHẢI lưu xong Session vào bộ nhớ mới được chạy tiếp.
-                // Tránh tình trạng trình duyệt chạy nhanh hơn máy chủ gây ra lỗi vòng lặp Redirect.
                 req.session.save((err) => {
                     if (err) {
                         console.error("Lỗi lưu session:", err);
