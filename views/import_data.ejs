@@ -7,12 +7,10 @@
     .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 13px;}
     .btn-danger:hover { background: #e74c3c; }
     
-    /* Style cho History Box gọn gàng */
     .history-box { border: 1px solid #ecf0f1; padding: 15px; border-radius: 6px; background: #fff; margin-bottom: 15px; }
     .history-box h4 { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid #ecf0f1; padding-bottom: 5px; }
     .history-container { max-height: 120px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; padding-right: 5px; }
     
-    /* Scrollbar cho History Container */
     .history-container::-webkit-scrollbar { width: 6px; }
     .history-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
     .history-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 4px; }
@@ -23,14 +21,17 @@
     .date-4g { background: #f4ecf8; color: #8e44ad; border: 1px solid #e1cbed; }
     .date-5g { background: #e8f8f5; color: #16a085; border: 1px solid #bce8e0; }
 
-    /* CSS CHO TAB GIAO DIỆN */
-    .tab-header { display: flex; border-bottom: 2px solid #ecf0f1; margin-bottom: 20px; }
-    .tab-btn { background: #f8f9fa; border: none; padding: 12px 15px; cursor: pointer; font-size: 13px; font-weight: bold; color: #7f8c8d; flex: 1; transition: 0.3s; }
+    .tab-header { display: flex; border-bottom: 2px solid #ecf0f1; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { background: #f8f9fa; border: none; padding: 12px 15px; cursor: pointer; font-size: 13px; font-weight: bold; color: #7f8c8d; flex: 1; transition: 0.3s; white-space: nowrap;}
     .tab-btn:hover { background: #eef2f5; }
     .tab-btn.active { background: #fff; color: #2980b9; border-bottom: 3px solid #3498db; }
     .tab-content { display: none; animation: fadeIn 0.3s; }
     .tab-content.active { display: block; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Layout chọn tuần */
+    .week-selector { display: flex; gap: 10px; margin-bottom: 15px; }
+    .week-input { flex: 1; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; }
 </style>
 
 <div class="layout">
@@ -50,25 +51,12 @@
 
             <% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
                 <div class="card" style="margin-bottom: 20px; border-left: 4px solid #e74c3c;">
-                    <h4 style="color: #c0392b; margin-top: 0; margin-bottom: 5px;">Khu Vực Admin: Làm Sạch Dữ Liệu</h4>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Xóa <strong>toàn bộ</strong> dữ liệu hiện tại để Import lại từ đầu (Không thể hoàn tác).</p>
+                    <h4 style="color: #c0392b; margin-top: 0; margin-bottom: 5px;">Khu Vực Admin: Làm Sạch Dữ Liệu KPI</h4>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Xóa <strong>toàn bộ</strong> dữ liệu hiện tại để Import lại từ đầu.</p>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <!-- Reset KPI -->
-                        <form action="/kpi-data/reset/3g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ KPI 3G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 3G</button></form>
-                        <form action="/kpi-data/reset/4g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ KPI 4G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 4G</button></form>
-                        <form action="/kpi-data/reset/5g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ KPI 5G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 5G</button></form>
-                        
-                        <span style="color: #ccc; margin: 0 5px;">|</span>
-                        
-                        <!-- Reset RF Database -->
-                        <form action="/rf-database/reset/3g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ Database Trạm RF 3G?');"><button type="submit" class="btn-sm btn-danger" style="background:#d35400;">⚠ Reset RF 3G</button></form>
-                        <form action="/rf-database/reset/4g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ Database Trạm RF 4G?');"><button type="submit" class="btn-sm btn-danger" style="background:#d35400;">⚠ Reset RF 4G</button></form>
-                        <form action="/rf-database/reset/5g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ Database Trạm RF 5G?');"><button type="submit" class="btn-sm btn-danger" style="background:#d35400;">⚠ Reset RF 5G</button></form>
-                        
-                        <span style="color: #ccc; margin: 0 5px;">|</span>
-                        
-                        <!-- Reset TA Database -->
-                        <form action="/ta-data/reset" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO NGUY HIỂM: Xóa SẠCH toàn bộ Database TA_Query?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset TA</button></form>
+                        <form action="/kpi-data/reset/3g" method="POST" style="margin: 0;" onsubmit="return confirm('Xóa SẠCH toàn bộ KPI 3G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 3G</button></form>
+                        <form action="/kpi-data/reset/4g" method="POST" style="margin: 0;" onsubmit="return confirm('Xóa SẠCH toàn bộ KPI 4G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 4G</button></form>
+                        <form action="/kpi-data/reset/5g" method="POST" style="margin: 0;" onsubmit="return confirm('Xóa SẠCH toàn bộ KPI 5G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 5G</button></form>
                     </div>
                 </div>
             <% } %>
@@ -81,7 +69,7 @@
                         <button class="tab-btn active" onclick="openTab(event, 'tab-rf')">1. Import RF</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-kpi')">2. Import KPI</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-ta')">3. Import TA</button>
-                        <button class="tab-btn" onclick="openTab(event, 'tab-poi')">4. Import POI</button>
+                        <button class="tab-btn" onclick="openTab(event, 'tab-qoe')">4. Import QoE/QoS</button>
                     </div>
 
                     <!-- TAB 1: IMPORT RF -->
@@ -146,23 +134,30 @@
                         </form>
                     </div>
 
-                    <!-- TAB 4: IMPORT POI -->
-                    <div id="tab-poi" class="tab-content">
-                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu Địa điểm thu hút (POI) cho các trạm 4G/5G.</p>
+                    <!-- TAB 4: IMPORT QoE / QoS (TUẦN) -->
+                    <div id="tab-qoe" class="tab-content">
+                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp QoE / QoS (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Lưu ý: File QoE lấy từ Hàng 6, QoS lấy từ Hàng 10.</i></p>
                         <form action="/import-data" method="POST" enctype="multipart/form-data">
                             <div class="form-group">
-                                <label>Chọn mạng cần Import:</label>
-                                <select name="networkType" class="form-control" required style="width: 100%; padding: 10px; border-color: #16a085;">
-                                    <option value="poi_4g">Database POI 4G (poi_4g)</option>
-                                    <option value="poi_5g">Database POI 5G (poi_5g)</option>
+                                <label>Chọn Loại File:</label>
+                                <select name="networkType" class="form-control" required style="width: 100%; padding: 10px; border-color: #1abc9c; margin-bottom: 15px;">
+                                    <option value="mbb_qoe">Dữ liệu Trải nghiệm QoE (Bắt đầu từ Hàng 6)</option>
+                                    <option value="mbb_qos">Dữ liệu Dịch vụ QoS (Bắt đầu từ Hàng 10)</option>
                                 </select>
                             </div>
-                            <div class="form-group" style="margin-top: 15px;">
-                                <div style="border: 2px dashed #16a085; padding: 20px 10px; text-align: center; border-radius: 6px; background: #f2fbf9;">
+
+                            <label style="font-weight:bold;">Chỉ định thời gian (Tuần theo lịch):</label>
+                            <div class="week-selector">
+                                <input type="number" name="weekNumber" class="week-input" placeholder="Ví dụ: 14 (Tuần 14)" required min="1" max="53">
+                                <input type="number" name="year" class="week-input" value="2026" placeholder="Năm (Ví dụ: 2026)" required min="2020">
+                            </div>
+
+                            <div class="form-group" style="margin-top: 10px;">
+                                <div style="border: 2px dashed #1abc9c; padding: 20px 10px; text-align: center; border-radius: 6px; background: #f2fcf9;">
                                     <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 10px; background: #16a085; border-color: #16a085;">🚀 Bắt đầu Import POI</button>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 10px; background: #1abc9c; border-color: #1abc9c;">🚀 Import QoE/QoS</button>
                         </form>
                     </div>
 
@@ -171,10 +166,9 @@
                 <!-- CỘT PHẢI: LỊCH SỬ DỮ LIỆU KPI QUY HOẠCH THANH CUỘN -->
                 <div class="card" style="flex: 2; min-width: 400px;">
                     <h3>Data History (Lịch sử KPI)</h3>
-                    <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Danh sách các ngày đã Import. Các mục dưới đây được trang bị thanh cuộn để giữ giao diện luôn gọn gàng.</p>
+                    <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Danh sách các ngày đã Import.</p>
                     
                     <div style="display: flex; flex-direction: column; gap: 15px;">
-                        <!-- Block 3G -->
                         <div class="history-box">
                             <h4 style="color: #2980b9;">Dữ Liệu KPI 3G</h4>
                             <div class="history-container">
@@ -188,7 +182,6 @@
                             </div>
                         </div>
 
-                        <!-- Block 4G -->
                         <div class="history-box">
                             <h4 style="color: #8e44ad;">Dữ Liệu KPI 4G</h4>
                             <div class="history-container">
@@ -202,7 +195,6 @@
                             </div>
                         </div>
 
-                        <!-- Block 5G -->
                         <div class="history-box">
                             <h4 style="color: #16a085;">Dữ Liệu KPI 5G</h4>
                             <div class="history-container">
@@ -223,7 +215,6 @@
     </main>
 </div>
 
-<!-- SCRIPTS CHUYỂN TAB -->
 <script>
     function openTab(evt, tabName) {
         var i, tabcontent, tablinks;
