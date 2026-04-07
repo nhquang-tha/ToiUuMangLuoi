@@ -147,7 +147,7 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (TÌM HEADER ĐỘNG + FILL DOWN GỘP Ô)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (THUẬT TOÁN FILL DOWN ĐỘNG)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
@@ -157,35 +157,38 @@ exports.handleImportData = async (req, res) => {
                 for (let sheetName of workbook.SheetNames) {
                     let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
                     
-                    let headerIndex = -1;
-                    // Tìm dòng Header chính
-                    for (let i = 0; i < Math.min(20, rawDataArray.length); i++) {
-                        let rowStr = (rawDataArray[i] || []).join('').toLowerCase();
-                        if (rowStr.includes('tên cell') || rowStr.includes('cell name') || rowStr.includes('uxi chuẩn hóa') || rowStr.includes('sqi chuẩn hóa')) {
-                            headerIndex = i;
-                            break;
+                    let lastCol0 = '', lastCol1 = '', lastCol2 = '', lastCol3 = '';
+
+                    for (let i = 0; i < rawDataArray.length; i++) {
+                        let row = rawDataArray[i];
+                        if (!row || !Array.isArray(row) || row.length < 5) continue;
+
+                        let col0 = String(row[0] || '').trim();
+                        let col1 = String(row[1] || '').trim();
+                        let col2 = String(row[2] || '').trim();
+                        let col3 = String(row[3] || '').trim();
+                        let col4 = String(row[4] || '').trim(); // Cột Tên Cell
+
+                        const isHeader = col4.toLowerCase() === 'tên cell' || col4.toLowerCase() === 'cell name' || col0.toLowerCase() === 'mã';
+                        
+                        if (isHeader) {
+                            // Reset trạng thái nếu gặp lại bảng khác
+                            lastCol0 = ''; lastCol1 = ''; lastCol2 = ''; lastCol3 = '';
+                        } else {
+                            // Bỏ qua các dòng tiêu đề phụ đánh số (vd: 1,2,3,4,5,6...)
+                            if (col0 && col0.length < 3 && !isNaN(col0)) continue; 
+
+                            // Áp dụng Fill Down: Nếu ô có giá trị thì lưu lại, nếu rỗng thì mượn giá trị cũ
+                            if (col0) lastCol0 = col0; else row[0] = lastCol0;
+                            if (col1) lastCol1 = col1; else row[1] = lastCol1;
+                            if (col2) lastCol2 = col2; else row[2] = lastCol2;
+                            if (col3) lastCol3 = col3; else row[3] = lastCol3;
+                            
+                            // Nhận dạng dòng Dữ liệu: Phải nằm trong vùng Data (có lastCol0) và Cell Name hợp lệ
+                            if (lastCol0 && col4 && col4.length > 2 && col4.toLowerCase() !== 'tổng') {
+                                dataRows.push(row);
+                            }
                         }
-                    }
-
-                    // Nếu tìm thấy Header, cắt bỏ đúng 5 dòng sub-header để lấy dữ liệu lõi
-                    if (headerIndex !== -1 && rawDataArray.length > headerIndex + 5) {
-                        
-                        let sheetDataRows = rawDataArray.slice(headerIndex + 5).filter(row => {
-                            // Chỉ lấy những dòng có dữ liệu ở cột Tên Cell (Index 4)
-                            let cellName = String(row[4] || '').trim();
-                            return cellName.length > 2 && !cellName.toLowerCase().includes('tên cell') && !cellName.toLowerCase().includes('cell name');
-                        });
-                        
-                        // Kỹ thuật Fill Down: Xử lý các ô bị gộp (Merge Cells) của Tỉnh, Đơn vị, Tên Trạm
-                        let lastCol0 = '', lastCol1 = '', lastCol2 = '', lastCol3 = '';
-                        sheetDataRows.forEach(row => {
-                            if (String(row[0]||'').trim()) lastCol0 = row[0]; else row[0] = lastCol0;
-                            if (String(row[1]||'').trim()) lastCol1 = row[1]; else row[1] = lastCol1;
-                            if (String(row[2]||'').trim()) lastCol2 = row[2]; else row[2] = lastCol2;
-                            if (String(row[3]||'').trim()) lastCol3 = row[3]; else row[3] = lastCol3;
-                        });
-
-                        dataRows = dataRows.concat(sheetDataRows);
                     }
                 }
 
