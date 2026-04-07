@@ -147,56 +147,69 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (THUẬT TOÁN FILL DOWN ĐỘNG)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (MÔ PHỎNG PANDAS FFILL)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
                 let dataRows = [];
                 
-                // Quét qua tất cả các Sheet
+                // Quét qua TẤT CẢ các Sheet
                 for (let sheetName of workbook.SheetNames) {
                     let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
                     
-                    let lastCol0 = '', lastCol1 = '', lastCol2 = '', lastCol3 = '';
+                    // Biến nhớ (State) mô phỏng ffill() của Pandas
+                    let currentProv = "", currentDist = "", currentWard = "", currentSite = "";
 
                     for (let i = 0; i < rawDataArray.length; i++) {
                         let row = rawDataArray[i];
-                        if (!row || !Array.isArray(row) || row.length < 5) continue;
+                        if (!row || row.length < 5) continue;
 
                         let col0 = String(row[0] || '').trim();
                         let col1 = String(row[1] || '').trim();
                         let col2 = String(row[2] || '').trim();
                         let col3 = String(row[3] || '').trim();
-                        let col4 = String(row[4] || '').trim(); // Cột Tên Cell
-
-                        const isHeader = col4.toLowerCase() === 'tên cell' || col4.toLowerCase() === 'cell name' || col0.toLowerCase() === 'mã';
+                        let col4 = String(row[4] || '').trim(); 
                         
-                        if (isHeader) {
-                            // Reset trạng thái nếu gặp lại bảng khác
-                            lastCol0 = ''; lastCol1 = ''; lastCol2 = ''; lastCol3 = '';
-                        } else {
-                            // Bỏ qua các dòng tiêu đề phụ đánh số (vd: 1,2,3,4,5,6...)
-                            if (col0 && col0.length < 3 && !isNaN(col0)) continue; 
+                        let col4Lower = col4.toLowerCase();
 
-                            // Áp dụng Fill Down: Nếu ô có giá trị thì lưu lại, nếu rỗng thì mượn giá trị cũ
-                            if (col0) lastCol0 = col0; else row[0] = lastCol0;
-                            if (col1) lastCol1 = col1; else row[1] = lastCol1;
-                            if (col2) lastCol2 = col2; else row[2] = lastCol2;
-                            if (col3) lastCol3 = col3; else row[3] = lastCol3;
-                            
-                            // Nhận dạng dòng Dữ liệu: Phải nằm trong vùng Data (có lastCol0) và Cell Name hợp lệ
-                            if (lastCol0 && col4 && col4.length > 2 && col4.toLowerCase() !== 'tổng') {
-                                dataRows.push(row);
+                        // 1. Bỏ qua dòng Header & Reset biến nhớ
+                        if (col4Lower === 'tên cell' || col4Lower === 'cell name' || col4Lower === 'tổng' || col4Lower === 'total' || col4 === '') {
+                            if (col4Lower === 'tên cell' || col4Lower === 'cell name') {
+                                currentProv = ""; currentDist = ""; currentWard = ""; currentSite = "";
                             }
+                            continue;
+                        }
+
+                        // 2. Bỏ qua dòng đánh số thứ tự (vd: 1, 2, 4, 5, 6...)
+                        if (col0 !== '' && !isNaN(col0) && col0.length < 3 && col4 !== '' && !isNaN(col4)) {
+                            continue;
+                        }
+
+                        // 3. Thực hiện Fill Down (Kéo dữ liệu gộp ô từ trên xuống)
+                        if (col0 !== '') currentProv = col0;
+                        if (col1 !== '') currentDist = col1;
+                        if (col2 !== '') currentWard = col2;
+                        if (col3 !== '') currentSite = col3;
+
+                        // 4. Đưa vào mảng nếu là dòng dữ liệu thực sự (Có Tên Cell hợp lệ)
+                        if (currentProv !== '' && col4.length > 3) {
+                            // Cập nhật lại các ô rỗng bằng dữ liệu đã Fill
+                            row[0] = currentProv;
+                            row[1] = currentDist;
+                            row[2] = currentWard;
+                            row[3] = currentSite;
+                            
+                            dataRows.push(row);
                         }
                     }
                 }
 
                 if (dataRows.length === 0) {
-                    errorLogs.push(`File ${file.originalname} rỗng hoặc không tìm thấy dữ liệu hợp lệ.`);
+                    errorLogs.push(`File ${file.originalname} không tìm thấy dữ liệu hợp lệ.`);
                     continue;
                 }
 
+                // CHUẨN BỊ SQL VÀ TRÍCH XUẤT GIÁ TRỊ TỪ CÁC CỘT (Tránh lỗi Undefined Array)
                 if (networkType === 'mbb_qoe') {
                     sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
                     
@@ -206,7 +219,7 @@ exports.handleImportData = async (req, res) => {
                         getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), 
                         getFloat(row[12]), getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), 
                         getFloat(row[16]), getFloat(row[17]), getFloat(row[18]), getFloat(row[19]), 
-                        getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), getFloat(row[23])  
+                        getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), getFloat(row[23] || '')  
                     ]);
                     
                     if(values.length > 0) await db.query('DELETE FROM mbb_qoe WHERE Tuan = ?', [tuanStr]);
@@ -220,7 +233,7 @@ exports.handleImportData = async (req, res) => {
                         getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), getFloat(row[12]), 
                         getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), getFloat(row[16]), getFloat(row[17]), 
                         getFloat(row[18]), getFloat(row[19]), getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), 
-                        getFloat(row[23]), getFloat(row[24]), getFloat(row[25]), getFloat(row[26]), getFloat(row[27])  
+                        getFloat(row[23]), getFloat(row[24]), getFloat(row[25]), getFloat(row[26]), getFloat(row[27] || '')  
                     ]);
 
                     if(values.length > 0) await db.query('DELETE FROM mbb_qos WHERE Tuan = ?', [tuanStr]);
@@ -230,7 +243,7 @@ exports.handleImportData = async (req, res) => {
             // 2. NHÓM ĐỌC DATA RF, KPI, TA, POI (TỰ TÌM HEADER)
             // ============================================
             } else {
-                const sheetName = workbook.SheetNames[0]; // Mặc định RF và KPI lấy Sheet 1
+                const sheetName = workbook.SheetNames[0]; 
                 let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
 
                 let headerRowIndex = 0;
@@ -330,7 +343,7 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error("Lỗi khi xử lý file:", error);
-            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai cấu trúc.`);
+            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai định dạng.`);
         }
     } 
 
