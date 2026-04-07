@@ -34,15 +34,11 @@ const getFloat = (val) => {
     if (val === undefined || val === null || val === "") return null;
     let str = String(val).trim();
     
-    // Loại bỏ các ký tự rác phổ biến trong Excel báo cáo Viễn thông
     if (str === '-' || str === 'N/A' || str === '#N/A' || str === '#DIV/0!' || str.toLowerCase() === 'null') return null;
     
-    // Xử lý thông minh dấu phẩy:
-    // Nếu chỉ có dấu phẩy mà không có dấu chấm (Kiểu Việt Nam: 98,54) -> Đổi thành dấu chấm
     if (str.includes(',') && !str.includes('.')) {
         str = str.replace(/,/g, '.');
     } else {
-        // Nếu có cả phẩy và chấm (Kiểu Mỹ: 1,000.54) -> Xóa dấu phẩy
         str = str.replace(/,/g, ''); 
     }
     
@@ -159,49 +155,56 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (LỌC THÔNG MINH)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (LỌC THÔNG MINH TUYỆT ĐỐI)
             // ============================================
-            if (networkType === 'mbb_qoe') {
-                // Lọc dữ liệu: Chỉ cần cột số 4 (Tên Cell) có nội dung thì lấy toàn bộ
-                let dataRows = rawDataArray.filter(r => {
-                    let cellName = String(r[4] || '').trim();
-                    // Bỏ qua dòng Header và các dòng trống
-                    return cellName.length > 3 && !cellName.toLowerCase().includes('tên cell') && !cellName.toLowerCase().includes('cell name');
-                });
+            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
-                sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
-                
-                values = dataRows.map(row => [
-                    tuanStr, row[0], row[1], row[2], row[3], row[4], row[5], 
-                    getFloat(row[6]), getFloat(row[7]), 
-                    getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), 
-                    getFloat(row[12]), getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), 
-                    getFloat(row[16]), getFloat(row[17]), getFloat(row[18]), getFloat(row[19]), 
-                    getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), getFloat(row[23])  
-                ]);
-                
-                // Xóa dữ liệu cũ của Tuần này trước khi ghi đè
-                if(values.length > 0) await db.query('DELETE FROM mbb_qoe WHERE Tuan = ?', [tuanStr]);
+                let dataRows = [];
+                for (let i = 0; i < rawDataArray.length; i++) {
+                    let row = rawDataArray[i];
+                    if (!row || row.length < 5) continue; // Bỏ qua các dòng rác quá ngắn
+                    
+                    // Lấy giá trị các cột chốt chặn để nhận dạng
+                    let col0 = String(row[0] || '').trim().toUpperCase();
+                    let col1 = String(row[1] || '').trim().toUpperCase();
+                    let col3 = String(row[3] || '').trim().toUpperCase();
+                    let col4 = String(row[4] || '').trim().toUpperCase();
 
-            } else if (networkType === 'mbb_qos') {
-                // Lọc dữ liệu cho QoS
-                let dataRows = rawDataArray.filter(r => {
-                    let cellName = String(r[4] || '').trim();
-                    return cellName.length > 3 && !cellName.toLowerCase().includes('tên cell') && !cellName.toLowerCase().includes('cell name');
-                });
-                
-                sql = `INSERT INTO mbb_qos (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoS_Score, QoS_Rank, Norm_Res, Norm_Acc, Norm_Ret, Norm_Int, Norm_Cov, Point_Res, Point_Acc, Point_Ret, Point_Int, Point_Cov, Out_Res, Out_Acc, Out_Ret, Out_Int, Out_Cov, In_Res, In_Acc, In_Ret, In_Int, In_Cov) VALUES ?`;
-                
-                values = dataRows.map(row => [
-                    tuanStr, row[0], row[1], row[2], row[3], row[4], row[5],
-                    getFloat(row[6]), getFloat(row[7]), 
-                    getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), getFloat(row[12]), 
-                    getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), getFloat(row[16]), getFloat(row[17]), 
-                    getFloat(row[18]), getFloat(row[19]), getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), 
-                    getFloat(row[23]), getFloat(row[24]), getFloat(row[25]), getFloat(row[26]), getFloat(row[27])  
-                ]);
+                    // Màng lọc Vàng: Dòng dữ liệu thật CHẮC CHẮN phải có chữ THA ở cột 0,
+                    // hoặc chứa chữ THANH HÓA ở cột 1, hoặc có chứa "4G-" ở tên Trạm/Cell.
+                    if (col0 === 'THA' || col1.includes('THANH HÓA') || col1.includes('THANH HOA') || col3.includes('4G-') || col4.includes('4G-')) {
+                        dataRows.push(row);
+                    }
+                }
 
-                if(values.length > 0) await db.query('DELETE FROM mbb_qos WHERE Tuan = ?', [tuanStr]);
+                if (networkType === 'mbb_qoe') {
+                    sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
+                    
+                    values = dataRows.map(row => [
+                        tuanStr, row[0], row[1], row[2], row[3], row[4], row[5], 
+                        getFloat(row[6]), getFloat(row[7]), 
+                        getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), 
+                        getFloat(row[12]), getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), 
+                        getFloat(row[16]), getFloat(row[17]), getFloat(row[18]), getFloat(row[19]), 
+                        getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), getFloat(row[23])  
+                    ]);
+                    
+                    if(values.length > 0) await db.query('DELETE FROM mbb_qoe WHERE Tuan = ?', [tuanStr]);
+
+                } else if (networkType === 'mbb_qos') {
+                    sql = `INSERT INTO mbb_qos (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoS_Score, QoS_Rank, Norm_Res, Norm_Acc, Norm_Ret, Norm_Int, Norm_Cov, Point_Res, Point_Acc, Point_Ret, Point_Int, Point_Cov, Out_Res, Out_Acc, Out_Ret, Out_Int, Out_Cov, In_Res, In_Acc, In_Ret, In_Int, In_Cov) VALUES ?`;
+                    
+                    values = dataRows.map(row => [
+                        tuanStr, row[0], row[1], row[2], row[3], row[4], row[5],
+                        getFloat(row[6]), getFloat(row[7]), 
+                        getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), getFloat(row[12]), 
+                        getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), getFloat(row[16]), getFloat(row[17]), 
+                        getFloat(row[18]), getFloat(row[19]), getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), 
+                        getFloat(row[23]), getFloat(row[24]), getFloat(row[25]), getFloat(row[26]), getFloat(row[27])  
+                    ]);
+
+                    if(values.length > 0) await db.query('DELETE FROM mbb_qos WHERE Tuan = ?', [tuanStr]);
+                }
 
             // ============================================
             // 2. NHÓM ĐỌC DATA RF, KPI, TA, POI (TỰ TÌM HEADER)
