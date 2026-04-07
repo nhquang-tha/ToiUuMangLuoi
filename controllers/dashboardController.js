@@ -131,7 +131,7 @@ exports.handleImportData = async (req, res) => {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             
-            // Lấy toàn bộ mảng dữ liệu thô (Dạng mảng 2 chiều, không lấy Header)
+            // Lấy toàn bộ mảng dữ liệu thô
             let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
 
             if (rawDataArray.length === 0) {
@@ -139,44 +139,53 @@ exports.handleImportData = async (req, res) => {
                 continue;
             }
 
-            let data = []; // Dữ liệu sẽ dùng cho RF/KPI
+            let data = []; 
             let sql = '';
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (CẮT HEADER BẰNG TAY)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (LỌC THÔNG MINH)
             // ============================================
             if (networkType === 'mbb_qoe') {
-                // Dữ liệu QoE bắt đầu từ hàng số 6 (Index 5)
-                let dataRows = rawDataArray.slice(5).filter(r => r[4] && String(r[4]).trim() !== ''); // Điều kiện: Phải có Tên Cell (Cột E / Index 4)
+                // Thuật toán quét và nhận diện dòng dữ liệu thay vì cắt tĩnh
+                let dataRows = rawDataArray.filter(r => {
+                    let cellName = String(r[4] || '').trim();
+                    let score = parseFloat(r[6]);
+                    // Điều kiện: Cột 4 có nội dung, không phải Header (Tên cell), Cột 6 là số thực
+                    return cellName.length > 2 && cellName.toLowerCase() !== 'tên cell' && !isNaN(score);
+                });
                 
                 sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
                 
                 values = dataRows.map(row => [
                     tuanStr, row[0], row[1], row[2], row[3], row[4], row[5], 
-                    getFloat(row[6]), getFloat(row[7]), // Điểm tổng & Xếp hạng
-                    getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), // Norm
-                    getFloat(row[12]), getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), // Point
-                    getFloat(row[16]), getFloat(row[17]), getFloat(row[18]), getFloat(row[19]), // Out
-                    getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), getFloat(row[23])  // In
+                    getFloat(row[6]), getFloat(row[7]), 
+                    getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), 
+                    getFloat(row[12]), getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), 
+                    getFloat(row[16]), getFloat(row[17]), getFloat(row[18]), getFloat(row[19]), 
+                    getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), getFloat(row[23])  
                 ]);
                 
                 // Xóa dữ liệu cũ của Tuần này trước khi ghi đè
                 if(values.length > 0) await db.query('DELETE FROM mbb_qoe WHERE Tuan = ?', [tuanStr]);
 
             } else if (networkType === 'mbb_qos') {
-                // Dữ liệu QoS bắt đầu từ hàng số 10 (Index 9)
-                let dataRows = rawDataArray.slice(9).filter(r => r[4] && String(r[4]).trim() !== ''); // Phải có Tên Cell
+                // Thuật toán quét và nhận diện dòng dữ liệu cho QoS
+                let dataRows = rawDataArray.filter(r => {
+                    let cellName = String(r[4] || '').trim();
+                    let score = parseFloat(r[6]);
+                    return cellName.length > 2 && cellName.toLowerCase() !== 'cell name' && !isNaN(score);
+                });
                 
                 sql = `INSERT INTO mbb_qos (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoS_Score, QoS_Rank, Norm_Res, Norm_Acc, Norm_Ret, Norm_Int, Norm_Cov, Point_Res, Point_Acc, Point_Ret, Point_Int, Point_Cov, Out_Res, Out_Acc, Out_Ret, Out_Int, Out_Cov, In_Res, In_Acc, In_Ret, In_Int, In_Cov) VALUES ?`;
                 
                 values = dataRows.map(row => [
                     tuanStr, row[0], row[1], row[2], row[3], row[4], row[5],
-                    getFloat(row[6]), getFloat(row[7]), // Điểm tổng & Xếp hạng
-                    getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), getFloat(row[12]), // Norm
-                    getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), getFloat(row[16]), getFloat(row[17]), // Point
-                    getFloat(row[18]), getFloat(row[19]), getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), // Out
-                    getFloat(row[23]), getFloat(row[24]), getFloat(row[25]), getFloat(row[26]), getFloat(row[27])  // In
+                    getFloat(row[6]), getFloat(row[7]), 
+                    getFloat(row[8]), getFloat(row[9]), getFloat(row[10]), getFloat(row[11]), getFloat(row[12]), 
+                    getFloat(row[13]), getFloat(row[14]), getFloat(row[15]), getFloat(row[16]), getFloat(row[17]), 
+                    getFloat(row[18]), getFloat(row[19]), getFloat(row[20]), getFloat(row[21]), getFloat(row[22]), 
+                    getFloat(row[23]), getFloat(row[24]), getFloat(row[25]), getFloat(row[26]), getFloat(row[27])  
                 ]);
 
                 if(values.length > 0) await db.query('DELETE FROM mbb_qos WHERE Tuan = ?', [tuanStr]);
@@ -228,7 +237,6 @@ exports.handleImportData = async (req, res) => {
                     await db.query(`TRUNCATE TABLE ${networkType}`);
                 }
 
-                // Ghép nối cấu trúc dữ liệu cho RF và KPI...
                 if (networkType === 'rf_3g') {
                     sql = `INSERT INTO rf_3g (CSHT_code, CELL_NAME, Cell_code, Site_code, Latitude, Longitude, Equipment, Frenquency, PSC, DL_UARFCN, BSC_LAC, CI, Anten_height, Azimuth, M_T, E_T, Total_tilt, Hang_SX, Antena, Swap, Start_day, Ghi_chu) VALUES ?`;
                     values = data.map(row => [row['CSHT_code'], row['CELL_NAME'], row['Cell_code'], row['Site_code'], row['Latitude'], row['Longitude'], row['Equipment'], row['Frenquency'], row['PSC'], row['DL_UARFCN'], row['BSC_LAC'], row['CI'], row['Anten_height'], row['Azimuth'], row['M_T'], row['E_T'], row['Total_tilt'], row['Hãng_SX'], row['Antena'], row['Swap'], row['Start_day'], row['Ghi_chú']]);
