@@ -147,7 +147,7 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (THUẬT TOÁN FFILL ĐỈNH CAO)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (CẮT TUYỆT ĐỐI VÀ FFILL PANDAS)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
@@ -155,62 +155,59 @@ exports.handleImportData = async (req, res) => {
                 
                 // Quét qua TẤT CẢ các Sheet
                 for (let sheetName of workbook.SheetNames) {
-                    // Cài đặt defval: "" rất quan trọng để mảng giữ nguyên cấu trúc dù ô bị rỗng
+                    // Đọc toàn bộ Sheet, các ô trống sẽ là chuỗi rỗng ""
                     let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
                     
+                    // Cắt tuyệt đối: QoE bắt đầu từ dòng 6 (index 5), QoS bắt đầu từ dòng 10 (index 9)
+                    let startIndex = (networkType === 'mbb_qoe') ? 5 : 9;
+                    if (rawDataArray.length <= startIndex) continue; // Nếu sheet không đủ dài, bỏ qua
+                    
+                    let slicedArray = rawDataArray.slice(startIndex);
+                    
+                    // Biến nhớ mô phỏng hàm df.ffill() của Python Pandas
                     let currentProv = "", currentDist = "", currentWard = "", currentSite = "";
-                    let dataStarted = false;
 
-                    for (let r = 0; r < rawDataArray.length; r++) {
-                        let row = rawDataArray[r];
-                        // Nếu dòng không phải là mảng hoặc quá ngắn -> Bỏ qua
-                        if (!Array.isArray(row) || row.length < 5) continue;
+                    for (let r = 0; r < slicedArray.length; r++) {
+                        let row = slicedArray[r];
+                        if (!row || !Array.isArray(row) || row.length < 5) continue;
 
                         let c0 = String(row[0]).trim();
                         let c1 = String(row[1]).trim();
                         let c2 = String(row[2]).trim();
                         let c3 = String(row[3]).trim();
                         let c4 = String(row[4]).trim(); 
+                        
                         let c4Lower = c4.toLowerCase();
 
-                        // PHÁT HIỆN TỰ ĐỘNG: Đâu là nơi Dữ Liệu bắt đầu?
-                        // Tên Cell của trạm viễn thông luôn có độ dài > 4 và chứa dấu gạch ngang/dưới (VD: 4G-THA023M, MBF_TH_...)
-                        if (!dataStarted) {
-                            if (c4.length > 4 && (c4.includes('-') || c4.includes('_')) && !c4Lower.includes('tên cell') && !c4Lower.includes('cell name')) {
-                                dataStarted = true;
-                            }
+                        // ÁP DỤNG FFILL (Forward Fill): Nếu ô có giá trị thì lưu, nếu rỗng thì mượn giá trị cũ
+                        if (c0 !== "") currentProv = c0; else row[0] = currentProv;
+                        if (c1 !== "") currentDist = c1; else row[1] = currentDist;
+                        if (c2 !== "") currentWard = c2; else row[2] = currentWard;
+                        if (c3 !== "") currentSite = c3; else row[3] = currentSite;
+
+                        // BỘ LỌC RÁC: Loại bỏ các dòng trống, dòng tính Tổng, dòng số thứ tự
+                        if (c4 === "" || c4Lower.includes('tổng') || c4Lower.includes('total')) {
+                            continue;
                         }
-
-                        if (!dataStarted) continue; // Bỏ qua toàn bộ Header và Sub-header bên trên
-
-                        // Lọc bỏ các dòng tính Tổng (Summary) xen ngang vùng dữ liệu
-                        if (c4 === '' || c0.toLowerCase().includes('tổng') || c1.toLowerCase().includes('tổng') || c4Lower.includes('tổng') || c4Lower.includes('total')) {
+                        
+                        // Loại bỏ dòng đánh số thứ tự (Ví dụ: 1, 2, 4, 5...) ở ngay dưới Header
+                        if (!isNaN(c4) && c4.length < 4) {
                             continue;
                         }
 
-                        // MÔ PHỎNG HÀM ffill() CỦA PANDAS:
-                        // Nếu ô có chứa dữ liệu -> Lưu vào bộ nhớ đệm
-                        // Nếu ô trống (do gộp ô / merge cells) -> Lấy dữ liệu từ bộ nhớ đệm bù vào
-                        if (c0 !== "") currentProv = c0;
-                        if (c1 !== "") currentDist = c1;
-                        if (c2 !== "") currentWard = c2;
-                        if (c3 !== "") currentSite = c3;
-
-                        row[0] = currentProv;
-                        row[1] = currentDist;
-                        row[2] = currentWard;
-                        row[3] = currentSite;
-
-                        dataRows.push(row);
+                        // Đưa dòng hợp lệ vào mảng nạp Database
+                        if (row[0] !== "") {
+                            dataRows.push(row);
+                        }
                     }
                 }
 
                 if (dataRows.length === 0) {
-                    errorLogs.push(`File ${file.originalname} không tìm thấy dữ liệu hợp lệ.`);
+                    errorLogs.push(`File ${file.originalname} không có dữ liệu thật (Hoặc bạn đã chọn nhầm loại file).`);
                     continue;
                 }
 
-                // Cấu hình Nạp vào DB cho QoE / QoS (Căn chuẩn vị trí Index dựa trên File)
+                // Cấu hình Nạp vào DB
                 if (networkType === 'mbb_qoe') {
                     sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
                     
@@ -301,7 +298,7 @@ exports.handleImportData = async (req, res) => {
                     values = data.map(row => [row['CSHT_code'], row['SITE_NAME'], row['Cell_code'], row['Site_code'], row['Latitude'], row['Longitude'], row['Equipment'], row['Frenquency'], row['nrarfcn'], row['PCI'], row['TAC'], row['gNodeB ID'], row['Lcrid'], row['Anten_height'], row['Azimuth'], row['M_T'], row['E_T'], row['Total_tilt'], row['MIMO'], row['Hãng_SX'], row['Antena'], row['Đồng_bộ'], row['Start_day'], row['Ghi_chú']]);
                 } else if (networkType === 'kpi_3g') {
                     sql = `INSERT INTO kpi_3g (STT, Nha_cung_cap, Tinh, Ten_RNC, Ten_CELL, Ma_VNP, Loai_NE, LAC, CI, Thoi_gian, CS_SO_ATT, CS_IF_ATT, CS_IR_ATT, PS_IF_ATT, PS_IR_ATT, PS_SO_ATT, CSVOICECSSR, DLTRAFFICPS, CSIRATHOSRWEIGHT, PSHSPACALLDROPRATE, TRAFFIC, CSVIDEODROPCALLRATE, PSTRAFFIC, CSINTERFREQHOSR, ULTRAFFICPS, CSVIDEOTRAFFIC, PSR99CALLSETUPSR, CSVOICEDROPCALLRATE, PSHSDPATPKBPS, SOFTHOSR, PSR99UPLINKTRAFFICGB, TRAFFICACTIVESETCS64, PSR99TRAFFICGB, CALLVOLUME, PSHSPATRAFFICGB, PSCONGES, DCR, PSCSSR, CSSR, IRATHOSR, PSDCR, CSSRVIDEOPHONE, PSIRATHOSR, SOFTHOSRPS, CSCONGES, V2INTERFREQHOSRPS, R99DLTHROUGHPUT, HSDPATHROUGHPUT, PSR99CALLDROPRATE, PSHSUPATPKBPS, PSR99DLTRAFFICGB, PSHSUPATRAFFICGB, PSHSDPATRAFFICGB, PSHSPACSSR, R99ULTHROUGHPUT) VALUES ?`;
-                    values = data.map(row => [row['STT'], row['Nhà cung cấp'], row['Tỉnh'], row['Tên RNC'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['LAC'], row['CI'], row['Thời gian'], row['CS_SO_ATT'], row['CS_IF_ATT'], row['CS_IR_ATT'], row['PS_IF_ATT'], row['PS_IR_ATT'], row['PS_SO_ATT'], row['CSVOICECSSR'], row['DLTRAFFICPS'], row['CSIRATHOSRWEIGHT'], row['PSHSPACALLDROPRATE'], row['TRAFFIC'], row['CSVIDEODROPCALLRATE'], row['PSTRAFFIC'], row['CSINTERFREQHOSR'], row['ULTRAFFICPS'], row['CSVIDEOTRAFFIC'], row['PSR99CALLSETUPSR'], row['CSVOICEDROPCALLRATE'], row['PSHSDPATPKBPS'], row['SOFTHOSR'], row['PSR99UPLINKTRAFFICGB'], row['TRAFFICACTIVESETCS64'], row['PSR99TRAFFICGB'], row['CALLVOLUME'], row['PSHSPATRAFFICGB'], row['PSCONGES'], row['DCR'], row['PSCSSR'], row['CSSR'], row['IRATHOSR'], row['PSDCR'], row['CSSRVIDEOPHONE'], row['PSIRATHOSR'], row['SOFTHOSRPS'], row['CSCONGES'], row['V2INTERFREQHOSRPS'], row['R99DLTHROUGHPUT'], row['HSDPATHROUGHPUT'], row['PSR99CALLDROPRATE'], row['PSHSUPATPKBPS'], row['PSR99DLTRAFFICGB'], row['PSHSUPATRAFFICGB'], row['PSHSDPATRAFFICGB'], row['PSHSPACSSR'], row['R99ULTHROUGHPUT']]);
+                    values = data.map(row => [row['STT'], row['Nhà cung cấp'], row['Tỉnh'], row['Tên RNC'], row['Tên CELL'], row['Mã VNP'], row['Loại NE'], row['LAC'], row['CI'], row['Thời gian'], row['CS_SO_ATT'], row['CS_IF_ATT'], row['CS_IR_ATT'], row['PS_IF_ATT'], row['PS_IR_ATT'], row['PS_SO_ATT'], row['CSVOICECSSR'], row['DLTRAFFICPS'], row['CSIRATHOSRWEIGHT'], row['PSHSPACALLDROPRATE'], row['TRAFFIC'], row['CSVIDEODROPCALLRATE'], row['PSTRAFFIC'], row['CSINTERFREQHOSR'], row['ULTRAFFICPS'], row['CSVIDEOTRAFFIC'], row['PSR99CALLSETUPSR'], row['CSVOICEDROPCALLRATE'], row['PSHSDPATPKBPS'], row['SOFTHOSR'], row['PSR99UPLINKTRAFFICGB'], row['TRAFFICACTIVESETCS64'], row['PSR99TRAFFICGB'], row['CALLVOLUME'], row['PSHSPATRAFFICGB'], row['PSCONGES'], row['DCR'], row['PSCSSR'], row['CSSR'], row['IRATHOSR'], row['PSDCR'], row['CSSRVIDEOPHONE'], row['PSIRATHOSR'], SOFTHOSRPS, CSCONGES, V2INTERFREQHOSRPS, R99DLTHROUGHPUT, HSDPATHROUGHPUT, PSR99CALLDROPRATE, PSHSUPATPKBPS, PSR99DLTRAFFICGB, PSHSUPATRAFFICGB, PSHSDPATRAFFICGB, PSHSPACSSR, R99ULTHROUGHPUT]);
                 } else if (networkType === 'kpi_4g') {
                     const fileHeaders = Object.keys(data[0]); 
                     sql = `INSERT INTO kpi_4g (Site_name, CellType, District_code, Cell_name, MIMO, Thoi_gian, UL_Traffic_VoLTE_GB, Avg_UL_throughput_QCI_1, VoLTE_Traffic_Erl, Total_Traffic_VoLTE_GB, VoLTE_ERAB_Call_Setup_SR, Intra_freq_HO_SR_VoLTE, Inter_freq_HO_SR_VoLTE, DL_Traffic_VoLTE_GB, Avg_DL_throughput_QCI_1, Call_Drop_Rate_VoLTE, SRVCC_SR_LTE_to_WCDMA, User_UL_Avg_Throughput_Kbps, User_DL_Avg_Throughput_Kbps, Traffic_Volume_UL_GB, Traffic_Volumn_DL_GB, Total_Data_Traffic_Volume_GB, Total_UE, Service_Drop_all, RB_Util_Rate_UL, RB_Util_Rate_DL, INTRA_HOSR_ATT, Intra_frequency_HO, Intra_eNB_HO_SR_total, Inter_frequency_HO, Inter_RAT_Total_HO_SR, Inter_RAT_HO_Prep_SR, Inter_RAT_HOSR_LTE_to_WCDMA, Inter_RAT_HO_SR_Exec, eRAB_Setup_SR_All, CS_Call_Setup_SR_Max, Downlink_Latency, Call_Setup_SR, E_UTRAN_Init_Context_Setup_SR_CSFB, CSFB_ATT, CQI_4G, Col42, Col43, Col44, Col45, Col46, Col47) VALUES ?`;
