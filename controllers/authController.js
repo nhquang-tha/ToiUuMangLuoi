@@ -1,46 +1,81 @@
 const db = require('../models/db');
 const bcrypt = require('bcryptjs');
 
-// [HÀM BỌC THÉP] Hàm render an toàn chống sập (Lỗi 500) nếu thiếu file giao diện
-const safeRenderLogin = (res, errorMessage = null) => {
-    res.render('login', { error: errorMessage }, (err, html) => {
-        if (err) {
-            console.error("Lỗi Render trang Login:", err);
-            // Nếu không tìm thấy file login.ejs, hiển thị lỗi rõ ràng thay vì Internal Server Error
-            return res.status(500).send(`
-                <div style="font-family: Arial, sans-serif; padding: 40px; text-align: center; color: #2c3e50; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #e74c3c;">⚠️ Lỗi Giao Diện Đăng Nhập</h2>
-                    <p style="font-size: 16px;">Hệ thống không tìm thấy file <b>views/login.ejs</b> trên máy chủ.</p>
-                    <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #f39c12; text-align: left; margin: 20px 0;">
-                        Vui lòng chắc chắn rằng bạn đã tạo file này và đã Push nó lên Github/Render.
-                    </div>
+// [VŨ KHÍ HẠNG NẶNG]: Nhúng trực tiếp HTML vào Backend để chống lỗi không tìm thấy file EJS
+const renderDirectLogin = (res, errorMessage = null) => {
+    let errorHtml = '';
+    if (errorMessage) {
+        errorHtml = `<div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; border: 1px solid #f5c6cb; font-weight: bold;">⚠️ ${errorMessage}</div>`;
+    }
+
+    const html = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Đăng nhập - Hệ Thống Tối Ưu Mạng</title>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Roboto', sans-serif; background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; }
+            .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); width: 100%; max-width: 400px; text-align: center; animation: fadeIn 0.5s ease-out; }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+            .login-card h2 { margin-top: 0; color: #2c3e50; font-size: 24px; margin-bottom: 10px; font-weight: 700; }
+            .login-card p { color: #7f8c8d; font-size: 14px; margin-bottom: 30px; }
+            .form-group { margin-bottom: 20px; text-align: left; }
+            .form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #34495e; font-size: 13px; }
+            .form-group input { width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 15px; box-sizing: border-box; transition: border-color 0.3s; }
+            .form-group input:focus { border-color: #3498db; box-shadow: 0 0 5px rgba(52, 152, 219, 0.3); }
+            .btn-login { background: #3498db; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+            .btn-login:hover { background: #2980b9; transform: translateY(-2px); }
+        </style>
+    </head>
+    <body>
+        <div class="login-card">
+            <h2>TELECOM DASHBOARD</h2>
+            <p>Hệ Thống Phân Tích & Tối Ưu Mạng Lưới</p>
+            ${errorHtml}
+            <form action="/login" method="POST">
+                <div class="form-group">
+                    <label>Tên đăng nhập</label>
+                    <input type="text" name="username" placeholder="Nhập tài khoản (VD: admin)..." required autofocus>
                 </div>
-            `);
-        }
-        res.send(html);
-    });
+                <div class="form-group">
+                    <label>Mật khẩu</label>
+                    <input type="password" name="password" placeholder="Nhập mật khẩu..." required>
+                </div>
+                <button type="submit" class="btn-login">Đăng Nhập Hệ Thống</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    `;
+    res.send(html);
 };
 
-// Hiển thị giao diện trang Login
+// ==========================================
+// HIỂN THỊ TRANG LOGIN
+// ==========================================
 exports.getLoginPage = (req, res) => {
-    // Nếu đã đăng nhập rồi thì tự động chuyển hướng về trang chủ
+    // Nếu đã đăng nhập, tự động về trang chủ
     if (req.session && req.session.user) {
         return res.redirect('/');
     }
-    safeRenderLogin(res, null);
+    // Gọi thẳng hàm vẽ HTML nội bộ (Bỏ qua file views/login.ejs)
+    renderDirectLogin(res, null);
 };
 
-// Xử lý khi người dùng bấm nút Đăng nhập
+// ==========================================
+// XỬ LÝ KHI BẤM NÚT ĐĂNG NHẬP
+// ==========================================
 exports.login = async (req, res) => {
     const { username, password } = req.body;
     try {
-        // [CỨU HỘ 1] Tự động kiểm tra và tạo bảng users nếu chưa tồn tại
+        // [CỨU HỘ 1] Tự tạo bảng users nếu chưa có
         try {
             await db.query('SELECT 1 FROM users LIMIT 1');
         } catch (e) {
-            // Bắt lỗi MySQL/TiDB nếu bảng không tồn tại
             if (e.code === 'ER_NO_SUCH_TABLE' || (e.message && e.message.includes("doesn't exist"))) {
-                console.log("Đang tự động khởi tạo bảng users...");
                 await db.query(`
                     CREATE TABLE users (
                         id INT AUTO_INCREMENT PRIMARY KEY, 
@@ -50,55 +85,52 @@ exports.login = async (req, res) => {
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 `);
-            } else {
-                throw e;
             }
         }
 
-        // [CỨU HỘ 2] Nếu Database chưa có ai, tự động tạo tài khoản Admin mặc định
+        // [CỨU HỘ 2] Tự tạo Admin nếu DB rỗng
         const [usersCheck] = await db.query('SELECT id FROM users LIMIT 1');
         if (usersCheck.length === 0) {
             const hashedPw = await bcrypt.hash('admin123', 10);
             await db.query("INSERT INTO users (username, password, role) VALUES ('admin', ?, 'admin')", [hashedPw]);
-            console.log("Đã tạo tài khoản admin/admin123 thành công!");
         }
 
-        // Kiểm tra thông tin đăng nhập trong Database
+        // Truy vấn User
         const [users] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         
         if (users.length > 0) {
             const user = users[0];
-            const userPw = user.password || ''; // Chống lỗi crash nếu password trong DB bị Null
+            const userPw = user.password || ''; 
             
             let isMatch = false;
-            // Hỗ trợ cả mật khẩu băm của Node.js ($2a$, $2b$) và mật khẩu thường (Từ code Python cũ)
+            // Hỗ trợ Pass cũ (Python) và Pass mới (Node.js)
             if (userPw.startsWith('$2a$') || userPw.startsWith('$2b$')) {
                 isMatch = await bcrypt.compare(password, userPw);
             } else {
                 isMatch = (password === userPw);
             }
             
-            // Đăng nhập thành công (Luôn mở cửa hậu cho admin/admin123 phòng trường hợp khẩn cấp)
+            // Tài khoản admin/admin123 luôn được cấp phép trong trường hợp khẩn cấp
             if (isMatch || (username === 'admin' && password === 'admin123')) {
                 req.session.user = { id: user.id, username: user.username, role: user.role };
                 return res.redirect('/');
             } else {
-                return safeRenderLogin(res, 'Sai mật khẩu!');
+                return renderDirectLogin(res, 'Sai mật khẩu!');
             }
         } else {
-            return safeRenderLogin(res, 'Tài khoản không tồn tại!');
+            return renderDirectLogin(res, 'Tài khoản không tồn tại!');
         }
     } catch (error) {
-        console.error("Lỗi đăng nhập nghiêm trọng:", error);
-        return safeRenderLogin(res, 'Lỗi kết nối Cơ sở dữ liệu! Vui lòng thử lại.');
+        console.error("Lỗi đăng nhập:", error);
+        return renderDirectLogin(res, 'Lỗi kết nối Cơ sở dữ liệu! Vui lòng thử lại.');
     }
 };
 
-// Xử lý Đăng xuất
+// ==========================================
+// XỬ LÝ ĐĂNG XUẤT
+// ==========================================
 exports.logout = (req, res) => {
-    // Hủy bỏ phiên đăng nhập (Session)
     req.session.destroy((err) => {
-        if (err) console.error("Lỗi khi hủy session:", err);
         res.redirect('/login');
     });
 };
