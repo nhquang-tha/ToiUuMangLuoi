@@ -147,37 +147,50 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (QUÉT ĐA SHEET THÔNG MINH)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (TÌM HEADER ĐỘNG + FILL DOWN GỘP Ô)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
                 let dataRows = [];
                 
-                // Quét qua TẤT CẢ các Sheet có trong file (Phòng ngừa trường hợp Sheet 1 là trang bìa)
+                // Quét qua tất cả các Sheet
                 for (let sheetName of workbook.SheetNames) {
                     let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
                     
-                    let sheetDataRows = rawDataArray.filter(row => {
-                        if (!row || !Array.isArray(row) || row.length < 5) return false;
-                        
-                        // Gom 5 cột đầu tiên lại thành 1 chuỗi để đối chiếu
-                        let checkStr = (String(row[0]||'') + ' ' + String(row[1]||'') + ' ' + String(row[2]||'') + ' ' + String(row[3]||'') + ' ' + String(row[4]||'')).toUpperCase();
-                        
-                        // Nếu dòng có chứa mã quy ước (THA, THANH HÓA, 4G-, 5G-)
-                        if (checkStr.includes('THA') || checkStr.includes('THANH H') || checkStr.includes('4G-') || checkStr.includes('5G-') || checkStr.includes('3G-')) {
-                            // Đảm bảo không phải dòng Header bị dính chữ
-                            if (!checkStr.includes('TÊN CELL') && !checkStr.includes('CELL NAME') && !checkStr.includes('ĐƠN VỊ')) {
-                                return true;
-                            }
+                    let headerIndex = -1;
+                    // Tìm dòng Header chính
+                    for (let i = 0; i < Math.min(20, rawDataArray.length); i++) {
+                        let rowStr = (rawDataArray[i] || []).join('').toLowerCase();
+                        if (rowStr.includes('tên cell') || rowStr.includes('cell name') || rowStr.includes('uxi chuẩn hóa') || rowStr.includes('sqi chuẩn hóa')) {
+                            headerIndex = i;
+                            break;
                         }
-                        return false;
-                    });
-                    
-                    dataRows = dataRows.concat(sheetDataRows);
+                    }
+
+                    // Nếu tìm thấy Header, cắt bỏ đúng 5 dòng sub-header để lấy dữ liệu lõi
+                    if (headerIndex !== -1 && rawDataArray.length > headerIndex + 5) {
+                        
+                        let sheetDataRows = rawDataArray.slice(headerIndex + 5).filter(row => {
+                            // Chỉ lấy những dòng có dữ liệu ở cột Tên Cell (Index 4)
+                            let cellName = String(row[4] || '').trim();
+                            return cellName.length > 2 && !cellName.toLowerCase().includes('tên cell') && !cellName.toLowerCase().includes('cell name');
+                        });
+                        
+                        // Kỹ thuật Fill Down: Xử lý các ô bị gộp (Merge Cells) của Tỉnh, Đơn vị, Tên Trạm
+                        let lastCol0 = '', lastCol1 = '', lastCol2 = '', lastCol3 = '';
+                        sheetDataRows.forEach(row => {
+                            if (String(row[0]||'').trim()) lastCol0 = row[0]; else row[0] = lastCol0;
+                            if (String(row[1]||'').trim()) lastCol1 = row[1]; else row[1] = lastCol1;
+                            if (String(row[2]||'').trim()) lastCol2 = row[2]; else row[2] = lastCol2;
+                            if (String(row[3]||'').trim()) lastCol3 = row[3]; else row[3] = lastCol3;
+                        });
+
+                        dataRows = dataRows.concat(sheetDataRows);
+                    }
                 }
 
                 if (dataRows.length === 0) {
-                    errorLogs.push(`File ${file.originalname} không tìm thấy dữ liệu hợp lệ trên bất kỳ Sheet nào.`);
+                    errorLogs.push(`File ${file.originalname} rỗng hoặc không tìm thấy dữ liệu hợp lệ.`);
                     continue;
                 }
 
@@ -314,7 +327,7 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error("Lỗi khi xử lý file:", error);
-            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai định dạng.`);
+            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai cấu trúc.`);
         }
     } 
 
