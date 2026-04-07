@@ -34,12 +34,14 @@ const getFloat = (val) => {
     if (val === undefined || val === null || val === "") return null;
     let str = String(val).trim();
     
+    // Xóa bỏ hoàn toàn các lỗi công thức của Excel
     if (str === '-' || str === 'N/A' || str === '#N/A' || str === '#DIV/0!' || str.toLowerCase() === 'null') return null;
     
-    if (str.includes(',') && !str.includes('.')) {
-        str = str.replace(/,/g, '.');
-    } else {
+    // Xử lý dấu phẩy (Kiểu Mỹ 1,000.54 vs Kiểu Việt 98,54)
+    if (str.includes(',') && str.includes('.')) {
         str = str.replace(/,/g, ''); 
+    } else if (str.includes(',') && !str.includes('.')) {
+        str = str.replace(/,/g, '.');
     }
     
     let n = Number(str);
@@ -132,7 +134,6 @@ exports.handleImportData = async (req, res) => {
     let errorLogs = [];
     let isKpiImported = false;
 
-    // Xử lý chuỗi Tuần cho QoE/QoS
     const weekNumber = req.body.weekNumber || '1';
     const year = req.body.year || new Date().getFullYear();
     const tuanStr = `Tuần ${weekNumber} (${year})`;
@@ -142,7 +143,6 @@ exports.handleImportData = async (req, res) => {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             
-            // Lấy toàn bộ mảng dữ liệu thô
             let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
 
             if (rawDataArray.length === 0) {
@@ -155,27 +155,25 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (LỌC THÔNG MINH TUYỆT ĐỐI)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (THUẬT TOÁN X-RAY STRINGIFY)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
-                let dataRows = [];
-                for (let i = 0; i < rawDataArray.length; i++) {
-                    let row = rawDataArray[i];
-                    if (!row || row.length < 5) continue; // Bỏ qua các dòng rác quá ngắn
+                // Lọc dữ liệu thông qua quét mã nguyên dòng
+                let dataRows = rawDataArray.filter(row => {
+                    if (!row || !Array.isArray(row)) return false;
+                    // Ép toàn bộ mảng thành 1 chuỗi dài để tìm từ khóa
+                    let rowStr = row.join('||').toUpperCase();
                     
-                    // Lấy giá trị các cột chốt chặn để nhận dạng
-                    let col0 = String(row[0] || '').trim().toUpperCase();
-                    let col1 = String(row[1] || '').trim().toUpperCase();
-                    let col3 = String(row[3] || '').trim().toUpperCase();
-                    let col4 = String(row[4] || '').trim().toUpperCase();
-
-                    // Màng lọc Vàng: Dòng dữ liệu thật CHẮC CHẮN phải có chữ THA ở cột 0,
-                    // hoặc chứa chữ THANH HÓA ở cột 1, hoặc có chứa "4G-" ở tên Trạm/Cell.
-                    if (col0 === 'THA' || col1.includes('THANH HÓA') || col1.includes('THANH HOA') || col3.includes('4G-') || col4.includes('4G-')) {
-                        dataRows.push(row);
+                    // Nếu dòng này chứa "THA", "4G-", "3G-" hoặc "5G-" -> 99% là Data
+                    if (rowStr.includes('THA') || rowStr.includes('4G-') || rowStr.includes('3G-') || rowStr.includes('5G-')) {
+                        // Loại bỏ các dòng Header có chứa những từ khóa cố định
+                        if (!rowStr.includes('TÊN CELL') && !rowStr.includes('CELL NAME') && !rowStr.includes('ĐƠN VỊ') && !rowStr.includes('PHƯỜNG/XÃ')) {
+                            return true;
+                        }
                     }
-                }
+                    return false;
+                });
 
                 if (networkType === 'mbb_qoe') {
                     sql = `INSERT INTO mbb_qoe (Tuan, Ma_Tinh, Don_Vi, Phuong_Xa, Site_Name, Cell_Name, Cell_ID, QoE_Score, QoE_Rank, Norm_Speed, Norm_Latency, Norm_Jitter, Norm_PacketLoss, Point_Speed, Point_Latency, Point_Jitter, Point_PacketLoss, Out_Speed, Out_Latency, Out_Jitter, Out_PacketLoss, In_Speed, In_Latency, In_Jitter, In_PacketLoss) VALUES ?`;
@@ -294,8 +292,14 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
+            // Kỹ thuật Chunking Insert: Chia nhỏ dữ liệu thành từng cụm 500 dòng
+            // Giúp ngăn ngừa lỗi "Packet too large" và Crash CSDL khi nạp hàng chục ngàn dòng
             if (values.length > 0) {
-                await db.query(sql, [values]);
+                const chunkSize = 500;
+                for (let i = 0; i < values.length; i += chunkSize) {
+                    let chunk = values.slice(i, i + chunkSize);
+                    await db.query(sql, [chunk]);
+                }
                 totalImported += values.length;
             }
 
