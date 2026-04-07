@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const db = require('../models/db'); // Kết nối chung Database của Web
 
 // 1. ĐIỀN TOKEN BẠN LẤY TỪ @BotFather VÀO ĐÂY
-const token = process.env.TELEGRAM_BOT_TOKEN || 8777941094:AAHFhpj4ZksmF7YyMjY8tn7Z3Ya7donSHpo;
+const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8tn7Z3Ya7donSHpo';
 
 let bot;
 try {
