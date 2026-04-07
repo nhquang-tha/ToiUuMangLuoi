@@ -1,6 +1,29 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
+// Hàm thiết yếu: Sửa lỗi file Excel Viễn thông khai báo sai vùng dữ liệu (!ref)
+// Ép Node.js đọc tới tận dòng cuối cùng thay vì bị ngắt quãng ở dòng 6 hoặc 10
+function fixSheetRange(sheet) {
+    if (!sheet) return sheet;
+    let range = { s: { c: 10000000, r: 10000000 }, e: { c: 0, r: 0 } };
+    let hasCells = false;
+    for (let key in sheet) {
+        if (key[0] === '!') continue;
+        try {
+            let cell = xlsx.utils.decode_cell(key);
+            if (cell.r < range.s.r) range.s.r = cell.r;
+            if (cell.c < range.s.c) range.s.c = cell.c;
+            if (cell.r > range.e.r) range.e.r = cell.r;
+            if (cell.c > range.e.c) range.e.c = cell.c;
+            hasCells = true;
+        } catch (e) {}
+    }
+    if (hasCells) {
+        sheet['!ref'] = xlsx.utils.encode_range(range);
+    }
+    return sheet;
+}
+
 function parseDateToSortableInteger(val) {
     if (!val) return 0;
     let str = String(val).replace(/["'\r\n]/g, '').trim().split(' ')[0];
@@ -34,10 +57,8 @@ const getFloat = (val) => {
     if (val === undefined || val === null || val === "") return null;
     let str = String(val).trim();
     
-    // Xóa bỏ hoàn toàn các lỗi công thức của Excel
     if (str === '-' || str === 'N/A' || str === '#N/A' || str === '#DIV/0!' || str.toLowerCase() === 'null') return null;
     
-    // Xử lý dấu phẩy (Kiểu Mỹ 1,000.54 vs Kiểu Việt 98,54)
     if (str.includes(',') && str.includes('.')) {
         str = str.replace(/,/g, ''); 
     } else if (str.includes(',') && !str.includes('.')) {
@@ -147,57 +168,47 @@ exports.handleImportData = async (req, res) => {
             let values = [];
 
             // ============================================
-            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (CẮT TUYỆT ĐỐI VÀ FFILL PANDAS)
+            // 1. NHÓM ĐỌC DATA QOE VÀ QOS (MÔ PHỎNG PANDAS FFILL)
             // ============================================
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 
                 let dataRows = [];
                 
-                // Quét qua TẤT CẢ các Sheet
                 for (let sheetName of workbook.SheetNames) {
-                    // Đọc toàn bộ Sheet, các ô trống sẽ là chuỗi rỗng ""
-                    let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
-                    
-                    // Cắt tuyệt đối: QoE bắt đầu từ dòng 6 (index 5), QoS bắt đầu từ dòng 10 (index 9)
-                    let startIndex = (networkType === 'mbb_qoe') ? 5 : 9;
-                    if (rawDataArray.length <= startIndex) continue; // Nếu sheet không đủ dài, bỏ qua
-                    
-                    let slicedArray = rawDataArray.slice(startIndex);
+                    // Áp dụng thuật toán vá lỗi !ref để Node.js đọc tới dòng cuối cùng
+                    let sheet = fixSheetRange(workbook.Sheets[sheetName]);
+                    let rawDataArray = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "" });
                     
                     // Biến nhớ mô phỏng hàm df.ffill() của Python Pandas
                     let currentProv = "", currentDist = "", currentWard = "", currentSite = "";
 
-                    for (let r = 0; r < slicedArray.length; r++) {
-                        let row = slicedArray[r];
-                        if (!row || !Array.isArray(row) || row.length < 5) continue;
+                    for (let r = 0; r < rawDataArray.length; r++) {
+                        let row = rawDataArray[r];
+                        if (!row || !Array.isArray(row)) continue;
 
-                        let c0 = String(row[0]).trim();
-                        let c1 = String(row[1]).trim();
-                        let c2 = String(row[2]).trim();
-                        let c3 = String(row[3]).trim();
-                        let c4 = String(row[4]).trim(); 
-                        
+                        let c0 = row[0] == null ? "" : String(row[0]).trim();
+                        let c1 = row[1] == null ? "" : String(row[1]).trim();
+                        let c2 = row[2] == null ? "" : String(row[2]).trim();
+                        let c3 = row[3] == null ? "" : String(row[3]).trim();
+                        let c4 = row[4] == null ? "" : String(row[4]).trim(); 
                         let c4Lower = c4.toLowerCase();
 
-                        // ÁP DỤNG FFILL (Forward Fill): Nếu ô có giá trị thì lưu, nếu rỗng thì mượn giá trị cũ
+                        // FFILL (Kéo dữ liệu ô bị gộp xuống)
                         if (c0 !== "") currentProv = c0; else row[0] = currentProv;
                         if (c1 !== "") currentDist = c1; else row[1] = currentDist;
                         if (c2 !== "") currentWard = c2; else row[2] = currentWard;
                         if (c3 !== "") currentSite = c3; else row[3] = currentSite;
 
-                        // BỘ LỌC RÁC: Loại bỏ các dòng trống, dòng tính Tổng, dòng số thứ tự
-                        if (c4 === "" || c4Lower.includes('tổng') || c4Lower.includes('total')) {
-                            continue;
-                        }
-                        
-                        // Loại bỏ dòng đánh số thứ tự (Ví dụ: 1, 2, 4, 5...) ở ngay dưới Header
-                        if (!isNaN(c4) && c4.length < 4) {
-                            continue;
-                        }
-
-                        // Đưa dòng hợp lệ vào mảng nạp Database
-                        if (row[0] !== "") {
-                            dataRows.push(row);
+                        // NHẬN DIỆN VÀ BẮT GIỮ DÒNG DỮ LIỆU
+                        // Bỏ qua dòng Header, Tổng, Số thứ tự
+                        if (c4.length > 4 && !c4Lower.includes('tổng') && !c4Lower.includes('total') && !c4Lower.includes('cell')) {
+                            // Cột Tên Cell không phải là 1 số đếm
+                            if (isNaN(c4)) {
+                                // Đảm bảo dòng được lấy có Mã Tỉnh (c0) hợp lệ
+                                if (row[0] !== "") {
+                                    dataRows.push(row);
+                                }
+                            }
                         }
                     }
                 }
@@ -238,11 +249,11 @@ exports.handleImportData = async (req, res) => {
                 }
 
             // ============================================
-            // 2. NHÓM ĐỌC DATA RF, KPI, TA, POI (TỰ TÌM HEADER CŨ)
+            // 2. NHÓM ĐỌC DATA RF, KPI, TA, POI
             // ============================================
             } else {
-                const sheetName = workbook.SheetNames[0]; 
-                let rawDataArray = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: "" });
+                let sheet = fixSheetRange(workbook.Sheets[workbook.SheetNames[0]]); 
+                let rawDataArray = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
                 let headerRowIndex = 0;
                 for (let i = 0; i < Math.min(15, rawDataArray.length); i++) {
@@ -251,7 +262,7 @@ exports.handleImportData = async (req, res) => {
                         headerRowIndex = i; break;
                     }
                 }
-                data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false, defval: "", range: headerRowIndex });
+                data = xlsx.utils.sheet_to_json(sheet, { raw: false, defval: "", range: headerRowIndex });
 
                 if (!networkType.startsWith('poi_')) {
                     data.forEach(row => {
