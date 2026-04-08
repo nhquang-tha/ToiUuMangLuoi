@@ -207,6 +207,27 @@
                                 <% } %>
                             </div>
                         </div>
+
+                        <!-- BỔ SUNG LỊCH SỬ QOE / QOS -->
+                        <div class="history-box">
+                            <h4 style="color: #f39c12;">Dữ Liệu QoE / QoS (Tuần)</h4>
+                            <div class="history-container">
+                                <% 
+                                    let allWeeks = new Set();
+                                    if(history && history.qoeWeeks) history.qoeWeeks.forEach(w => allWeeks.add(w));
+                                    if(history && history.qosWeeks) history.qosWeeks.forEach(w => allWeeks.add(w));
+                                    let weeksArray = Array.from(allWeeks);
+                                %>
+                                <% if(weeksArray.length > 0) { %>
+                                    <% weeksArray.forEach(week => { %>
+                                        <span class="date-badge" style="background: #fef5e7; color: #d35400; border: 1px solid #fad7a1;"><i style="margin-right: 4px;">⭐</i><%= week %></span>
+                                    <% }) %>
+                                <% } else { %>
+                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu...</span>
+                                <% } %>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
