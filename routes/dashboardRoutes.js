@@ -65,6 +65,10 @@ router.get('/kpi-analytics', isAuthenticated, safeCtrl(kpiController.getKpiAnaly
 router.get('/api/kpi-data', isAuthenticated, safeCtrl(kpiController.getKpiData));
 router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, safeCtrl(kpiController.resetData));
 
+// --- ROUTES CHO QOE / QOS ANALYTICS ---
+router.get('/qoe-qos-analytics', isAuthenticated, safeCtrl(kpiController.getQoeQosAnalyticsPage));
+router.get('/api/qoe-qos-data', isAuthenticated, safeCtrl(kpiController.getQoeQosData));
+
 router.get('/poi-report', isAuthenticated, safeCtrl(kpiController.getPoiReportPage));
 router.get('/api/poi-list', isAuthenticated, safeCtrl(kpiController.getPoiList));
 router.get('/api/poi-data', isAuthenticated, safeCtrl(kpiController.getPoiData));
