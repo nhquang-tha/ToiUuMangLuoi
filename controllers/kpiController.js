@@ -54,6 +54,41 @@ exports.getKpiData = async (req, res) => {
     }
 };
 
+// ==========================================
+// CÁC HÀM XỬ LÝ CHO QOE / QOS ANALYTICS
+// ==========================================
+exports.getQoeQosAnalyticsPage = async (req, res) => {
+    const activeUser = res.locals.currentUser || req.session.user || req.user;
+    res.render('qoe_qos_analytics', { title: 'QoE/QoS Analytics', page: 'QoE/QoS Analytics', currentUser: activeUser });
+};
+
+exports.getQoeQosData = async (req, res) => {
+    const value = req.query.value ? req.query.value.trim() : '';
+    if (!value) return res.json({ qoe: [], qos: [] });
+
+    try {
+        const values = value.split(',').map(s => s.trim()).filter(s => s);
+        const placeholders = values.map(() => '?').join(',');
+        
+        // Mảng params cần lặp lại 3 lần cho (Cell_Name IN (...) OR Cell_ID IN (...) OR Site_Name IN (...))
+        let params = [...values, ...values, ...values];
+
+        const queryStr = ` WHERE Cell_Name IN (${placeholders}) OR Cell_ID IN (${placeholders}) OR Site_Name IN (${placeholders}) ORDER BY id ASC LIMIT 5000`;
+
+        const [qoeRows] = await db.query(`SELECT * FROM mbb_qoe` + queryStr, params);
+        const [qosRows] = await db.query(`SELECT * FROM mbb_qos` + queryStr, params);
+
+        res.json({
+            qoe: qoeRows,
+            qos: qosRows
+        });
+
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu QoE/QoS:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL QoE/QoS." });
+    }
+};
+
 exports.resetData = async (req, res) => {
     const network = req.params.network;
     try {
