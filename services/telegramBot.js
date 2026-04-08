@@ -2,12 +2,12 @@ const TelegramBot = require('node-telegram-bot-api');
 const db = require('../models/db'); 
 
 // ĐIỀN TOKEN BẠN LẤY TỪ @BotFather VÀO ĐÂY
-const token = process.env.TELEGRAM_BOT_TOKEN || 'ĐIỀN_TOKEN_CỦA_BẠN_VÀO_ĐÂY';
+const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8tn7Z3Ya7donSHpo';
 
 let bot;
 try {
     bot = new TelegramBot(token, { polling: true });
-    console.log("🤖 Telegram Bot đã khởi động với Bộ Lọc Tìm Kiếm Thông Minh...");
+    console.log("🤖 Telegram Bot đã khởi động với Bộ Lọc Tìm Kiếm Thông Minh và Full Data RF...");
 } catch (error) {
     console.error("❌ Lỗi khởi động Telegram Bot!", error);
 }
@@ -40,16 +40,16 @@ if (bot) {
         const resp = `
 👋 *HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT*
 
-*Tra cứu Thông tin:*
-📡 \`rf <Tên Cell>\`: Tra thông tin RF & Google Map.
-📊 \`kpi <Tên Cell>\`: Tra KPI mới nhất.
-⭐ \`qoe <Tên Cell>\`: Tra điểm QoE (Trải nghiệm) tuần mới nhất.
-⚙️ \`qos <Tên Cell>\`: Tra điểm QoS (Dịch vụ) tuần mới nhất.
+*Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):*
+📡 \`rf <cell_code>\`: Tra toàn bộ thông tin RF của cell kèm link chỉ đường Google Map.
+📊 \`kpi <cell_code>\`: Tra thông tin KPI mới nhất của cell.
+⭐ \`qoe <cell_code>\`: Tra thông tin QOE tuần mới nhất của cell.
+⚙️ \`qos <cell_code>\`: Tra thông tin QOS tuần mới nhất của cell.
 
 *Vẽ Biểu đồ (Charts):*
-📈 \`charkpi <Tên Cell>\`: Biểu đồ KPI 7 ngày gần nhất.
-📉 \`charqoe <Tên Cell>\`: Biểu đồ QoE 4 tuần gần nhất.
-📉 \`charqos <Tên Cell>\`: Biểu đồ QoS 4 tuần gần nhất.
+📈 \`charkpi <cell_code>\`: Vẽ biểu đồ biến động 7 ngày gần nhất của cell (Mỗi KPI 1 biểu đồ).
+📉 \`charqoe <cell_code>\`: Vẽ biểu đồ biến động QoE 4 tuần gần nhất.
+📉 \`charqos <cell_code>\`: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
 
 _Ví dụ: rf 4G-THA001M11-THA_
         `;
@@ -57,42 +57,58 @@ _Ví dụ: rf 4G-THA001M11-THA_
     });
 
     // ==========================================
-    // 1. LỆNH: rf <tên cell>
+    // 1. LỆNH: rf <cell_code> (HIỂN THỊ TOÀN BỘ CỘT RF)
     // ==========================================
     bot.onText(/^(?:\/)?rf\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const rawKeyword = match[1].trim();
-        const keyword = cleanKeyword(rawKeyword); // Lọc từ khóa
+        const keyword = cleanKeyword(rawKeyword); 
         
-        bot.sendMessage(chatId, `⏳ Đang quét cấu hình RF cho: *${keyword}*...`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⏳ Đang trích xuất toàn bộ dữ liệu RF cho: *${keyword}*...`, { parse_mode: 'Markdown' });
 
         try {
-            let [rows] = await db.query(`SELECT '4G' as Net, CELL_NAME as Cell, Site_code as Site, Latitude, Longitude, Azimuth, Anten_height, Total_tilt, ENodeBID as Node FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 3`, [`%${keyword}%`, `%${keyword}%`]);
-            if (rows.length === 0) [rows] = await db.query(`SELECT '5G' as Net, SITE_NAME as Cell, Site_code as Site, Latitude, Longitude, Azimuth, Anten_height, Total_tilt, gNodeB_ID as Node FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 3`, [`%${keyword}%`, `%${keyword}%`]);
-            if (rows.length === 0) [rows] = await db.query(`SELECT '3G' as Net, CELL_NAME as Cell, Site_code as Site, Latitude, Longitude, Azimuth, Anten_height, Total_tilt, BSC_LAC as Node FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 3`, [`%${keyword}%`, `%${keyword}%`]);
+            // Lấy TẤT CẢ các cột (*) thay vì chỉ lấy một vài cột như trước
+            let [rows] = await db.query(`SELECT '4G' as Net, * FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 2`, [`%${keyword}%`, `%${keyword}%`]);
+            if (rows.length === 0) [rows] = await db.query(`SELECT '5G' as Net, * FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 2`, [`%${keyword}%`, `%${keyword}%`]);
+            if (rows.length === 0) [rows] = await db.query(`SELECT '3G' as Net, * FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 2`, [`%${keyword}%`, `%${keyword}%`]);
 
             if (rows.length > 0) {
-                let responseText = `📡 *KẾT QUẢ RF ĐỊNH VỊ:*\n`;
+                let responseText = `📡 *KẾT QUẢ RF CHI TIẾT:*\n`;
+                
                 rows.forEach((r) => {
                     const mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
-                    responseText += `
----------------------------
-🔹 *Cell:* \`${r.Cell}\` (${r.Net})
-📍 *Site:* ${r.Site} | *Node:* ${r.Node}
-🧭 *Góc phát (Azi):* ${r.Azimuth}° | *Cao độ:* ${r.Anten_height}m
-📉 *Tilt (Tổng):* ${r.Total_tilt}
-🗺️ [📍 MỞ CHỈ ĐƯỜNG GOOGLE MAP](${mapLink})
-`;
+                    responseText += `\n---------------------------\n`;
+                    responseText += `🌐 *Mạng:* ${r.Net}\n`;
+                    
+                    // Duyệt qua toàn bộ các cột trong Database và in ra
+                    for (let key in r) {
+                        // Bỏ qua các cột hệ thống không cần thiết
+                        if (key !== 'id' && key !== 'created_at' && key !== 'Net') {
+                            if (r[key] !== null && r[key] !== '') {
+                                // Format lại key cho đẹp mắt (Escape các ký tự đặc biệt của Markdown)
+                                let safeKey = key.replace(/_/g, '\\_');
+                                let safeVal = String(r[key]).replace(/_/g, '\\_');
+                                responseText += `▪️ *${safeKey}:* \`${safeVal}\`\n`;
+                            }
+                        }
+                    }
+                    responseText += `🗺️ [📍 MỞ CHỈ ĐƯỜNG GOOGLE MAP](${mapLink})\n`;
                 });
+
+                // Cắt bớt nếu tin nhắn quá dài vượt ngưỡng 4096 ký tự của Telegram
+                if (responseText.length > 4000) {
+                    responseText = responseText.substring(0, 4000) + '\n\n... (Dữ liệu quá dài, đã bị cắt bớt)';
+                }
+
                 bot.sendMessage(chatId, responseText, { parse_mode: 'Markdown', disable_web_page_preview: false });
             } else {
                 bot.sendMessage(chatId, `❌ Không tìm thấy Cell nào khớp với: *${keyword}*`);
             }
-        } catch (e) { bot.sendMessage(chatId, `❌ Lỗi CSDL RF.`); }
+        } catch (e) { bot.sendMessage(chatId, `❌ Lỗi CSDL RF.`); console.error(e); }
     });
 
     // ==========================================
-    // 2. LỆNH: kpi <tên cell> (Hỗ trợ 4G, 5G, 3G)
+    // 2. LỆNH: kpi <cell_code> (Hỗ trợ 4G, 5G, 3G)
     // ==========================================
     bot.onText(/^(?:\/)?kpi\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -114,7 +130,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
             }
 
             // Tìm 5G
-            [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE Ten_CELL LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
+            [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE Ten_CELL LIKE ? OR CELL_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
                 let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
@@ -125,7 +141,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
             }
 
             // Tìm 3G
-            [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE Ten_CELL LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
+            [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
                 let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
@@ -141,13 +157,13 @@ _Ví dụ: rf 4G-THA001M11-THA_
     });
 
     // ==========================================
-    // 3. LỆNH: qoe & qos <tên cell>
+    // 3. LỆNH: qoe & qos <cell_code>
     // ==========================================
     bot.onText(/^(?:\/)?qoe\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const keyword = cleanKeyword(match[1]);
         try {
-            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE Cell_Name LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
                 bot.sendMessage(chatId, `⭐ *CHỈ SỐ TRẢI NGHIỆM (QoE)*\n🔹 Cell: \`${r.Cell_Name}\`\n📅 Tuần đánh giá: *${r.Tuan}*\n---------------------------\n🏆 *Điểm QoE:* ${r.QoE_Score}\n🏅 *Hạng (Rank):* ${r.QoE_Rank}`, { parse_mode: 'Markdown' });
@@ -159,7 +175,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
         const chatId = msg.chat.id;
         const keyword = cleanKeyword(match[1]);
         try {
-            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE Cell_Name LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
                 bot.sendMessage(chatId, `⚙️ *CHỈ SỐ DỊCH VỤ (QoS)*\n🔹 Cell: \`${r.Cell_Name}\`\n📅 Tuần đánh giá: *${r.Tuan}*\n---------------------------\n🏆 *Điểm QoS:* ${r.QoS_Score}\n🏅 *Hạng (Rank):* ${r.QoS_Rank}`, { parse_mode: 'Markdown' });
@@ -168,7 +184,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
     });
 
     // ==========================================
-    // 4. LỆNH: charkpi <tên cell> (Gửi Nhóm Ảnh)
+    // 4. LỆNH: charkpi <cell_code> (Gửi Nhóm Ảnh)
     // ==========================================
     bot.onText(/^(?:\/)?charkpi\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -181,13 +197,13 @@ _Ví dụ: rf 4G-THA001M11-THA_
             
             // Fallback 5G
             if (rows.length < 2) {
-                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, A_User_DL_Avg_Throughput as thput, CQI_5G as cqi FROM kpi_5g WHERE Ten_CELL LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`]);
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, A_User_DL_Avg_Throughput as thput, CQI_5G as cqi FROM kpi_5g WHERE Ten_CELL LIKE ? OR CELL_ID LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
                 title2 = 'Throughput DL (Mbps)';
             }
             
             // Fallback 3G
             if (rows.length < 2) {
-                [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE Ten_CELL LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`]);
+                [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
                 title1 = 'Traffic (Erl/GB)';
                 title2 = 'CSSR (%)';
                 title3 = 'Drop Rate (%)';
@@ -224,7 +240,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
     });
 
     // ==========================================
-    // 5. LỆNH: charqoe & charqos <tên cell>
+    // 5. LỆNH: charqoe & charqos <cell_code>
     // ==========================================
     bot.onText(/^(?:\/)?charqoe\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -232,7 +248,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
         bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoE 4 tuần cho: *${keyword}*...`, { parse_mode: 'Markdown' });
 
         try {
-            const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE Cell_Name LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoE.`);
 
             const data = rows.reverse();
@@ -255,7 +271,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
         bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoS 4 tuần cho: *${keyword}*...`, { parse_mode: 'Markdown' });
 
         try {
-            const [rows] = await db.query(`SELECT Tuan, QoS_Score FROM mbb_qos WHERE Cell_Name LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, QoS_Score FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
 
             const data = rows.reverse();
