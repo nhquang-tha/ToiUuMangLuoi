@@ -75,19 +75,48 @@ const getInt = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
+// Hàm sắp xếp Tuần thông minh (Ví dụ: Tuần 1 (2026), Tuần 14 (2026))
+const sortWeeks = (weeksArray) => {
+    return weeksArray.sort((a, b) => {
+        let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
+        let matchB = b.match(/Tuần (\d+) \((\d+)\)/);
+        if (matchA && matchB) {
+            if (matchA[2] !== matchB[2]) return parseInt(matchA[2]) - parseInt(matchB[2]); // Xếp theo năm
+            return parseInt(matchA[1]) - parseInt(matchB[1]); // Xếp theo tuần
+        }
+        return 0;
+    });
+};
+
 async function getKpiHistory() {
     try {
         const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
+        
+        // Lấy lịch sử Tuần của QoE / QoS
+        const [rowsQoE] = await db.query('SELECT DISTINCT Tuan FROM mbb_qoe');
+        const [rowsQoS] = await db.query('SELECT DISTINCT Tuan FROM mbb_qos');
 
         const processHistory = (rows) => {
             let uniqueNums = [...new Set(rows.map(r => parseDateToSortableInteger(r.Thoi_gian)).filter(n => n > 0))];
             uniqueNums.sort((a, b) => a - b);
             return uniqueNums.map(n => integerToDDMMYYYY(n));
         };
-        return { kpi3g: processHistory(rows3g), kpi4g: processHistory(rows4g), kpi5g: processHistory(rows5g) };
-    } catch (e) { return { kpi3g: [], kpi4g: [], kpi5g: [] }; }
+        
+        const processWeeks = (rows) => {
+            let uniqueWeeks = [...new Set(rows.map(r => r.Tuan).filter(Boolean))];
+            return sortWeeks(uniqueWeeks);
+        };
+
+        return { 
+            kpi3g: processHistory(rows3g), 
+            kpi4g: processHistory(rows4g), 
+            kpi5g: processHistory(rows5g),
+            qoeWeeks: processWeeks(rowsQoE),
+            qosWeeks: processWeeks(rowsQoS)
+        };
+    } catch (e) { return { kpi3g: [], kpi4g: [], kpi5g: [], qoeWeeks: [], qosWeeks: [] }; }
 }
 
 async function aggregateDashboardData() {
