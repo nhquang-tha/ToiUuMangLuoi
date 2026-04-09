@@ -50,6 +50,7 @@ app.use('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server chạy tại: http://localhost:${PORT}`);
+// [SỬA LỖI TIMEOUT RENDER]: Bắt buộc thêm '0.0.0.0' để Render nhận diện được kết nối
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server chạy tại port: ${PORT}`);
 });
