@@ -186,15 +186,7 @@
                             <h4 style="color: #8e44ad;">Dữ Liệu KPI 4G</h4>
                             <div class="history-container">
                                 <% if(history && history.kpi4g && history.kpi4g.length > 0) { %>
-                                    <% history.kpi4g.forEach(date => { %>
-                                        <span class="date-badge date-4g"><i style="margin-right: 4px;">📅</i><%= date %></span>
-                                    <% }) %>
-                                <% } else { %>
-                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu...</span>
-                                <% } %>
-                            </div>
-                        </div>
-
+                        <!-- Block 5G -->
                         <div class="history-box">
                             <h4 style="color: #16a085;">Dữ Liệu KPI 5G</h4>
                             <div class="history-container">
@@ -208,19 +200,27 @@
                             </div>
                         </div>
 
-                        <!-- BỔ SUNG LỊCH SỬ QOE / QOS -->
+                        <!-- BỔ SUNG LỊCH SỬ QOE (TÁCH RIÊNG) -->
                         <div class="history-box">
-                            <h4 style="color: #f39c12;">Dữ Liệu QoE / QoS (Tuần)</h4>
+                            <h4 style="color: #f39c12;">Dữ Liệu QoE (Tuần)</h4>
                             <div class="history-container">
-                                <% 
-                                    let allWeeks = new Set();
-                                    if(history && history.qoeWeeks) history.qoeWeeks.forEach(w => allWeeks.add(w));
-                                    if(history && history.qosWeeks) history.qosWeeks.forEach(w => allWeeks.add(w));
-                                    let weeksArray = Array.from(allWeeks);
-                                %>
-                                <% if(weeksArray.length > 0) { %>
-                                    <% weeksArray.forEach(week => { %>
-                                        <span class="date-badge" style="background: #fef5e7; color: #d35400; border: 1px solid #fad7a1;"><i style="margin-right: 4px;">⭐</i><%= week %></span>
+                                <% if(history && history.qoeWeeks && history.qoeWeeks.length > 0) { %>
+                                    <% history.qoeWeeks.forEach(week => { %>
+                                        <span class="date-badge" style="background: #fef9e7; color: #d35400; border: 1px solid #f8c471;"><i style="margin-right: 4px;">⭐</i><%= week %></span>
+                                    <% }) %>
+                                <% } else { %>
+                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu...</span>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- BỔ SUNG LỊCH SỬ QOS (TÁCH RIÊNG) -->
+                        <div class="history-box">
+                            <h4 style="color: #e74c3c;">Dữ Liệu QoS (Tuần)</h4>
+                            <div class="history-container">
+                                <% if(history && history.qosWeeks && history.qosWeeks.length > 0) { %>
+                                    <% history.qosWeeks.forEach(week => { %>
+                                        <span class="date-badge" style="background: #fdedec; color: #c0392b; border: 1px solid #f5b7b1;"><i style="margin-right: 4px;">⚙️</i><%= week %></span>
                                     <% }) %>
                                 <% } else { %>
                                     <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu...</span>
