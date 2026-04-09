@@ -169,6 +169,7 @@
                     <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Danh sách các ngày đã Import.</p>
                     
                     <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Block 3G -->
                         <div class="history-box">
                             <h4 style="color: #2980b9;">Dữ Liệu KPI 3G</h4>
                             <div class="history-container">
@@ -182,10 +183,20 @@
                             </div>
                         </div>
 
+                        <!-- Block 4G -->
                         <div class="history-box">
                             <h4 style="color: #8e44ad;">Dữ Liệu KPI 4G</h4>
                             <div class="history-container">
                                 <% if(history && history.kpi4g && history.kpi4g.length > 0) { %>
+                                    <% history.kpi4g.forEach(date => { %>
+                                        <span class="date-badge date-4g"><i style="margin-right: 4px;">📅</i><%= date %></span>
+                                    <% }) %>
+                                <% } else { %>
+                                    <span style="color: #95a5a6; font-size: 13px; font-style: italic;">Chưa có dữ liệu...</span>
+                                <% } %>
+                            </div>
+                        </div>
+
                         <!-- Block 5G -->
                         <div class="history-box">
                             <h4 style="color: #16a085;">Dữ Liệu KPI 5G</h4>
