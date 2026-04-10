@@ -3,37 +3,162 @@
     let isAdminMenu = safeUser && safeUser.role === 'admin';
     let currentPath = typeof page !== 'undefined' ? page : '';
 %>
-<nav class="sidebar">
-    <h2>VNPT TELECOM</h2>
-    <ul>
-        <li><a href="/" class="<%= currentPath === 'Dashboard' ? 'active' : '' %>">🏠 Tổng Quan Dashboard</a></li>
-        
-        <li style="padding: 15px 20px 5px; font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold;">PHÂN TÍCH & BẢN ĐỒ</li>
-        <li><a href="/kpi-analytics" class="<%= currentPath === 'KPI Analytics' ? 'active' : '' %>">📊 Tra cứu KPI</a></li>
-        <li><a href="/qoe-qos-analytics" class="<%= currentPath === 'QoE/QoS Analytics' ? 'active' : '' %>" style="color: #f1c40f;">⭐ Tra cứu QoE / QoS</a></li>
-        <li><a href="/gis-map" class="<%= currentPath === 'GIS Map' ? 'active' : '' %>">🌍 Bản đồ Vùng Phủ (GIS)</a></li>
-        
-        <li style="padding: 15px 20px 5px; font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold;">CẢNH BÁO CHẤT LƯỢNG</li>
-        <li><a href="/worst-cells" class="<%= currentPath === 'Worst Cells' ? 'active' : '' %>">🚨 Worst Cells 4G</a></li>
-        <li><a href="/congestion-3g" class="<%= currentPath === 'Congestion 3G' ? 'active' : '' %>">⚠️ Nghẽn Mạng 3G</a></li>
-        <li><a href="/traffic-down" class="<%= currentPath === 'Traffic Down' ? 'active' : '' %>">📉 Sụt giảm Lưu lượng</a></li>
-        <li><a href="/poi-report" class="<%= currentPath === 'POI Report' ? 'active' : '' %>">📍 Báo cáo Điểm thu hút (POI)</a></li>
 
-        <li style="padding: 15px 20px 5px; font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold;">TỐI ƯU HÓA (OPTIMIZING)</li>
-        <li><a href="/optimizing-qoe-qos" class="<%= currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>" style="color: #27ae60;">🛠️ Tối ưu QoE/QoS (5 Bước)</a></li>
+<!-- STYLES DÀNH RIÊNG CHO SIDEBAR MỚI (GHI ĐÈ CSS CŨ) -->
+<style>
+    /* Nút Hamburger cho Mobile */
+    .mobile-toggle {
+        display: none; position: fixed; top: 15px; left: 15px; z-index: 1001;
+        background: #3498db; color: white; padding: 10px 15px; border-radius: 8px;
+        cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        transition: 0.3s;
+    }
+    .mobile-toggle:hover { background: #2980b9; transform: scale(1.05); }
 
-        <li style="padding: 15px 20px 5px; font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold;">QUẢN TRỊ DỮ LIỆU</li>
-        <li><a href="/rf-database" class="<%= currentPath === 'RF Database' ? 'active' : '' %>">📡 CSDL Trạm (RF)</a></li>
-        <li><a href="/scrip" class="<%= currentPath === 'Scrip' ? 'active' : '' %>">📜 Thư viện Scrip</a></li>
+    /* Lớp phủ mờ khi mở Menu trên Mobile */
+    .sidebar-overlay {
+        display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(15, 23, 42, 0.7); z-index: 999; backdrop-filter: blur(3px);
+        opacity: 0; transition: opacity 0.3s ease;
+    }
+    .sidebar-overlay.show { display: block; opacity: 1; }
+
+    /* Khung Sidebar Chính */
+    .modern-sidebar {
+        width: 270px; background: #1e293b; color: #f8fafc; height: 100vh;
+        display: flex; flex-direction: column; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 4px 0 15px rgba(0,0,0,0.1); position: relative; z-index: 1000;
+        flex-shrink: 0;
+    }
+
+    /* Logo & Brand */
+    .sidebar-brand {
+        padding: 22px 20px; display: flex; align-items: center; gap: 12px;
+        background: #0f172a; border-bottom: 1px solid #334155;
+    }
+    .sidebar-brand .logo-icon { font-size: 24px; background: linear-gradient(135deg, #3498db, #9b59b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .sidebar-brand h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; color: #f1f5f9; }
+
+    /* Vùng chứa Menu có thanh cuộn mượt */
+    .sidebar-menu { flex: 1; overflow-y: auto; padding: 15px 12px; }
+    .sidebar-menu::-webkit-scrollbar { width: 5px; }
+    .sidebar-menu::-webkit-scrollbar-thumb { background: #475569; border-radius: 5px; }
+    .sidebar-menu::-webkit-scrollbar-track { background: transparent; }
+
+    .sidebar-menu ul { list-style: none; padding: 0; margin: 0; }
+
+    /* Tiêu đề Phân loại Menu */
+    .menu-category {
+        padding: 18px 15px 6px 15px; font-size: 11px; color: #94a3b8;
+        text-transform: uppercase; font-weight: 700; letter-spacing: 1px;
+    }
+
+    /* Các Nút Menu */
+    .sidebar-menu li a {
+        display: flex; align-items: center; padding: 12px 15px; color: #cbd5e1;
+        text-decoration: none; transition: all 0.2s ease; font-size: 14px; font-weight: 500;
+        border-radius: 8px; margin-bottom: 4px;
+    }
+
+    .sidebar-menu li a:hover {
+        background: #334155; color: #ffffff; transform: translateX(5px);
+    }
+
+    /* Hiệu ứng Nút đang được chọn (Active) */
+    .sidebar-menu li a.active {
+        background: linear-gradient(90deg, #3498db, #2980b9);
+        color: white; font-weight: 700;
+        box-shadow: 0 4px 10px rgba(52, 152, 219, 0.4);
+    }
+    
+    /* Ghi đè màu đặc biệt cho một số chức năng (VD: Admin, Đăng xuất) */
+    .sidebar-menu li a.highlight-warning:hover { background: #e74c3c; color: white; }
+
+    /* ====================================================
+       📱 RESPONSIVE (DÀNH CHO ĐIỆN THOẠI & TABLET)
+       ==================================================== */
+    @media (max-width: 992px) {
+        /* Hiển thị nút Hamburger */
+        .mobile-toggle { display: block; }
         
-        <% if (isAdminMenu) { %>
-            <li style="padding: 15px 20px 5px; font-size: 11px; color: #e74c3c; text-transform: uppercase; font-weight: bold;">ADMIN ZONE</li>
-            <li><a href="/import-data" class="<%= currentPath === 'Import Data' ? 'active' : '' %>">📥 Nạp Dữ Liệu (Import)</a></li>
-            <li><a href="/system/users" class="<%= currentPath === 'User Manager' ? 'active' : '' %>">👥 Quản Lý Người Dùng</a></li>
-        <% } %>
+        /* Ẩn thanh Sidebar ra khỏi màn hình bên trái */
+        .modern-sidebar {
+            position: fixed; top: 0; left: -280px; height: 100vh;
+        }
+        
+        /* Khi click Hamburger thì trượt vào */
+        .modern-sidebar.show { transform: translateX(280px); }
 
-        <li style="padding: 15px 20px 5px; font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold;">CÁ NHÂN</li>
-        <li><a href="/system/profile" class="<%= currentPath === 'Profile' ? 'active' : '' %>">👤 Thông tin & Mật khẩu</a></li>
-        <li><a href="/logout" style="color: #e74c3c;">🚪 Đăng Xuất</a></li>
-    </ul>
+        /* Đẩy nội dung chính xuống một chút để không bị đè bởi nút Hamburger */
+        body .layout .main-content { padding-top: 70px !important; }
+        body .layout .topbar { display: none; /* Ẩn topbar mặc định trên mobile cho thoáng */ }
+    }
+</style>
+
+<!-- ==========================================
+     MÃ HTML CẤU TRÚC SIDEBAR
+     ========================================== -->
+
+<!-- Nút mở Menu trên Điện thoại -->
+<div class="mobile-toggle" onclick="toggleSidebar()">
+    ☰ MENU
+</div>
+
+<!-- Lớp nền mờ khi mở Menu -->
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<nav class="modern-sidebar" id="mainSidebar">
+    <!-- Brand / Logo -->
+    <div class="sidebar-brand">
+        <span class="logo-icon">🌐</span>
+        <h2>VNPT TELECOM</h2>
+    </div>
+
+    <!-- Danh sách Menu -->
+    <div class="sidebar-menu">
+        <ul>
+            <li>
+                <a href="/" class="<%= currentPath === 'Dashboard' ? 'active' : '' %>">🏠 Tổng Quan Dashboard</a>
+            </li>
+            
+            <li class="menu-category">PHÂN TÍCH & BẢN ĐỒ</li>
+            <li><a href="/kpi-analytics" class="<%= currentPath === 'KPI Analytics' ? 'active' : '' %>">📊 Tra cứu KPI</a></li>
+            <li><a href="/qoe-qos-analytics" class="<%= currentPath === 'QoE/QoS Analytics' ? 'active' : '' %>" style="<%= currentPath === 'QoE/QoS Analytics' ? '' : 'color: #f1c40f;' %>">⭐ Tra cứu QoE / QoS</a></li>
+            <li><a href="/gis-map" class="<%= currentPath === 'GIS Map' ? 'active' : '' %>">🌍 Bản đồ Vùng Phủ (GIS)</a></li>
+            
+            <li class="menu-category">CẢNH BÁO CHẤT LƯỢNG</li>
+            <li><a href="/worst-cells" class="<%= currentPath === 'Worst Cells' ? 'active' : '' %>">🚨 Worst Cells 4G</a></li>
+            <li><a href="/congestion-3g" class="<%= currentPath === 'Congestion 3G' ? 'active' : '' %>">⚠️ Nghẽn Mạng 3G</a></li>
+            <li><a href="/traffic-down" class="<%= currentPath === 'Traffic Down' ? 'active' : '' %>">📉 Sụt giảm Lưu lượng</a></li>
+            <li><a href="/poi-report" class="<%= currentPath === 'POI Report' ? 'active' : '' %>">📍 Báo cáo Điểm thu hút (POI)</a></li>
+
+            <li class="menu-category">TỐI ƯU HÓA (OPTIMIZING)</li>
+            <li><a href="/optimizing-qoe-qos" class="<%= currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>" style="<%= currentPath === 'Optimizing QoE/QoS' ? '' : 'color: #2ecc71;' %>">🛠️ Tối ưu QoE/QoS (5 Bước)</a></li>
+
+            <li class="menu-category">QUẢN TRỊ DỮ LIỆU</li>
+            <li><a href="/rf-database" class="<%= currentPath === 'RF Database' ? 'active' : '' %>">📡 CSDL Trạm (RF)</a></li>
+            <li><a href="/scrip" class="<%= currentPath === 'Scrip' ? 'active' : '' %>">📜 Thư viện Scrip</a></li>
+            
+            <% if (isAdminMenu) { %>
+                <li class="menu-category" style="color: #e74c3c;">ADMIN ZONE</li>
+                <li><a href="/import-data" class="<%= currentPath === 'Import Data' ? 'active' : '' %>">📥 Nạp Dữ Liệu (Import)</a></li>
+                <li><a href="/system/users" class="<%= currentPath === 'User Manager' ? 'active' : '' %>">👥 Quản Lý Người Dùng</a></li>
+            <% } %>
+
+            <li class="menu-category">CÁ NHÂN</li>
+            <li><a href="/system/profile" class="<%= currentPath === 'Profile' ? 'active' : '' %>">👤 Thông tin & Mật khẩu</a></li>
+            <li><a href="/logout" class="highlight-warning" style="color: #e74c3c;">🚪 Đăng Xuất</a></li>
+        </ul>
+    </div>
 </nav>
+
+<script>
+    // Hàm bật/tắt hiển thị Sidebar trên các thiết bị màn hình nhỏ
+    function toggleSidebar() {
+        const sidebar = document.getElementById('mainSidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        
+        sidebar.classList.toggle('show');
+        overlay.classList.toggle('show');
+    }
+</script>
