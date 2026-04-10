@@ -205,10 +205,13 @@ exports.getOptimizingData = async (req, res) => {
             const cell = row.Cell_Name;
             if (!cell) return;
             
-            const isBlacklisted = cell.toUpperCase().includes('IBS') || 
-                                  cell.toUpperCase().includes('DAS') || 
-                                  cell.toUpperCase().includes('VSAT') || 
-                                  cell.toUpperCase().includes('BOOSTER');
+            const upperCell = cell.toUpperCase();
+            const isBlacklisted = upperCell.includes('IBS') || 
+                                  upperCell.includes('DAS') || 
+                                  upperCell.includes('VSAT') || 
+                                  upperCell.includes('BOOSTER') ||
+                                  upperCell.startsWith('MBF_TH') ||
+                                  upperCell.startsWith('VNP-4G');
             
             if (filterBlacklist && isBlacklisted) {
                 blacklistedCount++;
