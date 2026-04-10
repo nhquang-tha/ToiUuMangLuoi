@@ -185,11 +185,11 @@ exports.getOptimizingData = async (req, res) => {
     if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
 
     try {
-        // BƯỚC 1: TÌM VÙNG TRŨNG (BAD CELLS - Điểm < 3)
+        // BƯỚC 1: TÌM VÙNG TRŨNG (BAD CELLS - Sử dụng cột Rank/Sao thay vì điểm Score phần trăm)
         const queryBadCells = `
-            SELECT Cell_Name, QoE_Score as Score, 'Vi phạm QoE' as Type FROM mbb_qoe WHERE Tuan = ? AND QoE_Score < 3
+            SELECT Cell_Name, QoE_Rank as Score, 'Vi phạm QoE' as Type FROM mbb_qoe WHERE Tuan = ? AND QoE_Rank < 3
             UNION
-            SELECT Cell_Name, QoS_Score as Score, 'Vi phạm QoS' as Type FROM mbb_qos WHERE Tuan = ? AND QoS_Score < 3
+            SELECT Cell_Name, QoS_Rank as Score, 'Vi phạm QoS' as Type FROM mbb_qos WHERE Tuan = ? AND QoS_Rank < 3
         `;
         const [badCellsRaw] = await db.query(queryBadCells, [week, week]);
 
