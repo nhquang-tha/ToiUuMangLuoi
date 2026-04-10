@@ -349,3 +349,89 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Import thành công ${totalImported} dòng vào bảng ${networkType}.`, error: null });
     }
 };
+
+// =====================================================================
+// BỔ SUNG CÁC HÀM API ĐỂ CUNG CẤP DỮ LIỆU CHO DASHBOARD & BÁO CÁO
+// =====================================================================
+
+// 1. API cho trang chủ Dashboard
+exports.getDashboardData = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM Dashboard ORDER BY thoi_gian ASC');
+        res.json(rows);
+    } catch (error) {
+        console.error("Lỗi getDashboardData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
+};
+
+// 2. API cho trang Worst Cells (Cell Vi phạm KPI)
+exports.getWorstCellsData = async (req, res) => {
+    const days = parseInt(req.query.days) || 1; // Thực tế thuật toán phức tạp hơn, ta lấy mẫu cơ bản trước
+    try {
+        const query = `
+            SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
+                   User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all,
+                   CONCAT_WS(', ',
+                       IF(User_DL_Avg_Throughput_Kbps < 7000, 'Thput Thấp', NULL),
+                       IF(RB_Util_Rate_DL > 20, 'PRB Cao', NULL),
+                       IF(CQI_4G < 93, 'CQI Thấp', NULL),
+                       IF(Service_Drop_all > 0.3, 'Drop Rate Cao', NULL)
+                   ) as Violations
+            FROM kpi_4g
+            WHERE User_DL_Avg_Throughput_Kbps < 7000 
+               OR RB_Util_Rate_DL > 20 
+               OR CQI_4G < 93 
+               OR Service_Drop_all > 0.3
+            GROUP BY Cell_name
+            ORDER BY Latest_Date DESC
+            LIMIT 500
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (error) {
+        console.error("Lỗi getWorstCellsData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
+};
+
+// 3. API cho trang Congestion 3G (Nghẽn mạng)
+exports.getCongestion3gData = async (req, res) => {
+    try {
+        const query = `
+            SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
+                   CSCONGES, CS_SO_ATT, PSCONGES, PS_SO_ATT,
+                   CONCAT_WS(', ',
+                       IF(CSCONGES > 2 AND CS_SO_ATT > 100, 'Nghẽn CS', NULL),
+                       IF(PSCONGES > 2 AND PS_SO_ATT > 500, 'Nghẽn PS', NULL)
+                   ) as Violations
+            FROM kpi_3g
+            WHERE (CSCONGES > 2 AND CS_SO_ATT > 100)
+               OR (PSCONGES > 2 AND PS_SO_ATT > 500)
+            GROUP BY Ten_CELL
+            ORDER BY Latest_Date DESC
+            LIMIT 500
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (error) {
+        console.error("Lỗi getCongestion3gData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
+};
+
+// 4. API cho trang Suy Giảm Lưu lượng (Traffic Down)
+exports.getTrafficDownData = async (req, res) => {
+    try {
+        // Trả về một mảng JSON rỗng cơ bản để giao diện không bị crash
+        res.json({
+            latestDate: 'Gần đây',
+            lastWeekDate: 'Tuần trước',
+            zeroTrafficCells: [],
+            droppedTrafficCells: [],
+            droppedTrafficPOIs: []
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
+};
