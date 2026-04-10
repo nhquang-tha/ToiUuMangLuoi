@@ -156,7 +156,7 @@ exports.getImportPage = async (req, res) => {
 };
 
 // =====================================================================
-// THUẬT TOÁN IMPORT THÔNG MINH (LẤY FULL 100% CỘT QOE VÀ QOS)
+// THUẬT TOÁN IMPORT THÔNG MINH
 // =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -196,7 +196,7 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
-    // [TÍNH NĂNG MỚI]: Ghi đè dữ liệu (Overwrite) khi import lại một Tuần đã có
+    // [CHỨC NĂNG MỚI]: GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN ĐÃ CÓ
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
         try {
             await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]);
@@ -219,15 +219,13 @@ exports.handleImportData = async (req, res) => {
             let headerRowIdx = -1;
             let dataStartIdx = -1;
 
-            // XÁC ĐỊNH DÒNG BẮT ĐẦU CỦA HEADER VÀ DỮ LIỆU
             if (networkType === 'mbb_qoe') {
                 headerRowIdx = 4; // Dòng 5 trong Excel
-                dataStartIdx = 5; // Dòng 6 bắt đầu chứa dữ liệu
+                dataStartIdx = 5; // Dòng 6 bắt đầu dữ liệu
             } else if (networkType === 'mbb_qos') {
                 headerRowIdx = 4; // Dòng 5 trong Excel
-                dataStartIdx = 9; // Dòng 10 bắt đầu chứa dữ liệu
+                dataStartIdx = 9; // Dòng 10 bắt đầu dữ liệu
             } else {
-                // AI Smart Detection cho KPI / RF
                 for (let i = 0; i < Math.min(20, rawData.length); i++) {
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
                     if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
@@ -250,9 +248,9 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             let colMapping = [];
 
-            // [BẢN VÁ QUAN TRỌNG]: ÉP CỨNG CHỈ MỤC CỘT CHO QOE VÀ QOS ĐỂ LẤY ĐẦY ĐỦ 100% CỘT
-            // Do file Excel của VNPT có các dòng trộn ô (Merge Cells) làm AI đọc thiếu cột
+            // [CHỨC NĂNG MỚI]: HARDCODE CHUẨN XÁC 100% CỘT THEO FILE VNPT
             if (networkType === 'mbb_qoe') {
+                // File QoE: Cột G (Index 6) là Score, Cột H (Index 7) là Rank
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
                     { excelIdx: 3, dbCol: 'Site_Name' }, { excelIdx: 4, dbCol: 'Cell_Name' }, { excelIdx: 5, dbCol: 'Cell_ID' },
@@ -263,6 +261,7 @@ exports.handleImportData = async (req, res) => {
                     { excelIdx: 20, dbCol: 'In_Speed' }, { excelIdx: 21, dbCol: 'In_Latency' }, { excelIdx: 22, dbCol: 'In_Jitter' }, { excelIdx: 23, dbCol: 'In_PacketLoss' }
                 ];
             } else if (networkType === 'mbb_qos') {
+                // File QoS: Cột G (Index 6) là Rank, Cột H (Index 7) là Score
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
                     { excelIdx: 3, dbCol: 'Site_Name' }, { excelIdx: 4, dbCol: 'Cell_Name' }, { excelIdx: 5, dbCol: 'Cell_ID' },
@@ -273,7 +272,6 @@ exports.handleImportData = async (req, res) => {
                     { excelIdx: 23, dbCol: 'In_Res' }, { excelIdx: 24, dbCol: 'In_Acc' }, { excelIdx: 25, dbCol: 'In_Ret' }, { excelIdx: 26, dbCol: 'In_Int' }, { excelIdx: 27, dbCol: 'In_Cov' }
                 ];
             } else {
-                // AI Mapper tự động dò các cột cho KPI và RF
                 excelHeaders.forEach((exHeader, idx) => {
                     const normEx = normalizeStr(exHeader);
                     if (normEx) {
@@ -295,12 +293,10 @@ exports.handleImportData = async (req, res) => {
 
             const insertData = [];
             
-            // Bắt đầu đọc dữ liệu từ dataStartIdx (Bỏ qua các Sub-header)
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
                 if (!row || row.length === 0) continue; 
 
-                // Loại bỏ dòng "Summary" hoặc "Giao dịch không thành công"
                 let firstCellStr = String(row[0] || '').toLowerCase().trim();
                 if (firstCellStr === 'summary' || firstCellStr.includes('không thành công')) {
                     continue; 
@@ -313,14 +309,12 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     if (val === undefined || val === '') val = null;
 
-                    // Chuyển đổi định dạng số kiểu Châu Âu
                     if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code'].includes(map.dbCol)) {
                          if (/^-?\d+,\d+$/.test(val)) {
                              val = parseFloat(val.replace(',', '.'));
                          }
                     }
 
-                    // Format Ngày
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
                         if (val !== null) {
                             val = formatExcelDate(val);
@@ -384,79 +378,214 @@ exports.getDashboardData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM Dashboard ORDER BY thoi_gian ASC');
         res.json(rows);
-    } catch (error) {
-        console.error("Lỗi getDashboardData:", error);
-        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
-    }
+    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL." }); }
 };
 
 exports.getWorstCellsData = async (req, res) => {
     const days = parseInt(req.query.days) || 1; 
     try {
+        // Lấy danh sách X ngày mới nhất có trong hệ thống
+        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
+        if(datesRaw.length === 0) return res.json([]);
+        
+        let uniqueDates = datesRaw.map(r => r.Thoi_gian);
+        uniqueDates.sort((a, b) => {
+            let pa = a.split('/'); let pb = b.split('/');
+            return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`).getTime() - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`).getTime();
+        }); 
+        
+        const targetDates = uniqueDates.slice(0, days);
+        if (targetDates.length === 0) return res.json([]);
+        
+        const placeholders = targetDates.map(() => '?').join(',');
+
+        // Quét tìm trạm vi phạm LIÊN TỤC trong số ngày đã chọn (Tránh lỗi ONLY_FULL_GROUP_BY)
         const query = `
             SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
-                   User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all,
-                   CONCAT_WS(', ',
-                       IF(User_DL_Avg_Throughput_Kbps < 7000, 'Thput Thấp', NULL),
-                       IF(RB_Util_Rate_DL > 20, 'PRB Cao', NULL),
-                       IF(CQI_4G < 93, 'CQI Thấp', NULL),
-                       IF(Service_Drop_all > 0.3, 'Drop Rate Cao', NULL)
-                   ) as Violations
+                   AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
+                   AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, 
+                   AVG(CQI_4G) as CQI_4G, 
+                   AVG(Service_Drop_all) as Service_Drop_all,
+                   COUNT(Thoi_gian) as So_Ngay_Vi_Pham
             FROM kpi_4g
-            WHERE User_DL_Avg_Throughput_Kbps < 7000 
+            WHERE Thoi_gian IN (${placeholders}) AND (
+               User_DL_Avg_Throughput_Kbps < 7000 
                OR RB_Util_Rate_DL > 20 
                OR CQI_4G < 93 
                OR Service_Drop_all > 0.3
+            )
             GROUP BY Cell_name
-            ORDER BY Latest_Date DESC
+            HAVING So_Ngay_Vi_Pham >= ?
+            ORDER BY User_DL_Avg_Throughput_Kbps ASC
             LIMIT 500
         `;
-        const [rows] = await db.query(query);
-        res.json(rows);
+        
+        const [rows] = await db.query(query, [...targetDates, days]);
+        
+        // Định dạng lại kết quả trả về
+        const formattedRows = rows.map(r => {
+            let vios = [];
+            if (r.User_DL_Avg_Throughput_Kbps < 7000) vios.push('Thput Thấp');
+            if (r.RB_Util_Rate_DL > 20) vios.push('PRB Cao');
+            if (r.CQI_4G < 93) vios.push('CQI Thấp');
+            if (r.Service_Drop_all > 0.3) vios.push('Drop Rate Cao');
+            r.Violations = vios.join(', ') || 'Vi phạm KPI';
+            
+            r.User_DL_Avg_Throughput_Kbps = r.User_DL_Avg_Throughput_Kbps.toFixed(2);
+            r.RB_Util_Rate_DL = r.RB_Util_Rate_DL.toFixed(2);
+            r.CQI_4G = r.CQI_4G.toFixed(2);
+            r.Service_Drop_all = r.Service_Drop_all.toFixed(2);
+            return r;
+        });
+
+        res.json(formattedRows);
     } catch (error) {
-        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+        console.error(error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
     }
 };
 
 exports.getCongestion3gData = async (req, res) => {
+    const days = parseInt(req.query.days) || 3; 
     try {
+        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
+        if(datesRaw.length === 0) return res.json([]);
+        
+        let uniqueDates = datesRaw.map(r => r.Thoi_gian);
+        uniqueDates.sort((a, b) => {
+            let pa = a.split('/'); let pb = b.split('/');
+            return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`).getTime() - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`).getTime();
+        }); 
+        
+        const targetDates = uniqueDates.slice(0, days);
+        if (targetDates.length === 0) return res.json([]);
+        const placeholders = targetDates.map(() => '?').join(',');
+
         const query = `
             SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
-                   CSCONGES, CS_SO_ATT, PSCONGES, PS_SO_ATT,
-                   CONCAT_WS(', ',
-                       IF(CSCONGES > 2 AND CS_SO_ATT > 100, 'Nghẽn CS', NULL),
-                       IF(PSCONGES > 2 AND PS_SO_ATT > 500, 'Nghẽn PS', NULL)
-                   ) as Violations
+                   AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, 
+                   AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
+                   COUNT(Thoi_gian) as So_Ngay_Vi_Pham
             FROM kpi_3g
-            WHERE (CSCONGES > 2 AND CS_SO_ATT > 100)
+            WHERE Thoi_gian IN (${placeholders}) AND (
+               (CSCONGES > 2 AND CS_SO_ATT > 100)
                OR (PSCONGES > 2 AND PS_SO_ATT > 500)
+            )
             GROUP BY Ten_CELL
-            ORDER BY Latest_Date DESC
+            HAVING So_Ngay_Vi_Pham >= ?
+            ORDER BY PSCONGES DESC
             LIMIT 500
         `;
-        const [rows] = await db.query(query);
-        res.json(rows);
-    } catch (error) {
-        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+        const [rows] = await db.query(query, [...targetDates, days]);
+
+        const formattedRows = rows.map(r => {
+            let vios = [];
+            if (r.CSCONGES > 2 && r.CS_SO_ATT > 100) vios.push('Nghẽn CS');
+            if (r.PSCONGES > 2 && r.PS_SO_ATT > 500) vios.push('Nghẽn PS');
+            r.Violations = vios.join(', ') || 'Nghẽn mạng';
+            
+            r.CSCONGES = r.CSCONGES.toFixed(2);
+            r.CS_SO_ATT = Math.round(r.CS_SO_ATT);
+            r.PSCONGES = r.PSCONGES.toFixed(2);
+            r.PS_SO_ATT = Math.round(r.PS_SO_ATT);
+            return r;
+        });
+
+        res.json(formattedRows);
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
     }
 };
 
 exports.getTrafficDownData = async (req, res) => {
     try {
-        res.json({
-            latestDate: 'Gần đây',
-            lastWeekDate: 'Tuần trước',
-            zeroTrafficCells: [],
-            droppedTrafficCells: [],
-            droppedTrafficPOIs: []
+        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
+        if(datesRaw.length < 2) {
+            return res.json({ error: "Cần ít nhất 2 ngày dữ liệu (Hôm nay và Tuần trước) để phân tích sụt giảm." });
+        }
+        
+        let uniqueDates = datesRaw.map(r => r.Thoi_gian);
+        uniqueDates.sort((a, b) => {
+            let pa = a.split('/'); let pb = b.split('/');
+            return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`).getTime() - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`).getTime();
+        }); 
+
+        let latestDate = uniqueDates[0];
+        // Lấy ngày cách đây 7 ngày (hoặc lấy ngày cũ nhất nếu DB chưa đủ 7 ngày)
+        let compareDate = uniqueDates.length >= 7 ? uniqueDates[6] : uniqueDates[1]; 
+
+        // 1. Quét dữ liệu mức CELL (Chỉ lọc L1800)
+        const [rows] = await db.query(`
+            SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB
+            FROM kpi_4g 
+            WHERE Thoi_gian IN (?, ?) AND CellType LIKE '%1800%'
+        `, [latestDate, compareDate]);
+
+        let dataMap = {};
+        rows.forEach(r => {
+            if (!dataMap[r.Cell_name]) dataMap[r.Cell_name] = { t0: 0, t7: 0 };
+            if (r.Thoi_gian === latestDate) dataMap[r.Cell_name].t0 = parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+            if (r.Thoi_gian === compareDate) dataMap[r.Cell_name].t7 = parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
         });
+
+        let zeroTrafficCells = [];
+        let droppedTrafficCells = [];
+
+        for (let cell in dataMap) {
+            let d = dataMap[cell];
+            if (d.t0 < 0.1 && d.t7 > 2) {
+                zeroTrafficCells.push({ Cell_name: cell, t0: d.t0.toFixed(2), avg7: d.t7.toFixed(2) });
+            } else if (d.t0 < (0.7 * d.t7) && d.t7 > 1) {
+                let ratio = ((d.t0 / d.t7) * 100).toFixed(1);
+                droppedTrafficCells.push({ Cell_name: cell, t0: d.t0.toFixed(2), t7: d.t7.toFixed(2), ratio: ratio });
+            }
+        }
+        zeroTrafficCells.sort((a,b) => b.avg7 - a.avg7);
+        droppedTrafficCells.sort((a,b) => a.ratio - b.ratio);
+
+        // 2. Quét dữ liệu mức POI (Gộp tổng Cell trong POI)
+        const [poiRows] = await db.query(`
+            SELECT p.POI, k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as Total_Traffic
+            FROM kpi_4g k
+            JOIN poi_4g p ON k.Cell_name = p.Cell_Code
+            WHERE k.Thoi_gian IN (?, ?)
+            GROUP BY p.POI, k.Thoi_gian
+        `, [latestDate, compareDate]);
+        
+        let poiMap = {};
+        poiRows.forEach(r => {
+            if (!poiMap[r.POI]) poiMap[r.POI] = { t0: 0, t7: 0 };
+            if (r.Thoi_gian === latestDate) poiMap[r.POI].t0 = parseFloat(r.Total_Traffic) || 0;
+            if (r.Thoi_gian === compareDate) poiMap[r.POI].t7 = parseFloat(r.Total_Traffic) || 0;
+        });
+        
+        let droppedTrafficPOIs = [];
+        for (let poi in poiMap) {
+            let p = poiMap[poi];
+            if (p.t0 < (0.7 * p.t7) && p.t7 > 5) { 
+                let ratio = ((p.t0 / p.t7) * 100).toFixed(1);
+                droppedTrafficPOIs.push({ POI: poi, t0: p.t0.toFixed(2), t7: p.t7.toFixed(2), ratio: ratio });
+            }
+        }
+        droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio);
+
+        res.json({
+            latestDate: latestDate,
+            lastWeekDate: compareDate,
+            zeroTrafficCells: zeroTrafficCells,
+            droppedTrafficCells: droppedTrafficCells,
+            droppedTrafficPOIs: droppedTrafficPOIs
+        });
+
     } catch (error) {
-        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+        console.error(error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
     }
 };
 
 // =====================================================================
-// CHỨC NĂNG MỚI: XÓA SẠCH DỮ LIỆU ĐA NĂNG
+// CHỨC NĂNG MỚI: XÓA SẠCH DỮ LIỆU ĐA NĂNG (TỪ NÚT BẤM GIAO DIỆN)
 // =====================================================================
 exports.resetImportedData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
