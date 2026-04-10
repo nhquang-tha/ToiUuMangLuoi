@@ -54,6 +54,9 @@ router.get('/api/qoe-qos-data', isAuthenticated, kpiController.getQoeQosData);
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
 router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), dashboardController.handleImportData);
 
+// CHỨC NĂNG MỚI: Xóa dữ liệu đa năng cho RF, TA, QoE, QoS
+router.post('/import-data/reset/:table', isAuthenticated, isAdmin, dashboardController.resetImportedData);
+
 // ==========================================
 // 5. QUẢN LÝ CƠ SỞ DỮ LIỆU TRẠM (RF DATABASE)
 // ==========================================
@@ -72,7 +75,7 @@ router.get('/api/worst-cells-data', isAuthenticated, dashboardController.getWors
 router.get('/api/congestion-3g-data', isAuthenticated, dashboardController.getCongestion3gData);
 router.get('/api/traffic-down-data', isAuthenticated, dashboardController.getTrafficDownData);
 
-// Bổ sung API cho trang POI Report (nếu có định nghĩa ở kpiController)
+// Bổ sung API cho trang POI Report
 if (kpiController.getPoiList) {
     router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
     router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
