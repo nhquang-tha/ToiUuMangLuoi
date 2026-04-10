@@ -53,6 +53,24 @@ app.use('*', (req, res) => {
 });
 
 // ==========================================
+// BẮT LỖI 500 (INTERNAL SERVER ERROR)
+// In trực tiếp chi tiết lỗi ra màn hình để dễ dàng sửa chữa
+// ==========================================
+app.use((err, req, res, next) => {
+    console.error('🔥 LỖI HỆ THỐNG (500):', err.stack);
+    res.status(500).send(`
+        <div style="text-align:center; padding:50px; font-family:Arial; background-color:#fdf2f2; height:100vh;">
+            <h2 style="color:#c0392b;">🔥 500 - Lỗi Máy Chủ (Internal Server Error)</h2>
+            <p style="color:#34495e; font-size: 16px;">Hệ thống đang gặp sự cố khi xử lý yêu cầu hoặc vẽ giao diện (EJS).</p>
+            <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #fad2d2; display: inline-block; text-align: left; max-width: 800px; width: 100%; overflow-x: auto;">
+                <strong style="color: #e74c3c;">Chi tiết lỗi (Copy mã này gửi cho AI):</strong>
+                <pre style="color: #2c3e50; font-size: 13px; margin-top: 10px; white-space: pre-wrap;">${err.message}\n\n${err.stack}</pre>
+            </div>
+        </div>
+    `);
+});
+
+// ==========================================
 // KHỞI ĐỘNG MÁY CHỦ
 // ==========================================
 const PORT = process.env.PORT || 3000;
