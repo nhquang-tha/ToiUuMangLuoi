@@ -100,4 +100,5 @@ router.get('/logout', (req, res) => {
     res.redirect('/login'); 
 });
 
+// DÒNG QUAN TRỌNG NHẤT KHÔNG ĐƯỢC THIẾU ĐỂ TRÁNH LỖI CRASH
 module.exports = router;
