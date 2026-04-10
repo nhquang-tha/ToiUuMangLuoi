@@ -18,6 +18,18 @@ app.use(session({
     cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // Thời hạn 1 ngày
 }));
 
+// ==========================================
+// MIDDLEWARE: THIẾT LẬP BIẾN TOÀN CỤC (FIX LỖI TITLE IS NOT DEFINED)
+// Đảm bảo mọi tệp EJS luôn có các biến cơ bản, tránh sập trang 500
+// ==========================================
+app.use((req, res, next) => {
+    res.locals.title = 'VNPT Dashboard'; // Tiêu đề mặc định
+    res.locals.error = null;            // Lỗi mặc định
+    res.locals.message = null;          // Thông báo mặc định
+    res.locals.currentUser = req.session.user || null;
+    next();
+});
+
 // Khởi động Telegram Bot (Có bẫy lỗi để tránh sập server nếu thiếu Token)
 try {
     require('./services/telegramBot');
