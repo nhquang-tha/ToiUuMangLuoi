@@ -1,11 +1,30 @@
 <%- include('partials/head') %>
-
+<%
+    // Bổ sung luồng trích xuất User để cấp cho Sidebar
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
 <style>
+    /* BỔ SUNG CSS BỐ CỤC CHUNG ĐỂ KHÔNG BỊ LỆCH KHUNG */
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+    .topbar { margin-bottom: 20px; border-bottom: 2px solid #e0e6ed; padding-bottom: 10px; }
+    .topbar h1 { margin: 0; color: #2c3e50; font-size: 24px; font-weight: bold; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #2c3e50; }
+    .btn-primary { background: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; border-radius: 4px; }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* CSS ĐẶC THÙ CHO IMPORT DATA */
     .alert { padding: 15px; margin-bottom: 20px; border-radius: 4px; }
     .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .btn-danger { background: #c0392b; color: white; border: none; cursor: pointer; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 13px;}
-    .btn-danger:hover { background: #e74c3c; }
+    .btn-danger:hover { background: #e74c3c; transform: translateY(-1px);}
     
     .history-box { border: 1px solid #ecf0f1; padding: 15px; border-radius: 6px; background: #fff; margin-bottom: 15px; }
     .history-box h4 { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid #ecf0f1; padding-bottom: 5px; }
@@ -34,21 +53,23 @@
 </style>
 
 <div class="layout">
-    <%- include('partials/sidebar') %>
+    <!-- Truyền user vào sidebar để sửa lỗi -->
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1><%= page %></h1>
+            <h1><%= typeof page !== 'undefined' ? page : 'Import Data' %></h1>
         </header>
         <div class="content-body">
             
-            <% if(message) { %>
-                <div class="alert alert-success"><%= message %></div>
+            <% if(locals.message) { %>
+                <div class="alert alert-success">✅ <%= message %></div>
             <% } %>
-            <% if(error) { %>
-                <div class="alert alert-danger"><%= error %></div>
+            <% if(locals.error) { %>
+                <div class="alert alert-danger">❌ <%= error %></div>
             <% } %>
 
-            <% if(typeof currentUser !== 'undefined' && currentUser.role === 'admin') { %>
+            <!-- KHU VỰC CÁC NÚT RESET -->
+            <% if(activeUser && activeUser.role === 'admin') { %>
                 <div class="card" style="margin-bottom: 20px; border-left: 4px solid #e74c3c;">
                     <h4 style="color: #c0392b; margin-top: 0; margin-bottom: 5px;">Khu Vực Admin: Làm Sạch Dữ Liệu</h4>
                     <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Xóa <strong>toàn bộ</strong> dữ liệu hiện tại để Import lại từ đầu (Hành động này không thể hoàn tác).</p>
@@ -69,9 +90,9 @@
 
                     <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">3. Dữ Liệu Khác (QoE, QoS, TA):</strong>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <form action="/import-data/reset/mbb_qoe" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH dữ liệu Trải nghiệm QoE?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoE</button></form>
-                        <form action="/import-data/reset/mbb_qos" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH dữ liệu Dịch vụ QoS?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoS</button></form>
-                        <form action="/import-data/reset/ta_query" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH dữ liệu Timing Advance (TA)?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset TA</button></form>
+                        <form action="/import-data/reset/mbb_qoe" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Trải nghiệm QoE?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoE</button></form>
+                        <form action="/import-data/reset/mbb_qos" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Dịch vụ QoS?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoS</button></form>
+                        <form action="/import-data/reset/ta_query" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Timing Advance (TA)?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset TA</button></form>
                     </div>
                 </div>
             <% } %>
@@ -104,7 +125,7 @@
                                     <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 10px;">🚀 Bắt đầu Import RF</button>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px;">🚀 Bắt đầu Import RF</button>
                         </form>
                     </div>
 
@@ -125,7 +146,7 @@
                                     <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 10px; background: #8e44ad; border-color: #8e44ad;">🚀 Bắt đầu Import KPI</button>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #8e44ad; border-color: #8e44ad;">🚀 Bắt đầu Import KPI</button>
                         </form>
                     </div>
 
@@ -145,13 +166,13 @@
                                     <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 10px; background: #e67e22; border-color: #e67e22;">🚀 Bắt đầu Import TA</button>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #e67e22; border-color: #e67e22;">🚀 Bắt đầu Import TA</button>
                         </form>
                     </div>
 
                     <!-- TAB 4: IMPORT QoE / QoS -->
                     <div id="tab-qoe" class="tab-content">
-                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp QoE / QoS (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Hệ thống sẽ tự nhận diện chuẩn cột Rank/Score.</i></p>
+                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp QoE / QoS (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Lưu ý: Nếu Import lại một Tuần đã có, dữ liệu cũ của Tuần đó sẽ tự động bị ghi đè.</i></p>
                         <form action="/import-data" method="POST" enctype="multipart/form-data">
                             <div class="form-group">
                                 <label>Chọn Loại File:</label>
@@ -161,7 +182,7 @@
                                 </select>
                             </div>
 
-                            <label style="font-weight:bold;">Chỉ định thời gian (Tuần theo lịch):</label>
+                            <label style="font-weight:bold; color: #2c3e50;">Chỉ định thời gian (Tuần theo lịch):</label>
                             <div class="week-selector">
                                 <input type="number" name="weekNumber" class="week-input" placeholder="Ví dụ: 14 (Tuần 14)" required min="1" max="53">
                                 <input type="number" name="year" class="week-input" value="2026" placeholder="Năm (Ví dụ: 2026)" required min="2020">
@@ -172,7 +193,7 @@
                                     <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 10px; background: #1abc9c; border-color: #1abc9c;">🚀 Import QoE/QoS</button>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #1abc9c; border-color: #1abc9c;">🚀 Import QoE/QoS</button>
                         </form>
                     </div>
 
@@ -180,7 +201,7 @@
 
                 <!-- CỘT PHẢI: LỊCH SỬ DỮ LIỆU -->
                 <div class="card" style="flex: 2; min-width: 400px;">
-                    <h3>Data History (Lịch sử Nhập liệu)</h3>
+                    <h3 style="margin-top: 0; color: #2c3e50;">Data History (Lịch sử Nhập liệu)</h3>
                     <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 20px;">Danh sách các ngày/tuần đã Import vào Database.</p>
                     
                     <div style="display: flex; flex-direction: column; gap: 15px;">
@@ -188,7 +209,7 @@
                         <div class="history-box">
                             <h4 style="color: #2980b9;">Dữ Liệu KPI 3G</h4>
                             <div class="history-container">
-                                <% if(history && history.kpi3g && history.kpi3g.length > 0) { %>
+                                <% if(locals.history && history.kpi3g && history.kpi3g.length > 0) { %>
                                     <% history.kpi3g.forEach(date => { %>
                                         <span class="date-badge date-3g"><i style="margin-right: 4px;">📅</i><%= date %></span>
                                     <% }) %>
@@ -202,7 +223,7 @@
                         <div class="history-box">
                             <h4 style="color: #8e44ad;">Dữ Liệu KPI 4G</h4>
                             <div class="history-container">
-                                <% if(history && history.kpi4g && history.kpi4g.length > 0) { %>
+                                <% if(locals.history && history.kpi4g && history.kpi4g.length > 0) { %>
                                     <% history.kpi4g.forEach(date => { %>
                                         <span class="date-badge date-4g"><i style="margin-right: 4px;">📅</i><%= date %></span>
                                     <% }) %>
@@ -216,7 +237,7 @@
                         <div class="history-box">
                             <h4 style="color: #16a085;">Dữ Liệu KPI 5G</h4>
                             <div class="history-container">
-                                <% if(history && history.kpi5g && history.kpi5g.length > 0) { %>
+                                <% if(locals.history && history.kpi5g && history.kpi5g.length > 0) { %>
                                     <% history.kpi5g.forEach(date => { %>
                                         <span class="date-badge date-5g"><i style="margin-right: 4px;">📅</i><%= date %></span>
                                     <% }) %>
@@ -230,7 +251,7 @@
                         <div class="history-box">
                             <h4 style="color: #f39c12;">Dữ Liệu QoE (Tuần)</h4>
                             <div class="history-container">
-                                <% if(history && history.qoeWeeks && history.qoeWeeks.length > 0) { %>
+                                <% if(locals.history && history.qoeWeeks && history.qoeWeeks.length > 0) { %>
                                     <% history.qoeWeeks.forEach(week => { %>
                                         <span class="date-badge" style="background: #fef9e7; color: #d35400; border: 1px solid #f8c471;"><i style="margin-right: 4px;">⭐</i><%= week %></span>
                                     <% }) %>
@@ -244,7 +265,7 @@
                         <div class="history-box">
                             <h4 style="color: #e74c3c;">Dữ Liệu QoS (Tuần)</h4>
                             <div class="history-container">
-                                <% if(history && history.qosWeeks && history.qosWeeks.length > 0) { %>
+                                <% if(locals.history && history.qosWeeks && history.qosWeeks.length > 0) { %>
                                     <% history.qosWeeks.forEach(week => { %>
                                         <span class="date-badge" style="background: #fdedec; color: #c0392b; border: 1px solid #f5b7b1;"><i style="margin-right: 4px;">⚙️</i><%= week %></span>
                                     <% }) %>
