@@ -155,7 +155,9 @@ exports.getImportPage = async (req, res) => {
     res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: null });
 };
 
-// Xử lý Import dữ liệu (Fix QoE Score là G, Rank là H. QoS Rank là G, Score là H)
+// =====================================================================
+// THUẬT TOÁN IMPORT THÔNG MINH (LẤY FULL 100% CỘT QOE VÀ QOS)
+// =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     let history = await getKpiHistory();
@@ -181,6 +183,7 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
+    // Lấy cấu trúc bảng đích
     let dbCols = [];
     try {
         const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
@@ -206,13 +209,15 @@ exports.handleImportData = async (req, res) => {
             let headerRowIdx = -1;
             let dataStartIdx = -1;
 
+            // XÁC ĐỊNH DÒNG BẮT ĐẦU CỦA HEADER VÀ DỮ LIỆU
             if (networkType === 'mbb_qoe') {
-                headerRowIdx = 4; // Dòng 5 
-                dataStartIdx = 5; // Dòng 6 bắt đầu dữ liệu
+                headerRowIdx = 4; // Dòng 5 trong Excel
+                dataStartIdx = 5; // Dòng 6 bắt đầu chứa dữ liệu
             } else if (networkType === 'mbb_qos') {
-                headerRowIdx = 4; // Dòng 5
-                dataStartIdx = 9; // Dòng 10 bắt đầu dữ liệu
+                headerRowIdx = 4; // Dòng 5 trong Excel
+                dataStartIdx = 9; // Dòng 10 bắt đầu chứa dữ liệu
             } else {
+                // AI Smart Detection cho KPI / RF
                 for (let i = 0; i < Math.min(20, rawData.length); i++) {
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
                     if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
@@ -235,27 +240,39 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             let colMapping = [];
 
-            excelHeaders.forEach((exHeader, idx) => {
-                const normEx = normalizeStr(exHeader);
-                if (normEx) {
-                    const match = dbCols.find(dbC => dbC.norm === normEx);
-                    if (match) {
-                        colMapping.push({ excelIdx: idx, dbCol: match.original });
-                    }
-                }
-            });
-
-            // ÉP CHỈ MỤC THEO ĐÚNG CẤU TRÚC FILE VNPT (Đã đổi Rank và Score cho QoE)
+            // [BẢN VÁ QUAN TRỌNG]: ÉP CỨNG CHỈ MỤC CỘT CHO QOE VÀ QOS ĐỂ LẤY ĐẦY ĐỦ 100% CỘT
+            // Do file Excel của VNPT có các dòng trộn ô (Merge Cells) làm AI đọc thiếu cột
             if (networkType === 'mbb_qoe') {
-                colMapping = colMapping.filter(m => m.dbCol !== 'QoE_Rank' && m.dbCol !== 'QoE_Score' && m.dbCol !== 'Cell_Name');
-                colMapping.push({ excelIdx: 4, dbCol: 'Cell_Name' }); // Cột E
-                colMapping.push({ excelIdx: 6, dbCol: 'QoE_Score' }); // Cột G
-                colMapping.push({ excelIdx: 7, dbCol: 'QoE_Rank' });  // Cột H
+                colMapping = [
+                    { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
+                    { excelIdx: 3, dbCol: 'Site_Name' }, { excelIdx: 4, dbCol: 'Cell_Name' }, { excelIdx: 5, dbCol: 'Cell_ID' },
+                    { excelIdx: 6, dbCol: 'QoE_Score' }, { excelIdx: 7, dbCol: 'QoE_Rank' },
+                    { excelIdx: 8, dbCol: 'Norm_Speed' }, { excelIdx: 9, dbCol: 'Norm_Latency' }, { excelIdx: 10, dbCol: 'Norm_Jitter' }, { excelIdx: 11, dbCol: 'Norm_PacketLoss' },
+                    { excelIdx: 12, dbCol: 'Point_Speed' }, { excelIdx: 13, dbCol: 'Point_Latency' }, { excelIdx: 14, dbCol: 'Point_Jitter' }, { excelIdx: 15, dbCol: 'Point_PacketLoss' },
+                    { excelIdx: 16, dbCol: 'Out_Speed' }, { excelIdx: 17, dbCol: 'Out_Latency' }, { excelIdx: 18, dbCol: 'Out_Jitter' }, { excelIdx: 19, dbCol: 'Out_PacketLoss' },
+                    { excelIdx: 20, dbCol: 'In_Speed' }, { excelIdx: 21, dbCol: 'In_Latency' }, { excelIdx: 22, dbCol: 'In_Jitter' }, { excelIdx: 23, dbCol: 'In_PacketLoss' }
+                ];
             } else if (networkType === 'mbb_qos') {
-                colMapping = colMapping.filter(m => m.dbCol !== 'QoS_Rank' && m.dbCol !== 'QoS_Score' && m.dbCol !== 'Cell_Name');
-                colMapping.push({ excelIdx: 4, dbCol: 'Cell_Name' }); // Cột E
-                colMapping.push({ excelIdx: 6, dbCol: 'QoS_Rank' });  // Cột G
-                colMapping.push({ excelIdx: 7, dbCol: 'QoS_Score' }); // Cột H
+                colMapping = [
+                    { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
+                    { excelIdx: 3, dbCol: 'Site_Name' }, { excelIdx: 4, dbCol: 'Cell_Name' }, { excelIdx: 5, dbCol: 'Cell_ID' },
+                    { excelIdx: 6, dbCol: 'QoS_Rank' }, { excelIdx: 7, dbCol: 'QoS_Score' },
+                    { excelIdx: 8, dbCol: 'Norm_Res' }, { excelIdx: 9, dbCol: 'Norm_Acc' }, { excelIdx: 10, dbCol: 'Norm_Ret' }, { excelIdx: 11, dbCol: 'Norm_Int' }, { excelIdx: 12, dbCol: 'Norm_Cov' },
+                    { excelIdx: 13, dbCol: 'Point_Res' }, { excelIdx: 14, dbCol: 'Point_Acc' }, { excelIdx: 15, dbCol: 'Point_Ret' }, { excelIdx: 16, dbCol: 'Point_Int' }, { excelIdx: 17, dbCol: 'Point_Cov' },
+                    { excelIdx: 18, dbCol: 'Out_Res' }, { excelIdx: 19, dbCol: 'Out_Acc' }, { excelIdx: 20, dbCol: 'Out_Ret' }, { excelIdx: 21, dbCol: 'Out_Int' }, { excelIdx: 22, dbCol: 'Out_Cov' },
+                    { excelIdx: 23, dbCol: 'In_Res' }, { excelIdx: 24, dbCol: 'In_Acc' }, { excelIdx: 25, dbCol: 'In_Ret' }, { excelIdx: 26, dbCol: 'In_Int' }, { excelIdx: 27, dbCol: 'In_Cov' }
+                ];
+            } else {
+                // AI Mapper tự động dò các cột cho KPI và RF
+                excelHeaders.forEach((exHeader, idx) => {
+                    const normEx = normalizeStr(exHeader);
+                    if (normEx) {
+                        const match = dbCols.find(dbC => dbC.norm === normEx);
+                        if (match) {
+                            colMapping.push({ excelIdx: idx, dbCol: match.original });
+                        }
+                    }
+                });
             }
 
             if (colMapping.length === 0) {
@@ -268,10 +285,12 @@ exports.handleImportData = async (req, res) => {
 
             const insertData = [];
             
+            // Bắt đầu đọc dữ liệu từ dataStartIdx (Bỏ qua các Sub-header)
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
                 if (!row || row.length === 0) continue; 
 
+                // Loại bỏ dòng "Summary" hoặc "Giao dịch không thành công"
                 let firstCellStr = String(row[0] || '').toLowerCase().trim();
                 if (firstCellStr === 'summary' || firstCellStr.includes('không thành công')) {
                     continue; 
@@ -284,12 +303,14 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     if (val === undefined || val === '') val = null;
 
+                    // Chuyển đổi định dạng số kiểu Châu Âu
                     if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code'].includes(map.dbCol)) {
                          if (/^-?\d+,\d+$/.test(val)) {
                              val = parseFloat(val.replace(',', '.'));
                          }
                     }
 
+                    // Format Ngày
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
                         if (val !== null) {
                             val = formatExcelDate(val);
@@ -346,39 +367,82 @@ exports.handleImportData = async (req, res) => {
     }
 };
 
+// =====================================================================
+// CÁC HÀM API BÁO CÁO GIỮ NGUYÊN
+// =====================================================================
 exports.getDashboardData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM Dashboard ORDER BY thoi_gian ASC');
         res.json(rows);
-    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL." }); }
+    } catch (error) {
+        console.error("Lỗi getDashboardData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
 };
 
 exports.getWorstCellsData = async (req, res) => {
+    const days = parseInt(req.query.days) || 1; 
     try {
         const query = `
-            SELECT Cell_name, MAX(Thoi_gian) as Latest_Date, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all,
-                   CONCAT_WS(', ', IF(User_DL_Avg_Throughput_Kbps < 7000, 'Thput Thấp', NULL), IF(RB_Util_Rate_DL > 20, 'PRB Cao', NULL), IF(CQI_4G < 93, 'CQI Thấp', NULL), IF(Service_Drop_all > 0.3, 'Drop Rate Cao', NULL)) as Violations
-            FROM kpi_4g WHERE User_DL_Avg_Throughput_Kbps < 7000 OR RB_Util_Rate_DL > 20 OR CQI_4G < 93 OR Service_Drop_all > 0.3 GROUP BY Cell_name ORDER BY Latest_Date DESC LIMIT 500
+            SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
+                   User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G, Service_Drop_all,
+                   CONCAT_WS(', ',
+                       IF(User_DL_Avg_Throughput_Kbps < 7000, 'Thput Thấp', NULL),
+                       IF(RB_Util_Rate_DL > 20, 'PRB Cao', NULL),
+                       IF(CQI_4G < 93, 'CQI Thấp', NULL),
+                       IF(Service_Drop_all > 0.3, 'Drop Rate Cao', NULL)
+                   ) as Violations
+            FROM kpi_4g
+            WHERE User_DL_Avg_Throughput_Kbps < 7000 
+               OR RB_Util_Rate_DL > 20 
+               OR CQI_4G < 93 
+               OR Service_Drop_all > 0.3
+            GROUP BY Cell_name
+            ORDER BY Latest_Date DESC
+            LIMIT 500
         `;
         const [rows] = await db.query(query);
         res.json(rows);
-    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL." }); }
+    } catch (error) {
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
 };
 
 exports.getCongestion3gData = async (req, res) => {
     try {
         const query = `
-            SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date, CSCONGES, CS_SO_ATT, PSCONGES, PS_SO_ATT,
-                   CONCAT_WS(', ', IF(CSCONGES > 2 AND CS_SO_ATT > 100, 'Nghẽn CS', NULL), IF(PSCONGES > 2 AND PS_SO_ATT > 500, 'Nghẽn PS', NULL)) as Violations
-            FROM kpi_3g WHERE (CSCONGES > 2 AND CS_SO_ATT > 100) OR (PSCONGES > 2 AND PS_SO_ATT > 500) GROUP BY Ten_CELL ORDER BY Latest_Date DESC LIMIT 500
+            SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
+                   CSCONGES, CS_SO_ATT, PSCONGES, PS_SO_ATT,
+                   CONCAT_WS(', ',
+                       IF(CSCONGES > 2 AND CS_SO_ATT > 100, 'Nghẽn CS', NULL),
+                       IF(PSCONGES > 2 AND PS_SO_ATT > 500, 'Nghẽn PS', NULL)
+                   ) as Violations
+            FROM kpi_3g
+            WHERE (CSCONGES > 2 AND CS_SO_ATT > 100)
+               OR (PSCONGES > 2 AND PS_SO_ATT > 500)
+            GROUP BY Ten_CELL
+            ORDER BY Latest_Date DESC
+            LIMIT 500
         `;
         const [rows] = await db.query(query);
         res.json(rows);
-    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL." }); }
+    } catch (error) {
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
 };
 
 exports.getTrafficDownData = async (req, res) => {
-    try { res.json({ latestDate: 'Gần đây', lastWeekDate: 'Tuần trước', zeroTrafficCells: [], droppedTrafficCells: [], droppedTrafficPOIs: [] }); } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL." }); }
+    try {
+        res.json({
+            latestDate: 'Gần đây',
+            lastWeekDate: 'Tuần trước',
+            zeroTrafficCells: [],
+            droppedTrafficCells: [],
+            droppedTrafficPOIs: []
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
 };
 
 // =====================================================================
@@ -386,6 +450,7 @@ exports.getTrafficDownData = async (req, res) => {
 // =====================================================================
 exports.resetImportedData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
+    
     if (userRole !== 'admin') {
         return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
     }
