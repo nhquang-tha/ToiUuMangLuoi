@@ -33,6 +33,10 @@
 
     .btn-kpi { background: #3498db; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; transition: 0.2s; border: 1px solid #2980b9; display: inline-block;}
     .btn-kpi:hover { background: #2980b9; transform: scale(1.05); }
+    
+    /* CSS cho nút xuất Excel */
+    .btn-success { background: #2980b9; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .btn-success:hover { background: #2471a3; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 
     .summary-box { background: #e8f8f5; border: 1px solid #27ae60; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;}
     .summary-box span { font-weight: bold; color: #27ae60; font-size: 18px;}
@@ -76,9 +80,15 @@
                             2. Kích hoạt loại bỏ Blacklist
                         </label>
                     </div>
-                    <button onclick="runOptimization()" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 46px; font-size: 14px; transition: 0.2s;">
-                        ⚙️ Khởi Chạy Phân Tích
-                    </button>
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button onclick="runOptimization()" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 46px; font-size: 14px; transition: 0.2s;">
+                            ⚙️ Khởi Chạy Phân Tích
+                        </button>
+                        <button onclick="exportToExcel()" id="btnExport" class="btn-success" style="display: none; height: 46px; font-size: 14px;">
+                            📥 Xuất File Excel
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -175,6 +185,13 @@
 </div>
 
 <script>
+    // Nạp thư viện xuất Excel (XLSX) ngay khi tải trang
+    document.addEventListener('DOMContentLoaded', function() {
+        const xlsxScript = document.createElement('script');
+        xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
+        document.head.appendChild(xlsxScript);
+    });
+
     async function runOptimization() {
         const week = document.getElementById('weekSelect').value;
         const filterBL = document.getElementById('blacklistCheck').checked;
@@ -189,6 +206,7 @@
         document.getElementById('group1').style.display = 'none';
         document.getElementById('group2').style.display = 'none';
         document.getElementById('group3').style.display = 'none';
+        document.getElementById('btnExport').style.display = 'none'; // Ẩn nút Export khi đang tải
 
         try {
             const response = await fetch(`/api/optimizing-data?week=${encodeURIComponent(week)}&filterBlacklist=${filterBL}`);
@@ -226,23 +244,32 @@
             };
 
             const data = result.data;
+            let hasDataToExport = false;
             
             if (data.group1.length > 0) {
                 document.getElementById('g1Count').innerText = data.group1.length;
                 document.getElementById('g1Body').innerHTML = data.group1.map(r => renderRow(r, 1)).join('');
                 document.getElementById('group1').style.display = 'block';
+                hasDataToExport = true;
             }
 
             if (data.group2.length > 0) {
                 document.getElementById('g2Count').innerText = data.group2.length;
                 document.getElementById('g2Body').innerHTML = data.group2.map(r => renderRow(r, 2)).join('');
                 document.getElementById('group2').style.display = 'block';
+                hasDataToExport = true;
             }
 
             if (data.group3.length > 0) {
                 document.getElementById('g3Count').innerText = data.group3.length;
                 document.getElementById('g3Body').innerHTML = data.group3.map(r => renderRow(r, 3)).join('');
                 document.getElementById('group3').style.display = 'block';
+                hasDataToExport = true;
+            }
+
+            // Hiện nút Export nếu có bất kỳ nhóm nào có dữ liệu
+            if (hasDataToExport) {
+                document.getElementById('btnExport').style.display = 'block';
             }
 
         } catch (error) {
@@ -250,6 +277,62 @@
             document.getElementById('errorMsg').innerText = 'Lỗi kết nối đến máy chủ CSDL.';
             document.getElementById('errorMsg').style.display = 'block';
         }
+    }
+
+    // THUẬT TOÁN XUẤT FILE EXCEL
+    function exportToExcel() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel chưa tải xong, vui lòng đợi thêm vài giây và bấm lại...');
+            return;
+        }
+
+        let wb = XLSX.utils.book_new();
+        let currentWeek = document.getElementById('weekSelect').value || 'QoE_QoS';
+        
+        // Thay thế các ký tự không hợp lệ trong tên File Excel
+        let safeWeekName = currentWeek.replace(/[\\\/\:\*\?\"\<\>\|]/g, '_').replace(/\s+/g, '_').replace(/[\(\)]/g, '');
+
+        // Hàm hỗ trợ lọc bảng (Nhân bản bảng và xóa Cột "Thao Tác" cuối cùng)
+        const getCleanTableData = (groupId) => {
+            const container = document.getElementById(groupId);
+            if (container.style.display !== 'block') return null; // Bỏ qua nếu nhóm không có dữ liệu hiển thị
+            
+            const table = container.querySelector('.data-table').cloneNode(true);
+            const rows = table.rows;
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].cells.length > 0) {
+                    rows[i].deleteCell(-1); // Xóa cột "BƯỚC 5: CLOSED-LOOP"
+                }
+            }
+            return table;
+        };
+
+        // Lấy dữ liệu và tạo Sheet cho từng Nhóm
+        const tableG1 = getCleanTableData('group1');
+        if (tableG1) {
+            let ws1 = XLSX.utils.table_to_sheet(tableG1);
+            XLSX.utils.book_append_sheet(wb, ws1, "Loi_Truyen_Dan");
+        }
+
+        const tableG2 = getCleanTableData('group2');
+        if (tableG2) {
+            let ws2 = XLSX.utils.table_to_sheet(tableG2);
+            XLSX.utils.book_append_sheet(wb, ws2, "Nghen_Vo_Tuyen");
+        }
+
+        const tableG3 = getCleanTableData('group3');
+        if (tableG3) {
+            let ws3 = XLSX.utils.table_to_sheet(tableG3);
+            XLSX.utils.book_append_sheet(wb, ws3, "Loi_PhanCung_Nhieu");
+        }
+
+        // Xuất file
+        if (wb.SheetNames.length === 0) {
+            alert('Không có dữ liệu để xuất file!');
+            return;
+        }
+        
+        XLSX.writeFile(wb, `Danh_Sach_Toi_Uu_${safeWeekName}.xlsx`);
     }
 </script>
 </body>
