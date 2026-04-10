@@ -196,6 +196,16 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
+    // [TÍNH NĂNG MỚI]: Ghi đè dữ liệu (Overwrite) khi import lại một Tuần đã có
+    if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
+        try {
+            await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]);
+            console.log(`Đã dọn dẹp dữ liệu cũ của ${weekPrefix} trong bảng ${networkType} để chuẩn bị ghi đè.`);
+        } catch (delErr) {
+            console.error(`Lỗi khi xóa dữ liệu cũ của ${weekPrefix}:`, delErr);
+        }
+    }
+
     for (const file of req.files) {
         try {
             const workbook = xlsx.read(file.buffer, { type: 'buffer', raw: true });
@@ -363,7 +373,7 @@ exports.handleImportData = async (req, res) => {
     if (errorLogs.length > 0) {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: `Đã import được ${totalImported} dòng. Cảnh báo: ${errorLogs.join(' | ')}` });
     } else {
-        return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Import thành công ${totalImported} dòng vào bảng ${networkType}.`, error: null });
+        return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Import và Ghi đè thành công ${totalImported} dòng vào bảng ${networkType}.`, error: null });
     }
 };
 
