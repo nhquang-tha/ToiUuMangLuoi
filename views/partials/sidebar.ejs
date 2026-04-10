@@ -1,4 +1,3 @@
-<%- include('partials/head') %>
 <%
     let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
     let rawRole = activeUser && activeUser.role ? activeUser.role : '';
