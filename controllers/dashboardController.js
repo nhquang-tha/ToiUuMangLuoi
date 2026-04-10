@@ -84,7 +84,7 @@ async function getKpiHistory() {
         };
 
         return { 
-            kpi3g: processHistory(rows3g).reverse(), // Ngày mới nhất lên đầu 
+            kpi3g: processHistory(rows3g).reverse(), 
             kpi4g: processHistory(rows4g).reverse(), 
             kpi5g: processHistory(rows5g).reverse(),
             qoeWeeks: processWeeks(rowsQoE),
@@ -128,7 +128,6 @@ async function aggregateDashboardData() {
     }
 }
 
-// Hàm format ngày từ số Serial của Excel sang DD/MM/YYYY
 const formatExcelDate = (excelDate) => {
     if (typeof excelDate === 'number') {
         const date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
@@ -140,7 +139,6 @@ const formatExcelDate = (excelDate) => {
     return excelDate; 
 };
 
-// Thuật toán làm sạch chuỗi (Chuẩn hóa Header)
 const normalizeStr = (str) => {
     if (!str) return '';
     return String(str).toLowerCase()
@@ -161,6 +159,9 @@ exports.getImportPage = async (req, res) => {
     res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: null });
 };
 
+// =====================================================================
+// THUẬT TOÁN IMPORT THÔNG MINH (ĐÃ VÁ LỖI CỘT QOE/QOS)
+// =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     let history = await getKpiHistory();
@@ -176,7 +177,6 @@ exports.handleImportData = async (req, res) => {
     const networkType = req.body.networkType; 
     let isKpiImported = networkType.startsWith('kpi_');
 
-    // Xử lý thông số Tuần cho QoE/QoS
     let weekPrefix = "";
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
         const wNum = req.body.weekNumber;
@@ -202,51 +202,49 @@ exports.handleImportData = async (req, res) => {
 
     for (const file of req.files) {
         try {
-            // Đọc file với raw: true để tránh SheetJS tự tiện định dạng số (gây lỗi với định dạng kiểu Pháp dùng dấu phẩy cho số thập phân)
             const workbook = xlsx.read(file.buffer, { type: 'buffer', raw: true });
             const sheetName = workbook.SheetNames[0];
             let sheet = workbook.Sheets[sheetName];
-            sheet = fixSheetRange(sheet); // Ép sửa lỗi Range
+            sheet = fixSheetRange(sheet); 
 
-            // Bỏ qua các dòng trống ở đầu file QoE và QoS như trước (chỉ áp dụng riêng mbb_qoe/qos)
-            let skipRows = 0;
-            if (networkType === 'mbb_qoe') skipRows = 5; // Header ở dòng 6
-            if (networkType === 'mbb_qos') skipRows = 9; // Header ở dòng 10
-
-            // Lấy toàn bộ mảng dữ liệu (mảng của mảng)
             let rawData = xlsx.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
-            
-            // Xử lý cắt bỏ các dòng trống ở đầu nếu là file mbb_qoe/qos (giống code cũ)
-            if (skipRows > 0 && rawData.length > skipRows) {
-                 rawData = rawData.slice(skipRows);
-            }
-
             if (rawData.length === 0) continue;
 
-            // AI Smart Detection: Tự động quét các dòng đầu tiên để tìm Dòng Tiêu Đề
-            // Chạy cho toàn bộ các file import (kể cả KPI 4G, 3G, 5G, RF...)
             let headerRowIdx = -1;
-            for (let i = 0; i < Math.min(20, rawData.length); i++) {
-                const rowStr = JSON.stringify(rawData[i]).toLowerCase();
-                if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
-                    rowStr.includes('tên cell') || rowStr.includes('cell name') ||
-                    rowStr.includes('site name') || rowStr.includes('cell_code') || 
-                    rowStr.includes('tuan') || rowStr.includes('tuần') || 
-                    rowStr.includes('poi')) {
-                    headerRowIdx = i;
-                    break;
+            let dataStartIdx = -1;
+
+            // XÁC ĐỊNH DÒNG BẮT ĐẦU CỦA HEADER VÀ DỮ LIỆU
+            if (networkType === 'mbb_qoe') {
+                headerRowIdx = 4; // Dòng 5 trong Excel
+                dataStartIdx = 5; // Dòng 6 bắt đầu chứa dữ liệu
+            } else if (networkType === 'mbb_qos') {
+                headerRowIdx = 4; // Dòng 5 trong Excel
+                dataStartIdx = 9; // Dòng 10 bắt đầu chứa dữ liệu
+            } else {
+                // AI Smart Detection cho KPI / RF
+                for (let i = 0; i < Math.min(20, rawData.length); i++) {
+                    const rowStr = JSON.stringify(rawData[i]).toLowerCase();
+                    if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
+                        rowStr.includes('tên cell') || rowStr.includes('cell name') ||
+                        rowStr.includes('site name') || rowStr.includes('cell_code') || 
+                        rowStr.includes('tuan') || rowStr.includes('tuần') || 
+                        rowStr.includes('poi')) {
+                        headerRowIdx = i;
+                        dataStartIdx = i + 1;
+                        break;
+                    }
                 }
             }
 
-            if (headerRowIdx === -1) {
+            if (headerRowIdx === -1 || !rawData[headerRowIdx]) {
                  errorLogs.push(`File ${file.originalname}: Không tìm thấy dòng Tiêu đề hợp lệ.`);
                  continue;
             }
 
             const excelHeaders = rawData[headerRowIdx];
-            
-            // Map cột Excel vào cột Database
-            const colMapping = [];
+            let colMapping = [];
+
+            // AI Mapper tự động dò các cột
             excelHeaders.forEach((exHeader, idx) => {
                 const normEx = normalizeStr(exHeader);
                 if (normEx) {
@@ -257,22 +255,39 @@ exports.handleImportData = async (req, res) => {
                 }
             });
 
+            // [FIX LỖI QUAN TRỌNG]: ÉP CỨNG CHỈ MỤC CỘT CHO QOE VÀ QOS
+            // Để chống việc AI đọc nhầm do File Excel có gộp ô (Merge Cells)
+            if (networkType === 'mbb_qoe') {
+                // Xóa mapping sai cũ của AI
+                colMapping = colMapping.filter(m => m.dbCol !== 'QoE_Rank' && m.dbCol !== 'QoE_Score' && m.dbCol !== 'Cell_Name');
+                // Ép chuẩn theo cấu trúc File VNPT: Cột G là Score, Cột H là Rank
+                colMapping.push({ excelIdx: 4, dbCol: 'Cell_Name' }); // Cột E
+                colMapping.push({ excelIdx: 6, dbCol: 'QoE_Score' }); // Cột G
+                colMapping.push({ excelIdx: 7, dbCol: 'QoE_Rank' });  // Cột H
+            } else if (networkType === 'mbb_qos') {
+                colMapping = colMapping.filter(m => m.dbCol !== 'QoS_Rank' && m.dbCol !== 'QoS_Score' && m.dbCol !== 'Cell_Name');
+                // Ép chuẩn theo cấu trúc File VNPT: Cột G là Rank, Cột H là Score
+                colMapping.push({ excelIdx: 4, dbCol: 'Cell_Name' }); // Cột E
+                colMapping.push({ excelIdx: 6, dbCol: 'QoS_Rank' });  // Cột G
+                colMapping.push({ excelIdx: 7, dbCol: 'QoS_Score' }); // Cột H
+            }
+
             if (colMapping.length === 0) {
                  errorLogs.push(`File ${file.originalname}: Không khớp được cột nào với CSDL.`);
                  continue;
             }
 
             let hasTuanCol = weekPrefix ? dbCols.some(c => c.original === 'Tuan') : false;
-            let lastValidDate = null; // Dùng cho thuật toán FFill (Forward Fill)
+            let lastValidDate = null; 
 
-            // Rút trích dữ liệu thành Object chuẩn
             const insertData = [];
-            // Bắt đầu từ dòng ngay dưới dòng Header
-            for (let i = headerRowIdx + 1; i < rawData.length; i++) {
+            
+            // Bắt đầu đọc dữ liệu từ dataStartIdx (Bỏ qua các Sub-header)
+            for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
-                if (!row || row.length === 0) continue; // Dòng trống
+                if (!row || row.length === 0) continue; 
 
-                // Loại bỏ dòng "Summary" hoặc "Giao dịch không thành công" của file QoE / QoS (Kế thừa từ code cũ)
+                // Loại bỏ dòng "Summary" hoặc "Giao dịch không thành công"
                 let firstCellStr = String(row[0] || '').toLowerCase().trim();
                 if (firstCellStr === 'summary' || firstCellStr.includes('không thành công')) {
                     continue; 
@@ -285,21 +300,21 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     if (val === undefined || val === '') val = null;
 
-                    // Chuyển đổi định dạng số kiểu Châu Âu (VD: 1,55824 -> 1.55824) cho tất cả các cột trừ Tên và Thời gian
+                    // Chuyển đổi định dạng số kiểu Châu Âu
                     if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code'].includes(map.dbCol)) {
                          if (/^-?\d+,\d+$/.test(val)) {
                              val = parseFloat(val.replace(',', '.'));
                          }
                     }
 
-                    // Format lại ngày tháng chuẩn cho Cột Thời Gian
+                    // Format Ngày
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
                         if (val !== null) {
                             val = formatExcelDate(val);
                             if (typeof val === 'string' && val.includes(' ')) val = val.split(' ')[0];
                             lastValidDate = val; 
                         } else {
-                            val = lastValidDate; // FFill
+                            val = lastValidDate; 
                         }
                     }
                     
@@ -317,7 +332,6 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
-            // Kỹ thuật Chunking Insert: Chia nhỏ dữ liệu thành từng cụm 500 dòng
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
@@ -351,10 +365,8 @@ exports.handleImportData = async (req, res) => {
 };
 
 // =====================================================================
-// BỔ SUNG CÁC HÀM API ĐỂ CUNG CẤP DỮ LIỆU CHO DASHBOARD & BÁO CÁO
+// CÁC HÀM API BÁO CÁO GIỮ NGUYÊN
 // =====================================================================
-
-// 1. API cho trang chủ Dashboard
 exports.getDashboardData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM Dashboard ORDER BY thoi_gian ASC');
@@ -365,9 +377,8 @@ exports.getDashboardData = async (req, res) => {
     }
 };
 
-// 2. API cho trang Worst Cells (Cell Vi phạm KPI)
 exports.getWorstCellsData = async (req, res) => {
-    const days = parseInt(req.query.days) || 1; // Thực tế thuật toán phức tạp hơn, ta lấy mẫu cơ bản trước
+    const days = parseInt(req.query.days) || 1; 
     try {
         const query = `
             SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
@@ -390,12 +401,10 @@ exports.getWorstCellsData = async (req, res) => {
         const [rows] = await db.query(query);
         res.json(rows);
     } catch (error) {
-        console.error("Lỗi getWorstCellsData:", error);
         res.status(500).json({ error: "Lỗi truy xuất CSDL." });
     }
 };
 
-// 3. API cho trang Congestion 3G (Nghẽn mạng)
 exports.getCongestion3gData = async (req, res) => {
     try {
         const query = `
@@ -415,15 +424,12 @@ exports.getCongestion3gData = async (req, res) => {
         const [rows] = await db.query(query);
         res.json(rows);
     } catch (error) {
-        console.error("Lỗi getCongestion3gData:", error);
         res.status(500).json({ error: "Lỗi truy xuất CSDL." });
     }
 };
 
-// 4. API cho trang Suy Giảm Lưu lượng (Traffic Down)
 exports.getTrafficDownData = async (req, res) => {
     try {
-        // Trả về một mảng JSON rỗng cơ bản để giao diện không bị crash
         res.json({
             latestDate: 'Gần đây',
             lastWeekDate: 'Tuần trước',
