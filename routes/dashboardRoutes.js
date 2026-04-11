@@ -33,7 +33,7 @@ pages.forEach(page => {
 
 // ROUTE CHO TÍNH NĂNG TẠO SCRIPT
 router.get('/scrip', isAuthenticated, scriptController.getScriptPage);
-router.post('/scrip', isAuthenticated, scriptController.generateScript);
+router.post('/scrip', isAuthenticated, upload.none(), scriptController.generateScript);
 
 // ==========================================
 // 2. BẢN ĐỒ GIS VÀ MÔ PHỎNG TA
