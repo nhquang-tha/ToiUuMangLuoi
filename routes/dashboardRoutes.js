@@ -11,6 +11,7 @@ const rfController = require('../controllers/rfController');
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
 const mapController = require('../controllers/mapController'); 
+const scriptController = require('../controllers/scriptController'); // Controller chức năng tạo Script mới
 
 // Cấu hình Multer để upload file vào RAM (memory buffer)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,13 +24,16 @@ const pages = [
     { path: '/poi-report', name: 'POI Report' },
     { path: '/worst-cells', name: 'Worst Cells' },
     { path: '/congestion-3g', name: 'Congestion 3G' },
-    { path: '/traffic-down', name: 'Traffic Down' },
-    { path: '/scrip', name: 'Scrip' }
+    { path: '/traffic-down', name: 'Traffic Down' }
 ];
 
 pages.forEach(page => {
     router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
 });
+
+// ROUTE CHO TÍNH NĂNG TẠO SCRIPT
+router.get('/scrip', isAuthenticated, scriptController.getScriptPage);
+router.post('/scrip', isAuthenticated, scriptController.generateScript);
 
 // ==========================================
 // 2. BẢN ĐỒ GIS VÀ MÔ PHỎNG TA
