@@ -1,5 +1,3 @@
-// controllers/scriptController.js
-
 exports.getScriptPage = (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
     res.render('scrip', { 
@@ -13,23 +11,37 @@ exports.getScriptPage = (req, res) => {
 
 exports.generateScript = (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
+    const tech = req.body.tech || '3g900';
     
-    // Lấy dữ liệu từ Form gửi lên
-    const tech = req.body.tech;
+    // HÀM HỖ TRỢ: Khắc phục khác biệt giữa Python và Express.
+    // Tự động nhận diện trường mảng kể cả khi HTML có đuôi [] hay không.
+    const getList = (key) => {
+        let val = req.body[key] !== undefined ? req.body[key] : req.body[key + '[]'];
+        if (val === undefined) return [];
+        return Array.isArray(val) ? val : [val];
+    };
     
-    // Hàm hỗ trợ: Đảm bảo dữ liệu luôn là mảng (Array) dù chỉ có 1 dòng
-    const forceArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
-    
-    const rns = forceArray(req.body['rn[]']);
-    const srns = forceArray(req.body['srn[]']);
-    const hsns = forceArray(req.body['hsn[]']);
-    const hpns = forceArray(req.body['hpn[]']);
-    const rcns = forceArray(req.body['rcn[]']);
-    const secids = forceArray(req.body['sectorid[]']);
-    const rxnums = forceArray(req.body['rxnum[]']);
-    const txnums = forceArray(req.body['txnum[]']);
+    const rns = getList('rn');
+    const srns = getList('srn');
+    const hsns = getList('hsn');
+    const hpns = getList('hpn');
+    const rcns = getList('rcn');
+    const secids = getList('sectorid');
+    const rxnums = getList('rxnum');
+    const txnums = getList('txnum');
 
     let lines = [];
+
+    // Bẫy lỗi nếu mảng trống
+    if (rns.length === 0) {
+        return res.render('scrip', { 
+            title: 'Thư Viện Scrip', 
+            page: 'Scrip', 
+            currentUser: activeUser,
+            script_result: "Lỗi: Không nhận được dữ liệu đầu vào. Vui lòng thêm ít nhất 1 RRU.",
+            activeTab: tech
+        });
+    }
 
     for (let i = 0; i < rns.length; i++) {
         // 1. Lệnh ADD RRUCHAIN
@@ -40,7 +52,7 @@ exports.generateScript = (req, res) => {
         if (tech === '4g') rs_mode = "LO";
         
         // 2. Lệnh ADD RRU
-        lines.push(`ADD RRU: CN=0, SRN=${srns[i]}, SN=0, TP=TRUNK, RCN=${rcns[i]}, PS=0, RT=MRRU, RS=${rs_mode}, RN=${rns[i]}, RXNUM=${rxnums[i]}, TXNUM=${txnums[i]}, MNTMODE=NORMAL, RFDCPWROFFALMDETECTSW=OFF, RFTXSIGNDETECTSW=OFF;`);
+        lines.push(`ADD RRU: CN=0, SRN=${srns[i]}, SN=0, TP=TRUNK, RCN=${rcns[i]}, PS=0, RT=MRRU, RS=${rs_mode}, RN="${rns[i]}", RXNUM=${rxnums[i]}, TXNUM=${txnums[i]}, MNTMODE=NORMAL, RFDCPWROFFALMDETECTSW=OFF, RFTXSIGNDETECTSW=OFF;`);
         
         // Chuỗi Antenna
         let ant_num = parseInt(rxnums[i]) || 0;
@@ -58,10 +70,10 @@ exports.generateScript = (req, res) => {
         
         // Sửa lại SRN = 0 cho SECTOREQM
         let sectoreqm_ant_str = ant_str
-            .replace(`ANT1SRN=${srns[i]}`, 'ANT1SRN=0')
-            .replace(`ANT2SRN=${srns[i]}`, 'ANT2SRN=0')
-            .replace(`ANT3SRN=${srns[i]}`, 'ANT3SRN=0')
-            .replace(`ANT4SRN=${srns[i]}`, 'ANT4SRN=0');
+            .replace(new RegExp(`ANT1SRN=${srns[i]}`, 'g'), 'ANT1SRN=0')
+            .replace(new RegExp(`ANT2SRN=${srns[i]}`, 'g'), 'ANT2SRN=0')
+            .replace(new RegExp(`ANT3SRN=${srns[i]}`, 'g'), 'ANT3SRN=0')
+            .replace(new RegExp(`ANT4SRN=${srns[i]}`, 'g'), 'ANT4SRN=0');
             
         // 4. Lệnh ADD SECTOREQM
         lines.push(`ADD SECTOREQM: SECTOREQMID=${secids[i]}, SECTORID=${secids[i]}, ANTCFGMODE=ANTENNAPORT, ANTNUM=${ant_num}, ${sectoreqm_ant_str}, ${ant_type_str};`);
@@ -75,6 +87,6 @@ exports.generateScript = (req, res) => {
         page: 'Scrip', 
         currentUser: activeUser,
         script_result: script_result,
-        activeTab: tech // Giữ lại tab người dùng vừa thao tác
+        activeTab: tech 
     });
 };
