@@ -1,0 +1,37 @@
+<form method="POST" action="/scrip">
+    <input type="hidden" name="tech" value="<%= tech %>">
+    <div class="table-responsive">
+        <table class="data-table" id="rruTable_<%= tech %>">
+            <thead>
+                <tr>
+                    <th>RRU Name</th>
+                    <th>SRN</th>
+                    <th>Slot (HSN)</th>
+                    <th>Port (HPN)</th>
+                    <th>RCN</th>
+                    <th>SectorID</th>
+                    <th>RX</th>
+                    <th>TX</th>
+                    <th>Thao Tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><input type="text" name="rn[]" value="RRU1"></td>
+                    <td><input type="number" name="srn[]" value="<%= defaultSRN %>"></td>
+                    <td><input type="number" name="hsn[]" value="<%= defaultSlot %>"></td>
+                    <td><input type="number" name="hpn[]" value="0"></td>
+                    <td><input type="number" name="rcn[]" value="0"></td>
+                    <td><input type="number" name="sectorid[]" value="0"></td>
+                    <td><input type="number" name="rxnum[]" value="<%= rx %>"></td>
+                    <td><input type="number" name="txnum[]" value="<%= tx %>"></td>
+                    <td><button type="button" class="btn-danger" onclick="this.closest('tr').remove()">✖</button></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div style="display: flex; gap: 15px; margin-top: 15px;">
+        <button type="button" class="btn-success" onclick="addRow('<%= tech %>')">➕ Thêm RRU (Row)</button>
+        <button type="submit" class="btn-primary" style="flex: 1;">⚡ Sinh lệnh Command (Generate Script)</button>
+    </div>
+</form>
