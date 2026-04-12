@@ -43,7 +43,7 @@
             
             <div class="filter-card">
                 <div style="flex: 1; min-width: 250px;">
-                    <p style="margin: 0 0 5px 0; color: #7f8c8d; font-size: 14px;">Thuật toán so sánh dữ liệu mới nhất với dữ liệu cùng thứ tuần trước.</p>
+                    <p style="margin: 0 0 5px 0; color: #7f8c8d; font-size: 14px;">Thuật toán tự động nhận diện dữ liệu mới nhất trong Database để phân tích với 10 ngày trước đó.</p>
                     <div id="dateInfo" style="font-weight: bold; color: #8e44ad; font-size: 16px;">
                         Ngày phân tích: <span style="color:#2c3e50;">[Chưa lấy dữ liệu]</span>
                     </div>
@@ -58,12 +58,12 @@
                 </div>
             </div>
 
-            <!-- HƯỚNG DẪN / THÔNG BÁO CHỨA CHÚ THÍCH L1800 -->
+            <!-- HƯỚNG DẪN / THÔNG BÁO TIÊU CHÍ LỌC -->
             <div id="initMsg" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; font-size: 14px; color: #34495e;">
-                <strong>💡 Tiêu chí Lọc Traffic (Cập nhật mới):</strong><br>
-                <span style="color: #e74c3c">1. Cell Không Lưu Lượng:</span> Traffic hôm nay &lt; 0.1 GB <strong>VÀ</strong> Traffic TB (7 ngày trước) &gt; 2 GB <i>(Áp dụng L1800)</i>.<br>
-                <span style="color: #f39c12">2. Cell Suy Giảm:</span> Traffic hôm nay &lt; 70% Tuần trước <strong>VÀ</strong> Tuần trước &gt; 1 GB <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với tuần trước <i>(Áp dụng L1800)</i>.<br>
-                <span style="color: #8e44ad">3. POI Suy Giảm:</span> Traffic POI hôm nay &lt; 70% Tuần trước <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với tuần trước.
+                <strong>💡 Các tiêu chí Lọc Traffic:</strong><br>
+                <span style="color: #e74c3c">1. Cell Không Lưu Lượng:</span> Traffic hôm nay &lt; 0.1 GB <strong>VÀ</strong> Traffic TB (7 ngày trước) &gt; 2 GB.<br>
+                <span style="color: #f39c12">2. Cell Suy Giảm:</span> Traffic hôm nay &lt; 70% Tuần trước (cùng thứ) <strong>VÀ</strong> Tuần trước &gt; 1 GB <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với cùng kỳ tuần trước.<br>
+                <span style="color: #8e44ad">3. POI Suy Giảm:</span> Traffic POI hôm nay &lt; 70% Tuần trước <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với cùng kỳ tuần trước.
             </div>
 
             <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #8e44ad; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; margin-bottom: 15px;">
@@ -75,7 +75,7 @@
             <!-- BẢNG 1: CELL KHÔNG LƯU LƯỢNG -->
             <div class="table-wrapper" id="zeroTableWrapper">
                 <div class="header-zero">
-                    🔴 BẢNG 1: CELL KHÔNG LƯU LƯỢNG (L1800) (<span id="zeroCount">0</span>)
+                    🔴 BẢNG 1: CELL KHÔNG LƯU LƯỢNG (<span id="zeroCount">0</span>)
                 </div>
                 <table class="data-table" id="zeroTable">
                     <thead>
@@ -94,7 +94,7 @@
             <!-- BẢNG 2: CELL SUY GIẢM -->
             <div class="table-wrapper" id="dropCellTableWrapper">
                 <div class="header-drop">
-                    🟠 BẢNG 2: CELL SUY GIẢM LƯU LƯỢNG (L1800) (<span id="dropCellCount">0</span>)
+                    🟠 BẢNG 2: CELL SUY GIẢM LƯU LƯỢNG (<span id="dropCellCount">0</span>)
                 </div>
                 <table class="data-table" id="dropCellTable">
                     <thead>
@@ -185,7 +185,7 @@
                     `);
                 });
             } else {
-                zeroBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có Cell L1800 nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
+                zeroBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
             }
             document.getElementById('zeroTableWrapper').style.display = 'block';
 
@@ -209,7 +209,7 @@
                     `);
                 });
             } else {
-                dropCellBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Không có Cell L1800 nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
+                dropCellBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
             }
             document.getElementById('dropCellTableWrapper').style.display = 'block';
 
