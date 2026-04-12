@@ -500,10 +500,8 @@ exports.getCongestion3gData = async (req, res) => {
 
 exports.getTrafficDownData = async (req, res) => {
     try {
+        // Lấy danh sách các ngày có dữ liệu
         const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
-        if(datesRaw.length < 2) {
-            return res.json({ error: "Cần ít nhất 2 ngày dữ liệu (Hôm nay và Tuần trước) để phân tích sụt giảm." });
-        }
         
         let uniqueDates = datesRaw.map(r => r.Thoi_gian);
         uniqueDates.sort((a, b) => {
@@ -511,22 +509,36 @@ exports.getTrafficDownData = async (req, res) => {
             return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`).getTime() - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`).getTime();
         }); 
 
-        let latestDate = uniqueDates[0];
-        // Lấy ngày cách đây 7 ngày (hoặc lấy ngày cũ nhất nếu DB chưa đủ 7 ngày)
-        let compareDate = uniqueDates.length >= 7 ? uniqueDates[6] : uniqueDates[1]; 
+        // Cần ít nhất 10 ngày để so sánh (Hôm nay->Hôm kia vs Cùng kỳ tuần trước) và tính Trung bình 7 ngày
+        if(uniqueDates.length < 10) {
+            return res.json({ error: "Cần ít nhất 10 ngày dữ liệu trong hệ thống để thực hiện thuật toán 'Suy giảm 3 ngày liên tiếp' và 'Tính trung bình 7 ngày'." });
+        }
+
+        const targetDates = uniqueDates.slice(0, 10);
+        const placeholders = targetDates.map(() => '?').join(',');
+
+        // Khai báo Index ngày để dễ so sánh
+        const d0 = targetDates[0]; // Hôm nay
+        const d1 = targetDates[1]; // Hôm qua
+        const d2 = targetDates[2]; // Hôm kia
+        const d7 = targetDates[7]; // Tuần trước (cùng thứ hôm nay)
+        const d8 = targetDates[8]; // Tuần trước (cùng thứ hôm qua)
+        const d9 = targetDates[9]; // Tuần trước (cùng thứ hôm kia)
 
         // 1. Quét dữ liệu mức CELL (Chỉ lọc L1800)
         const [rows] = await db.query(`
             SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB
             FROM kpi_4g 
-            WHERE Thoi_gian IN (?, ?) AND CellType LIKE '%1800%'
-        `, [latestDate, compareDate]);
+            WHERE Thoi_gian IN (${placeholders}) AND CellType LIKE '%1800%'
+        `, targetDates);
 
         let dataMap = {};
         rows.forEach(r => {
-            if (!dataMap[r.Cell_name]) dataMap[r.Cell_name] = { t0: 0, t7: 0 };
-            if (r.Thoi_gian === latestDate) dataMap[r.Cell_name].t0 = parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
-            if (r.Thoi_gian === compareDate) dataMap[r.Cell_name].t7 = parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+            if (!dataMap[r.Cell_name]) {
+                dataMap[r.Cell_name] = {};
+                targetDates.forEach(d => dataMap[r.Cell_name][d] = 0);
+            }
+            dataMap[r.Cell_name][r.Thoi_gian] = parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
         });
 
         let zeroTrafficCells = [];
@@ -534,11 +546,22 @@ exports.getTrafficDownData = async (req, res) => {
 
         for (let cell in dataMap) {
             let d = dataMap[cell];
-            if (d.t0 < 0.1 && d.t7 > 2) {
-                zeroTrafficCells.push({ Cell_name: cell, t0: d.t0.toFixed(2), avg7: d.t7.toFixed(2) });
-            } else if (d.t0 < (0.7 * d.t7) && d.t7 > 1) {
-                let ratio = ((d.t0 / d.t7) * 100).toFixed(1);
-                droppedTrafficCells.push({ Cell_name: cell, t0: d.t0.toFixed(2), t7: d.t7.toFixed(2), ratio: ratio });
+            let t0 = d[d0], t1 = d[d1], t2 = d[d2];
+            let t7 = d[d7], t8 = d[d8], t9 = d[d9];
+
+            // Tính Traffic TB 7 ngày trước (Từ d1 đến d7)
+            let sum7 = 0;
+            for(let i = 1; i <= 7; i++) { sum7 += d[targetDates[i]]; }
+            let avg7 = sum7 / 7;
+
+            // TIÊU CHÍ 1: Cell Không Lưu Lượng
+            if (t0 < 0.1 && avg7 > 2) {
+                zeroTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), avg7: avg7.toFixed(2) });
+            } 
+            // TIÊU CHÍ 2: Cell Suy Giảm (Hôm nay < 70% tuần trước AND Tuần trước > 1 AND 3 ngày gần nhất đều giảm)
+            else if (t0 < (0.7 * t7) && t7 > 1 && t1 < t8 && t2 < t9) {
+                let ratio = ((t0 / t7) * 100).toFixed(1);
+                droppedTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), t7: t7.toFixed(2), ratio: ratio });
             }
         }
         zeroTrafficCells.sort((a,b) => b.avg7 - a.avg7);
@@ -549,30 +572,36 @@ exports.getTrafficDownData = async (req, res) => {
             SELECT p.POI, k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as Total_Traffic
             FROM kpi_4g k
             JOIN poi_4g p ON k.Cell_name = p.Cell_Code
-            WHERE k.Thoi_gian IN (?, ?)
+            WHERE k.Thoi_gian IN (${placeholders})
             GROUP BY p.POI, k.Thoi_gian
-        `, [latestDate, compareDate]);
+        `, targetDates);
         
         let poiMap = {};
         poiRows.forEach(r => {
-            if (!poiMap[r.POI]) poiMap[r.POI] = { t0: 0, t7: 0 };
-            if (r.Thoi_gian === latestDate) poiMap[r.POI].t0 = parseFloat(r.Total_Traffic) || 0;
-            if (r.Thoi_gian === compareDate) poiMap[r.POI].t7 = parseFloat(r.Total_Traffic) || 0;
+            if (!poiMap[r.POI]) {
+                poiMap[r.POI] = {};
+                targetDates.forEach(d => poiMap[r.POI][d] = 0);
+            }
+            poiMap[r.POI][r.Thoi_gian] = parseFloat(r.Total_Traffic) || 0;
         });
         
         let droppedTrafficPOIs = [];
         for (let poi in poiMap) {
             let p = poiMap[poi];
-            if (p.t0 < (0.7 * p.t7) && p.t7 > 5) { 
-                let ratio = ((p.t0 / p.t7) * 100).toFixed(1);
-                droppedTrafficPOIs.push({ POI: poi, t0: p.t0.toFixed(2), t7: p.t7.toFixed(2), ratio: ratio });
+            let pt0 = p[d0], pt1 = p[d1], pt2 = p[d2];
+            let pt7 = p[d7], pt8 = p[d8], pt9 = p[d9];
+
+            // TIÊU CHÍ 3: POI Suy Giảm (Hôm nay < 70% tuần trước AND 3 ngày gần nhất đều giảm)
+            if (pt0 < (0.7 * pt7) && pt1 < pt8 && pt2 < pt9) { 
+                let ratio = ((pt0 / pt7) * 100).toFixed(1);
+                droppedTrafficPOIs.push({ POI: poi, t0: pt0.toFixed(2), t7: pt7.toFixed(2), ratio: ratio });
             }
         }
         droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio);
 
         res.json({
-            latestDate: latestDate,
-            lastWeekDate: compareDate,
+            latestDate: d0,
+            lastWeekDate: d7,
             zeroTrafficCells: zeroTrafficCells,
             droppedTrafficCells: droppedTrafficCells,
             droppedTrafficPOIs: droppedTrafficPOIs
