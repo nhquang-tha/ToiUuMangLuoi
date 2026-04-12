@@ -525,11 +525,11 @@ exports.getTrafficDownData = async (req, res) => {
         const d8 = targetDates[8]; // Tuần trước (cùng thứ hôm qua)
         const d9 = targetDates[9]; // Tuần trước (cùng thứ hôm kia)
 
-        // 1. Quét dữ liệu mức CELL (Chỉ lọc L1800)
+        // 1. Quét dữ liệu mức CELL (Đã BỎ lọc CellType LIKE '%1800%' để quét toàn bộ trạm)
         const [rows] = await db.query(`
             SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB
             FROM kpi_4g 
-            WHERE Thoi_gian IN (${placeholders}) AND CellType LIKE '%1800%'
+            WHERE Thoi_gian IN (${placeholders})
         `, targetDates);
 
         let dataMap = {};
