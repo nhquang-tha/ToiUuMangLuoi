@@ -23,11 +23,24 @@ exports.getKpiData = async (req, res) => {
 
         if (type === 'keyword') {
             const values = value.split(',').map(s => s.trim()).filter(s => s);
-            const placeholders = values.map(() => '?').join(',');
-            let cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
-            let siteCol = network === '4g' ? 'Site_name' : 'Ten_CELL';
-            query += ` WHERE ${cellCol} IN (${placeholders}) OR ${siteCol} IN (${placeholders})`;
-            params = [...values, ...values];
+            let conditions = [];
+            
+            // SỬ DỤNG 'LIKE' ĐỂ TÌM KIẾM MỞ RỘNG (Nhập Site -> Tự động load tất cả Cell con)
+            values.forEach(v => {
+                if (network === '4g') {
+                    conditions.push(`(Cell_name LIKE ? OR Site_name LIKE ?)`);
+                    params.push(`%${v}%`, `%${v}%`);
+                } else if (network === '3g') {
+                    conditions.push(`(Ten_CELL LIKE ? OR Ma_VNP LIKE ?)`);
+                    params.push(`%${v}%`, `%${v}%`);
+                } else { // 5G
+                    conditions.push(`(Ten_CELL LIKE ?)`);
+                    params.push(`%${v}%`);
+                }
+            });
+
+            query += ` WHERE ` + conditions.join(' OR ');
+            
         } else if (type === 'poi') {
             let poiCellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
             query += ` JOIN poi_${network} ON kpi_${network}.${poiCellCol} = poi_${network}.Cell_Code WHERE poi_${network}.POI = ?`;
@@ -50,10 +63,16 @@ exports.getQoeQosData = async (req, res) => {
 
     try {
         const values = value.split(',').map(s => s.trim()).filter(s => s);
-        const placeholders = values.map(() => '?').join(',');
-        let params = [...values, ...values, ...values];
+        let conditions = [];
+        let params = [];
 
-        const queryStr = ` WHERE Cell_Name IN (${placeholders}) OR Cell_ID IN (${placeholders}) OR Site_Name IN (${placeholders}) ORDER BY id ASC LIMIT 5000`;
+        // ÁP DỤNG 'LIKE' TƯƠNG TỰ CHO QOE/QOS
+        values.forEach(v => {
+            conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
+            params.push(`%${v}%`, `%${v}%`);
+        });
+
+        const queryStr = ` WHERE ` + conditions.join(' OR ') + ` ORDER BY id ASC LIMIT 5000`;
 
         const [qoeRows] = await db.query(`SELECT * FROM mbb_qoe` + queryStr, params);
         const [qosRows] = await db.query(`SELECT * FROM mbb_qos` + queryStr, params);
