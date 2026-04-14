@@ -36,19 +36,22 @@ exports.getKpiData = async (req, res) => {
             const rawValues = value.split(',').map(s => s.trim()).filter(s => s);
             let conditions = [];
             
-            // SỬ DỤNG 'LIKE' VÀ TỪ KHÓA LÕI ĐỂ TÌM KIẾM MỞ RỘNG
+            // SỬ DỤNG 'LIKE' VÀ TỪ KHÓA LÕI ĐỂ TÌM KIẾM MỞ RỘNG THEO ĐÚNG TÊN CỘT TRONG CSDL
             rawValues.forEach(v => {
                 const cleanV = cleanKeyword(v); // Gọt râu ria lấy tên lõi (Ví dụ: DSN019M)
 
                 if (network === '4g') {
+                    // 4G: cell_code là Cell_name, site_code là Site_name
                     conditions.push(`(Cell_name LIKE ? OR Site_name LIKE ?)`);
                     params.push(`%${cleanV}%`, `%${cleanV}%`);
                 } else if (network === '3g') {
-                    conditions.push(`(Ten_CELL LIKE ? OR Ma_VNP LIKE ? OR Ten_RNC LIKE ?)`);
+                    // 3G: cell_code là Ten_CELL, site_code là Site_code bên bảng rf_3g
+                    conditions.push(`(Ten_CELL LIKE ? OR Ten_CELL IN (SELECT Cell_code FROM rf_3g WHERE Site_code LIKE ?) OR Ten_CELL IN (SELECT CELL_NAME FROM rf_3g WHERE Site_code LIKE ?))`);
                     params.push(`%${cleanV}%`, `%${cleanV}%`, `%${cleanV}%`);
-                } else { // 5G
-                    conditions.push(`(Ten_CELL LIKE ?)`);
-                    params.push(`%${cleanV}%`);
+                } else { 
+                    // 5G: cell_code là Ten_CELL, site_code là Ten_GNODEB
+                    conditions.push(`(Ten_CELL LIKE ? OR Ten_GNODEB LIKE ?)`);
+                    params.push(`%${cleanV}%`, `%${cleanV}%`);
                 }
             });
 
