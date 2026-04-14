@@ -14,8 +14,10 @@ exports.getQoeQosAnalyticsPage = (req, res) => {
 const cleanKeyword = (str) => {
     if (!str) return '';
     return String(str).toUpperCase()
-                      .replace(/^(3G|4G|5G)[-\s_]?/i, '') // Xóa 3G-, 4G-, 5G-
-                      .replace(/-(THA|TH)$/i, '')         // Xóa đuôi -THA
+                      // Xóa 3G, 4G, 5G ở đầu (hỗ trợ cả dấu gạch ngang, gạch dưới và khoảng trắng)
+                      .replace(/^(3G|4G|5G)[-\s_]?/i, '') 
+                      // Xóa đuôi THA, TH ở cuối (hỗ trợ cả dấu gạch ngang, gạch dưới)
+                      .replace(/[-\s_]?(THA|TH)$/i, '')   
                       .trim();
 };
 
@@ -36,7 +38,7 @@ exports.getKpiData = async (req, res) => {
             
             // SỬ DỤNG 'LIKE' VÀ TỪ KHÓA LÕI ĐỂ TÌM KIẾM MỞ RỘNG
             rawValues.forEach(v => {
-                const cleanV = cleanKeyword(v); // Gọt râu ria lấy tên lõi Trạm
+                const cleanV = cleanKeyword(v); // Gọt râu ria lấy tên lõi (Ví dụ: DSN019M)
 
                 if (network === '4g') {
                     conditions.push(`(Cell_name LIKE ? OR Site_name LIKE ?)`);
