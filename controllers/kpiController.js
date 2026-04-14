@@ -10,6 +10,15 @@ exports.getQoeQosAnalyticsPage = (req, res) => {
     res.render('qoe_qos_analytics', { title: 'QoE/QoS Analytics', page: 'QoE/QoS Analytics', currentUser: activeUser });
 };
 
+// HÀM BỔ TRỢ LÀM SẠCH TỪ KHÓA (TỰ ĐỘNG GỌT BỎ TIỀN TỐ/HẬU TỐ)
+const cleanKeyword = (str) => {
+    if (!str) return '';
+    return String(str).toUpperCase()
+                      .replace(/^(3G|4G|5G)[-\s_]?/i, '') // Xóa 3G-, 4G-, 5G-
+                      .replace(/-(THA|TH)$/i, '')         // Xóa đuôi -THA
+                      .trim();
+};
+
 exports.getKpiData = async (req, res) => {
     const network = req.query.network || '4g';
     const type = req.query.type || 'keyword';
@@ -22,20 +31,22 @@ exports.getKpiData = async (req, res) => {
         let params = [];
 
         if (type === 'keyword') {
-            const values = value.split(',').map(s => s.trim()).filter(s => s);
+            const rawValues = value.split(',').map(s => s.trim()).filter(s => s);
             let conditions = [];
             
-            // SỬ DỤNG 'LIKE' ĐỂ TÌM KIẾM MỞ RỘNG (Nhập Site -> Tự động load tất cả Cell con)
-            values.forEach(v => {
+            // SỬ DỤNG 'LIKE' VÀ TỪ KHÓA LÕI ĐỂ TÌM KIẾM MỞ RỘNG
+            rawValues.forEach(v => {
+                const cleanV = cleanKeyword(v); // Gọt râu ria lấy tên lõi Trạm
+
                 if (network === '4g') {
                     conditions.push(`(Cell_name LIKE ? OR Site_name LIKE ?)`);
-                    params.push(`%${v}%`, `%${v}%`);
+                    params.push(`%${cleanV}%`, `%${cleanV}%`);
                 } else if (network === '3g') {
-                    conditions.push(`(Ten_CELL LIKE ? OR Ma_VNP LIKE ?)`);
-                    params.push(`%${v}%`, `%${v}%`);
+                    conditions.push(`(Ten_CELL LIKE ? OR Ma_VNP LIKE ? OR Ten_RNC LIKE ?)`);
+                    params.push(`%${cleanV}%`, `%${cleanV}%`, `%${cleanV}%`);
                 } else { // 5G
                     conditions.push(`(Ten_CELL LIKE ?)`);
-                    params.push(`%${v}%`);
+                    params.push(`%${cleanV}%`);
                 }
             });
 
@@ -62,14 +73,15 @@ exports.getQoeQosData = async (req, res) => {
     if (!value) return res.json({ qoe: [], qos: [] });
 
     try {
-        const values = value.split(',').map(s => s.trim()).filter(s => s);
+        const rawValues = value.split(',').map(s => s.trim()).filter(s => s);
         let conditions = [];
         let params = [];
 
-        // ÁP DỤNG 'LIKE' TƯƠNG TỰ CHO QOE/QOS
-        values.forEach(v => {
+        // ÁP DỤNG TÌM KIẾM TỪ KHÓA LÕI TƯƠNG TỰ CHO QOE/QOS
+        rawValues.forEach(v => {
+            const cleanV = cleanKeyword(v);
             conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
-            params.push(`%${v}%`, `%${v}%`);
+            params.push(`%${cleanV}%`, `%${cleanV}%`);
         });
 
         const queryStr = ` WHERE ` + conditions.join(' OR ') + ` ORDER BY id ASC LIMIT 5000`;
