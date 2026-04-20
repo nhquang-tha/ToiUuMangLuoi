@@ -1,307 +1,310 @@
-<%- include('partials/head') %>
-<%
-    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
-    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
-    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
-    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
-%>
-<style>
-    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
-    .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+const db = require('../models/db');
+
+exports.getKpiAnalyticsPage = (req, res) => {
+    const activeUser = res.locals.currentUser || req.session.user || req.user;
+    res.render('kpi_analytics', { title: 'KPI Analytics', page: 'KPI Analytics', currentUser: activeUser });
+};
+
+exports.getQoeQosAnalyticsPage = (req, res) => {
+    const activeUser = res.locals.currentUser || req.session.user || req.user;
+    res.render('qoe_qos_analytics', { title: 'QoE/QoS Analytics', page: 'QoE/QoS Analytics', currentUser: activeUser });
+};
+
+exports.getKpiData = async (req, res) => {
+    const network = req.query.network || '4g';
+    const type = req.query.type || 'keyword';
+    const value = req.query.value ? req.query.value.trim() : '';
     
-    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #9b59b6;}
-    
-    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 1024px) { .charts-grid { grid-template-columns: 1fr; } }
-    
-    .chart-container { 
-        background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-        height: 380px; position: relative; 
-        opacity: 0; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
+    if (!value) return res.json([]);
 
-    .chart-container:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
-    .chart-container:hover .zoom-hint { color: #9b59b6; font-weight: bold; }
-    .zoom-hint { position: absolute; top: 15px; right: 20px; font-size: 12px; color: #bdc3c7; transition: 0.3s; pointer-events: none; }
+    try {
+        let query = `SELECT * FROM kpi_${network}`;
+        let params = [];
 
-    @keyframes popInBouncing {
-        0% { opacity: 0; transform: scale(0.8) translateY(30px); }
-        60% { opacity: 1; transform: scale(1.03) translateY(-5px); }
-        100% { opacity: 1; transform: scale(1) translateY(0); }
-    }
-    .popup-anim-1 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s forwards; }
-    .popup-anim-2 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s forwards; }
-    .popup-anim-3 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s forwards; }
-    .popup-anim-4 { animation: popInBouncing 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s forwards; }
-
-    /* Modal Zoom */
-    .modal-overlay {
-        display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7);
-        align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;
-    }
-    .modal-overlay.show { display: flex; opacity: 1; }
-    .modal-content {
-        background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 1300px; height: 85vh; position: relative;
-        transform: scale(0.8); transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column;
-    }
-    .modal-overlay.show .modal-content { transform: scale(1); }
-    .close-btn { position: absolute; top: 15px; right: 25px; font-size: 32px; font-weight: bold; color: #7f8c8d; cursor: pointer; transition: 0.2s; z-index: 10; }
-    .close-btn:hover { color: #e74c3c; }
-    .modal-body { flex: 1; position: relative; width: 100%; height: 100%; }
-
-    #initMsg { text-align: center; padding: 50px; color: #7f8c8d; font-size: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-</style>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<div class="layout">
-    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
-    <main class="main-content">
-        <header class="topbar">
-            <h1>Báo Cáo POI (Tổng Hợp KPI Điểm Thu Hút)</h1>
-        </header>
-        
-        <div class="content-body">
-            
-            <div class="filter-card">
-                <div style="flex: 1; min-width: 300px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Danh sách POI (Points of Interest):</label>
-                    <select id="poiSelect" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; cursor: pointer; font-size: 14px; border-left: 4px solid #9b59b6;">
-                        <option value="">Đang tải danh sách POI...</option>
-                    </select>
-                </div>
-                <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #8e44ad; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 15px; transition: 0.2s;">
-                    📊 Trích Xuất Báo Cáo
-                </button>
-            </div>
-
-            <div id="initMsg">
-                <i>Lựa chọn một địa điểm POI từ danh sách thả xuống và bấm "Trích Xuất Báo Cáo".</i>
-            </div>
-
-            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px;">
-                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang gộp dữ liệu các Cell thuộc POI...
-            </div>
-            
-            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
-
-            <div class="charts-grid" id="chartsArea" style="display: none;">
-                <!-- 4G Charts -->
-                <div class="chart-container" id="box1" onclick="openModal('chart1')">
-                    <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chart1"></canvas>
-                </div>
-                <div class="chart-container" id="box2" onclick="openModal('chart2')">
-                    <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chart2"></canvas>
-                </div>
-                <!-- 5G Charts (Sẽ tự động ẩn nếu POI không có trạm 5G) -->
-                <div class="chart-container" id="box3" onclick="openModal('chart3')">
-                    <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chart3"></canvas>
-                </div>
-                <div class="chart-container" id="box4" onclick="openModal('chart4')">
-                    <span class="zoom-hint">🔍 Click để phóng to</span>
-                    <canvas id="chart4"></canvas>
-                </div>
-            </div>
-
-        </div>
-    </main>
-</div>
-
-<!-- MODAL POPUP PHÓNG TO ĐỒ THỊ -->
-<div id="chartModal" class="modal-overlay">
-    <div class="modal-content">
-        <span class="close-btn" onclick="closeModal()">&times;</span>
-        <div class="modal-body">
-            <canvas id="modalCanvas"></canvas>
-        </div>
-    </div>
-</div>
-
-<script>
-    window.chartDataStore = {};
-    let modalChartInstance = null;
-
-    // Load danh sách POI khi mới vào trang
-    window.onload = async () => {
-        try {
-            const res = await fetch('/api/poi-list');
-            const list = await res.json();
-            const select = document.getElementById('poiSelect');
-            select.innerHTML = '<option value="">-- Chọn Địa Điểm POI --</option>';
-            list.forEach(poi => {
-                const opt = document.createElement('option');
-                opt.value = poi; opt.textContent = poi;
-                select.appendChild(opt);
-            });
-
-            // ĐỌC THAM SỐ TỪ URL ĐỂ TỰ ĐỘNG CHẠY BIỂU ĐỒ (DEEP LINKING TỪ TRANG TRAFFIC DOWN)
-            const urlParams = new URLSearchParams(window.location.search);
-            const poiParam = urlParams.get('poi');
-            if (poiParam) {
-                setTimeout(() => {
-                    select.value = poiParam;
-                    if(select.value === poiParam) {
-                        fetchAndDrawCharts();
-                    }
-                }, 150);
-            }
-        } catch (e) {
-            document.getElementById('poiSelect').innerHTML = '<option value="">Lỗi tải danh sách POI</option>';
+        if (type === 'keyword') {
+            const values = value.split(',').map(s => s.trim()).filter(s => s);
+            const placeholders = values.map(() => '?').join(',');
+            let cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
+            let siteCol = network === '4g' ? 'Site_name' : 'Ten_CELL';
+            query += ` WHERE ${cellCol} IN (${placeholders}) OR ${siteCol} IN (${placeholders})`;
+            params = [...values, ...values];
+        } else if (type === 'poi') {
+            let poiCellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
+            query += ` JOIN poi_${network} ON kpi_${network}.${poiCellCol} = poi_${network}.Cell_Code WHERE poi_${network}.POI = ?`;
+            params = [value];
         }
-    };
+        
+        query += ` ORDER BY id ASC LIMIT 5000`; 
+        const [rows] = await db.query(query, params);
+        res.json(rows);
 
-    function sortDataByDate(data) {
-        return data.sort((a, b) => {
-            const parseDate = (d) => {
-                if (!d) return 0;
-                const p = d.split('/');
-                return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : 0;
-            };
-            return parseDate(a.Thoi_gian) - parseDate(b.Thoi_gian);
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu KPI:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." });
+    }
+};
+
+exports.getQoeQosData = async (req, res) => {
+    const value = req.query.value ? req.query.value.trim() : '';
+    if (!value) return res.json({ qoe: [], qos: [] });
+
+    try {
+        const values = value.split(',').map(s => s.trim()).filter(s => s);
+        const placeholders = values.map(() => '?').join(',');
+        let params = [...values, ...values, ...values];
+
+        const queryStr = ` WHERE Cell_Name IN (${placeholders}) OR Cell_ID IN (${placeholders}) OR Site_Name IN (${placeholders}) ORDER BY id ASC LIMIT 5000`;
+
+        const [qoeRows] = await db.query(`SELECT * FROM mbb_qoe` + queryStr, params);
+        const [qosRows] = await db.query(`SELECT * FROM mbb_qos` + queryStr, params);
+
+        res.json({
+            qoe: qoeRows,
+            qos: qosRows
         });
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu QoE/QoS:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL QoE/QoS." });
     }
+};
 
-    async function fetchAndDrawCharts() {
-        const poiName = document.getElementById('poiSelect').value;
+exports.resetData = async (req, res) => {
+    let userRole = req.session && req.session.user ? req.session.user.role : 'user';
+    if (userRole !== 'admin') return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
+    
+    const network = req.params.network;
+    try {
+        await db.query(`TRUNCATE TABLE kpi_${network}`);
+        res.redirect('/import-data');
+    } catch (error) {
+        console.error("Lỗi xóa dữ liệu:", error);
+        res.status(500).send("Lỗi xóa dữ liệu.");
+    }
+};
 
-        if (!poiName) {
-            alert("Vui lòng chọn 1 POI từ danh sách!");
-            return;
+exports.getPoiList = async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT DISTINCT POI FROM poi_4g
+            UNION
+            SELECT DISTINCT POI FROM poi_5g
+        `);
+        const poiList = rows.map(r => r.POI).filter(Boolean);
+        res.json(poiList);
+    } catch (error) {
+        console.error("Lỗi lấy danh sách POI:", error);
+        res.json([]);
+    }
+};
+
+exports.getPoiData = async (req, res) => {
+    const poi = req.query.poi;
+    if (!poi) return res.json({ data: [], has4g: false, has5g: false });
+
+    try {
+        const [kpi4g] = await db.query(`
+            SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g
+            FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code
+            WHERE p.POI = ? GROUP BY k.Thoi_gian
+        `, [poi]);
+
+        const [kpi5g] = await db.query(`
+            SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g
+            FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code
+            WHERE p.POI = ? GROUP BY k.Thoi_gian
+        `, [poi]);
+
+        let combinedData = {};
+        
+        kpi4g.forEach(row => {
+            combinedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, traffic_4g: row.traffic_4g, thput_4g: row.thput_4g };
+        });
+
+        kpi5g.forEach(row => {
+            if (!combinedData[row.Thoi_gian]) {
+                combinedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
+            }
+            combinedData[row.Thoi_gian].traffic_5g = row.traffic_5g;
+            combinedData[row.Thoi_gian].thput_5g = row.thput_5g;
+        });
+
+        const sortedData = Object.values(combinedData).sort((a, b) => {
+            const dateA = a.Thoi_gian.split('/').reverse().join('');
+            const dateB = b.Thoi_gian.split('/').reverse().join('');
+            return dateA.localeCompare(dateB);
+        });
+
+        res.json({
+            data: sortedData,
+            has4g: kpi4g.length > 0,
+            has5g: kpi5g.length > 0
+        });
+
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu POI Chart:", error);
+        res.status(500).json({ error: "Lỗi CSDL khi load POI Data." });
+    }
+};
+
+// =====================================================================
+// CHỨC NĂNG: TỐI ƯU QOE / QOS 5 BƯỚC KHÉP KÍN
+// =====================================================================
+
+exports.getOptimizingPage = async (req, res) => {
+    const activeUser = res.locals.currentUser || req.session.user || req.user;
+    try {
+        const [qoeWeeks] = await db.query('SELECT DISTINCT Tuan FROM mbb_qoe WHERE Tuan IS NOT NULL');
+        const [qosWeeks] = await db.query('SELECT DISTINCT Tuan FROM mbb_qos WHERE Tuan IS NOT NULL');
+        
+        let uniqueWeeks = [...new Set([...qoeWeeks.map(r => r.Tuan), ...qosWeeks.map(r => r.Tuan)])];
+        uniqueWeeks.sort((a, b) => {
+            let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
+            let matchB = b.match(/Tuần (\d+) \((\d+)\)/);
+            if (matchA && matchB) {
+                if (matchA[2] !== matchB[2]) return parseInt(matchB[2]) - parseInt(matchA[2]);
+                return parseInt(matchB[1]) - parseInt(matchA[1]);
+            }
+            return 0;
+        }).reverse(); 
+
+        res.render('optimizing_qoe_qos', { 
+            title: 'Tối Ưu QoE/QoS', 
+            page: 'Optimizing QoE/QoS', 
+            weeks: uniqueWeeks,
+            currentUser: activeUser
+        });
+    } catch (error) {
+        res.render('optimizing_qoe_qos', { title: 'Tối Ưu', page: 'Optimizing QoE/QoS', weeks: [], currentUser: activeUser });
+    }
+};
+
+exports.getOptimizingData = async (req, res) => {
+    const week = req.query.week;
+    const filterBlacklist = req.query.filterBlacklist === 'true';
+
+    if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
+
+    try {
+        // BƯỚC 1: TÌM VÙNG TRŨNG (BAD CELLS - Sử dụng cột Rank/Sao thay vì điểm Score phần trăm)
+        const queryBadCells = `
+            SELECT Cell_Name, QoE_Rank as Score, 'Vi phạm QoE' as Type FROM mbb_qoe WHERE Tuan = ? AND QoE_Rank < 3
+            UNION
+            SELECT Cell_Name, QoS_Rank as Score, 'Vi phạm QoS' as Type FROM mbb_qos WHERE Tuan = ? AND QoS_Rank < 3
+        `;
+        const [badCellsRaw] = await db.query(queryBadCells, [week, week]);
+
+        if (badCellsRaw.length === 0) {
+            return res.json({ message: "Mạng lưới rất tốt! Không tìm thấy Cell nào có điểm QoE/QoS < 3 trong tuần này.", data: null });
         }
 
-        document.getElementById('initMsg').style.display = 'none';
-        document.getElementById('loadingMsg').style.display = 'block';
-        document.getElementById('errorMsg').style.display = 'none';
-        document.getElementById('chartsArea').style.display = 'none';
+        // BƯỚC 2: ĐỐI SOÁT BLACKLIST (SÀNG LỌC)
+        let blacklistedCount = 0;
+        let validCellsObj = {};
         
-        ['box1', 'box2', 'box3', 'box4'].forEach(id => document.getElementById(id).className = 'chart-container'); 
-
-        try {
-            const response = await fetch(`/api/poi-data?poi=${encodeURIComponent(poiName)}`);
-            if (!response.ok) throw new Error('Lỗi máy chủ');
-            const result = await response.json();
-
-            if (!result.data || result.data.length === 0) {
-                document.getElementById('loadingMsg').style.display = 'none';
-                document.getElementById('errorMsg').innerText = `Chưa có dữ liệu KPI cho POI "${poiName}".`;
-                document.getElementById('errorMsg').style.display = 'block';
+        badCellsRaw.forEach(row => {
+            const cell = row.Cell_Name;
+            if (!cell) return;
+            
+            const upperCell = cell.toUpperCase();
+            const isBlacklisted = upperCell.includes('IBS') || 
+                                  upperCell.includes('DAS') || 
+                                  upperCell.includes('VSAT') || 
+                                  upperCell.includes('BOOSTER') ||
+                                  upperCell.startsWith('MBF_TH') ||
+                                  upperCell.startsWith('VNP-4G');
+            
+            if (filterBlacklist && isBlacklisted) {
+                blacklistedCount++;
                 return;
             }
 
-            const data = sortDataByDate(result.data);
-            const labels = data.map(d => d.Thoi_gian || 'N/A');
-
-            document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('chartsArea').style.display = 'grid';
-
-            // Xử lý đồ thị 4G
-            if (result.has4g) {
-                document.getElementById('box1').style.display = 'block';
-                document.getElementById('box2').style.display = 'block';
-                document.getElementById('box1').classList.add('popup-anim-1');
-                document.getElementById('box2').classList.add('popup-anim-2');
-                
-                const traffic4g = data.map(d => parseFloat(d.traffic_4g) || 0);
-                const thput4g = data.map(d => parseFloat(d.thput_4g) || 0);
-                
-                drawChart('chart1', labels, traffic4g, `[4G] Tổng Traffic GB - ${poiName}`, '#3498db');
-                drawChart('chart2', labels, thput4g, `[4G] Trung bình USER DL THPUT (Kbps)`, '#9b59b6');
-            } else {
-                document.getElementById('box1').style.display = 'none';
-                document.getElementById('box2').style.display = 'none';
+            if (!validCellsObj[cell]) validCellsObj[cell] = { Cell_Name: cell, issues: [] };
+            if (!validCellsObj[cell].issues.includes(row.Type)) {
+                validCellsObj[cell].issues.push(row.Type);
             }
+        });
 
-            // Xử lý đồ thị 5G
-            if (result.has5g) {
-                document.getElementById('box3').style.display = 'block';
-                document.getElementById('box4').style.display = 'block';
-                document.getElementById('box3').classList.add('popup-anim-3');
-                document.getElementById('box4').classList.add('popup-anim-4');
-                
-                const traffic5g = data.map(d => parseFloat(d.traffic_5g) || 0);
-                const thput5g = data.map(d => parseFloat(d.thput_5g) || 0);
-                
-                drawChart('chart3', labels, traffic5g, `[5G] Tổng Traffic GB - ${poiName}`, '#e67e22');
-                drawChart('chart4', labels, thput5g, `[5G] Trung bình USER DL THPUT (Kbps)`, '#27ae60');
-            } else {
-                document.getElementById('box3').style.display = 'none';
-                document.getElementById('box4').style.display = 'none';
-            }
-
-        } catch (error) {
-            console.error(error);
-            document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('errorMsg').innerText = 'Lỗi truy xuất hệ thống. Vui lòng kiểm tra lại CSDL.';
-            document.getElementById('errorMsg').style.display = 'block';
+        const targetCells = Object.keys(validCellsObj);
+        if (targetCells.length === 0) {
+             return res.json({ message: `Đã lọc ${blacklistedCount} trạm Blacklist bất khả kháng. Hiện không còn trạm nào cần phân tích khẩn cấp.`, data: null });
         }
-    }
 
-    function drawChart(canvasId, labels, dataArr, title, color) {
-        window.chartDataStore[canvasId] = { labels, dataArr, title, color };
-        const ctx = document.getElementById(canvasId).getContext('2d');
-        if (Chart.getChart(canvasId)) Chart.getChart(canvasId).destroy();
+        // BƯỚC 3: PHÂN TÍCH VI MÔ (ÁNH XẠ SANG BẢNG KPI 4G ĐỂ BẮT BỆNH)
+        const placeholders = targetCells.map(() => '?').join(',');
+        const queryKpi = `
+            SELECT Cell_name,
+                   AVG(User_DL_Avg_Throughput_Kbps) as thput,
+                   AVG(Downlink_Latency) as latency,
+                   AVG(RB_Util_Rate_DL) as prb,
+                   AVG(CQI_4G) as cqi,
+                   AVG(eRAB_Setup_SR_All) as erab,
+                   AVG(Service_Drop_all) as drop_rate
+            FROM kpi_4g
+            WHERE Cell_name IN (${placeholders})
+            GROUP BY Cell_name
+        `;
+        const [kpiData] = await db.query(queryKpi, targetCells);
 
-        return new Chart(ctx, {
-            type: 'line', 
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: title, data: dataArr, backgroundColor: color + '22', borderColor: color,
-                    borderWidth: 3, pointBackgroundColor: '#ffffff', pointBorderColor: color,
-                    pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 7, fill: true, tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false, animation: { duration: 1500, easing: 'easeOutQuart' },
-                plugins: {
-                    title: { display: true, text: title, font: { size: 14, weight: 'bold', family: "'Segoe UI', sans-serif" }, color: '#34495e', padding: { bottom: 15 } },
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(44, 62, 80, 0.9)', titleFont: { size: 14 }, bodyFont: { size: 14, weight: 'bold' },
-                        padding: 12, cornerRadius: 8, displayColors: false,
-                        callbacks: { label: function(context) { return context.parsed.y.toLocaleString('vi-VN'); } }
-                    }
-                },
-                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12, font: { size: 11 } } }, y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 12 } } } }
+        let group1 = []; // Core/Truyền dẫn
+        let group2 = []; // Nghẽn Vô tuyến
+        let group3 = []; // Nhiễu/Phần cứng/Vùng phủ
+        let groupUnknown = []; // Cần theo dõi thêm
+
+        kpiData.forEach(row => {
+            const thput = parseFloat(row.thput) || 0;
+            const latency = parseFloat(row.latency) || 0;
+            const prb = parseFloat(row.prb) || 0;
+            const cqi = parseFloat(row.cqi) || 0;
+            const erab = parseFloat(row.erab) || 100;
+            const drop_rate = parseFloat(row.drop_rate) || 0;
+
+            const cellInfo = {
+                Cell_Name: row.Cell_name,
+                Type: validCellsObj[row.Cell_name].issues.join(' & '),
+                metrics: { 
+                    thput: (thput/1000).toFixed(2), 
+                    latency: latency.toFixed(1), 
+                    prb: prb.toFixed(1), 
+                    cqi: cqi.toFixed(1), 
+                    erab: erab.toFixed(2), 
+                    drop_rate: drop_rate.toFixed(2) 
+                }
+            };
+
+            // THUẬT TOÁN CHẨN ĐOÁN BỆNH
+            if (thput < 15000 && latency > 100) {
+                group1.push(cellInfo);
+            } 
+            else if (prb > 65) {
+                group2.push(cellInfo);
+            } 
+            else if (cqi < 90 || erab < 98.5 || drop_rate > 1) {
+                group3.push(cellInfo);
+            } 
+            else {
+                groupUnknown.push(cellInfo);
             }
+            
+            const idx = targetCells.indexOf(row.Cell_name);
+            if (idx > -1) targetCells.splice(idx, 1);
         });
-    }
 
-    function openModal(canvasId) {
-        const config = window.chartDataStore[canvasId];
-        if (!config) return;
-        document.getElementById('chartModal').classList.add('show');
-        const ctx = document.getElementById('modalCanvas').getContext('2d');
-        if (modalChartInstance) modalChartInstance.destroy();
-
-        modalChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: config.labels,
-                datasets: [{
-                    label: config.title, data: config.dataArr, backgroundColor: config.color + '22', borderColor: config.color,
-                    borderWidth: 4, pointBackgroundColor: '#ffffff', pointBorderColor: config.color,
-                    pointBorderWidth: 3, pointRadius: 6, pointHoverRadius: 9, fill: true, tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' },
-                plugins: {
-                    title: { display: true, text: config.title, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
-                    legend: { display: false },
-                    tooltip: { backgroundColor: 'rgba(44, 62, 80, 0.95)', titleFont: { size: 16 }, bodyFont: { size: 16, weight: 'bold' }, padding: 15, cornerRadius: 8, displayColors: false, callbacks: { label: function(context) { return context.parsed.y.toLocaleString('vi-VN'); } } }
-                },
-                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 14 } } }, y: { beginAtZero: true, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 14 } } } }
-            }
+        targetCells.forEach(cell => {
+            groupUnknown.push({
+                Cell_Name: cell,
+                Type: validCellsObj[cell].issues.join(' & '),
+                metrics: { thput: '-', latency: '-', prb: '-', cqi: '-', erab: '-', drop_rate: '-' },
+                note: "Chưa có dữ liệu KPI 4G để bắt bệnh"
+            });
         });
-    }
 
-    function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
-    window.onclick = function(event) { if (event.target === document.getElementById('chartModal')) closeModal(); }
-</script>
-</body>
-</html>
+        res.json({
+            stats: { totalBad: badCellsRaw.length, blacklisted: blacklistedCount, analyzed: Object.keys(validCellsObj).length },
+            data: { group1, group2, group3, groupUnknown }
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." });
+    }
+};
