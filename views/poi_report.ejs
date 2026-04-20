@@ -137,6 +137,18 @@
                 opt.value = poi; opt.textContent = poi;
                 select.appendChild(opt);
             });
+
+            // ĐỌC THAM SỐ TỪ URL ĐỂ TỰ ĐỘNG CHẠY BIỂU ĐỒ (DEEP LINKING TỪ TRANG TRAFFIC DOWN)
+            const urlParams = new URLSearchParams(window.location.search);
+            const poiParam = urlParams.get('poi');
+            if (poiParam) {
+                setTimeout(() => {
+                    select.value = poiParam;
+                    if(select.value === poiParam) {
+                        fetchAndDrawCharts();
+                    }
+                }, 150);
+            }
         } catch (e) {
             document.getElementById('poiSelect').innerHTML = '<option value="">Lỗi tải danh sách POI</option>';
         }
