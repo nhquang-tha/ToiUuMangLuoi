@@ -29,7 +29,8 @@ exports.getKpiData = async (req, res) => {
     if (!value) return res.json([]);
 
     try {
-        let query = `SELECT * FROM kpi_${network}`;
+        // FIX LỖI 500: Sử dụng Alias 'k' cho bảng chính để tránh trùng lặp cột (Ambiguous) khi JOIN
+        let query = `SELECT k.* FROM kpi_${network} k`;
         let params = [];
 
         if (type === 'keyword') {
@@ -42,15 +43,15 @@ exports.getKpiData = async (req, res) => {
 
                 if (network === '4g') {
                     // 4G: cell_code là Cell_name, site_code là Site_name
-                    conditions.push(`(Cell_name LIKE ? OR Site_name LIKE ?)`);
+                    conditions.push(`(k.Cell_name LIKE ? OR k.Site_name LIKE ?)`);
                     params.push(`%${cleanV}%`, `%${cleanV}%`);
                 } else if (network === '3g') {
                     // 3G: cell_code là Ten_CELL, site_code là Site_code bên bảng rf_3g
-                    conditions.push(`(Ten_CELL LIKE ? OR Ten_CELL IN (SELECT Cell_code FROM rf_3g WHERE Site_code LIKE ?) OR Ten_CELL IN (SELECT CELL_NAME FROM rf_3g WHERE Site_code LIKE ?))`);
+                    conditions.push(`(k.Ten_CELL LIKE ? OR k.Ten_CELL IN (SELECT Cell_code FROM rf_3g WHERE Site_code LIKE ?) OR k.Ten_CELL IN (SELECT CELL_NAME FROM rf_3g WHERE Site_code LIKE ?))`);
                     params.push(`%${cleanV}%`, `%${cleanV}%`, `%${cleanV}%`);
                 } else { 
                     // 5G: cell_code là Ten_CELL, site_code là Ten_GNODEB
-                    conditions.push(`(Ten_CELL LIKE ? OR Ten_GNODEB LIKE ?)`);
+                    conditions.push(`(k.Ten_CELL LIKE ? OR k.Ten_GNODEB LIKE ?)`);
                     params.push(`%${cleanV}%`, `%${cleanV}%`);
                 }
             });
@@ -59,11 +60,13 @@ exports.getKpiData = async (req, res) => {
             
         } else if (type === 'poi') {
             let poiCellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
-            query += ` JOIN poi_${network} ON kpi_${network}.${poiCellCol} = poi_${network}.Cell_Code WHERE poi_${network}.POI = ?`;
+            // FIX LỖI 500: Thêm Alias 'p' cho bảng poi, so sánh chính xác k.Cell_name = p.Cell_Code
+            query += ` JOIN poi_${network} p ON k.${poiCellCol} = p.Cell_Code WHERE p.POI = ?`;
             params = [value];
         }
         
-        query += ` ORDER BY id ASC LIMIT 5000`; 
+        // FIX LỖI 500: Chỉ định rõ k.id thay vì id chung chung
+        query += ` ORDER BY k.id ASC LIMIT 5000`; 
         const [rows] = await db.query(query, params);
         res.json(rows);
 
