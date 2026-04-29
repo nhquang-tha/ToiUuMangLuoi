@@ -156,7 +156,7 @@ exports.getImportPage = async (req, res) => {
 };
 
 // =====================================================================
-// THUẬT TOÁN IMPORT THÔNG MINH
+// THUẬT TOÁN IMPORT THÔNG MINH (BẮT TẤT CẢ LỖI CHÍNH TẢ)
 // =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -196,7 +196,7 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
-    // [CHỨC NĂNG MỚI]: GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN ĐÃ CÓ
+    // GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN ĐÃ CÓ
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
         try {
             await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]);
@@ -248,9 +248,8 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             let colMapping = [];
 
-            // [CHỨC NĂNG MỚI]: HARDCODE CHUẨN XÁC 100% CỘT THEO FILE VNPT
+            // [CHỨC NĂNG MỚI]: BỘ TỪ ĐIỂN ĐỐI CHIẾU CHUẨN XÁC 100% THEO FILE VNPT
             if (networkType === 'mbb_qoe') {
-                // File QoE: Cột G (Index 6) là Score, Cột H (Index 7) là Rank
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
                     { excelIdx: 3, dbCol: 'Site_Name' }, { excelIdx: 4, dbCol: 'Cell_Name' }, { excelIdx: 5, dbCol: 'Cell_ID' },
@@ -261,7 +260,6 @@ exports.handleImportData = async (req, res) => {
                     { excelIdx: 20, dbCol: 'In_Speed' }, { excelIdx: 21, dbCol: 'In_Latency' }, { excelIdx: 22, dbCol: 'In_Jitter' }, { excelIdx: 23, dbCol: 'In_PacketLoss' }
                 ];
             } else if (networkType === 'mbb_qos') {
-                // File QoS: Cột G (Index 6) là Rank, Cột H (Index 7) là Score
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
                     { excelIdx: 3, dbCol: 'Site_Name' }, { excelIdx: 4, dbCol: 'Cell_Name' }, { excelIdx: 5, dbCol: 'Cell_ID' },
@@ -273,12 +271,104 @@ exports.handleImportData = async (req, res) => {
                 ];
             } else {
                 excelHeaders.forEach((exHeader, idx) => {
-                    const normEx = normalizeStr(exHeader);
-                    if (normEx) {
-                        const match = dbCols.find(dbC => dbC.norm === normEx);
-                        if (match) {
-                            colMapping.push({ excelIdx: idx, dbCol: match.original });
+                    let h = String(exHeader).toLowerCase().trim();
+                    let mappedCol = null;
+
+                    if (networkType === 'kpi_4g') {
+                        if (h === 'site name') mappedCol = 'Site_name';
+                        else if (h.includes('celltype')) mappedCol = 'CellType';
+                        else if (h === 'district code') mappedCol = 'District_code';
+                        else if (h === 'cell name') mappedCol = 'Cell_name';
+                        else if (h === 'mimo') mappedCol = 'MIMO';
+                        else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
+                        else if (h.includes('user downlink average')) mappedCol = 'User_DL_Avg_Throughput_Kbps';
+                        else if (h.includes('user uplink average')) mappedCol = 'User_UL_Avg_Throughput_Kbps';
+                        else if (h.includes('untilizing rate downlink') || h.includes('utilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
+                        else if (h.includes('untilizing rate uplink') || h.includes('utilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
+                        else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                        else if (h.includes('cqi_4g') || h.includes('cqi 4g')) mappedCol = 'CQI_4G';
+                        else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
+                        else if (h.includes('erab setup success rate') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
+                        else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
+                        else if (h.includes('cs call setup success rate max')) mappedCol = 'CS_Call_Setup_SR_Max';
+                        else if (h.includes('call drop rate (volte)')) mappedCol = 'Call_Drop_Rate_VoLTE';
+                        else if (h.includes('ul traffic volte')) mappedCol = 'UL_Traffic_VoLTE_GB';
+                        else if (h.includes('dl traffic volte')) mappedCol = 'DL_Traffic_VoLTE_GB';
+                        else if (h.includes('avg ul throughput of services with a qci of 1')) mappedCol = 'Avg_UL_throughput_QCI_1';
+                        else if (h.includes('avg dl throughput of services with a qci of 1')) mappedCol = 'Avg_DL_throughput_QCI_1';
+                        else if (h === 'volte traffic (erl)') mappedCol = 'VoLTE_Traffic_Erl';
+                        else if (h === 'total traffic volte (gb)') mappedCol = 'Total_Traffic_VoLTE_GB';
+                        else if (h.includes('volte e-rab call setup')) mappedCol = 'VoLTE_ERAB_Call_Setup_SR';
+                        else if (h.includes('traffic volume ul')) mappedCol = 'Traffic_Volume_UL_GB';
+                        else if (h.includes('traffic volumn dl') || h.includes('traffic volume dl')) mappedCol = 'Traffic_Volumn_DL_GB';
+                        else if (h === 'total ue') mappedCol = 'Total_UE';
+                        else if (h === 'csfb_att') mappedCol = 'CSFB_ATT';
+                        else if (h.includes('intra-frequency ho success rates (volte)')) mappedCol = 'Intra_freq_HO_SR_VoLTE';
+                        else if (h.includes('inter-frequency ho success rates (volte)')) mappedCol = 'Inter_freq_HO_SR_VoLTE';
+                        else if (h.includes('srvcc success rate')) mappedCol = 'SRVCC_SR_LTE_to_WCDMA';
+                        else if (h.includes('intra_hosr_att')) mappedCol = 'INTRA_HOSR_ATT';
+                        else if (h.includes('intra-frequency ho (%)')) mappedCol = 'Intra_frequency_HO';
+                        else if (h.includes('intra enb ho sr total')) mappedCol = 'Intra_eNB_HO_SR_total';
+                        else if (h.includes('inter-frequency ho (%)')) mappedCol = 'Inter_frequency_HO';
+                        else if (h.includes('inter rat total ho sr')) mappedCol = 'Inter_RAT_Total_HO_SR';
+                        else if (h.includes('inter rat ho preparation success ratio')) mappedCol = 'Inter_RAT_HO_Prep_SR';
+                        else if (h.includes('inter-rat hosr (lte to wcdma)')) mappedCol = 'Inter_RAT_HOSR_LTE_to_WCDMA';
+                        else if (h.includes('inter rat ho sr (execution phase)')) mappedCol = 'Inter_RAT_HO_SR_Exec';
+                        else if (h === 'call setup success rate') mappedCol = 'Call_Setup_SR';
+                        else if (h.includes('e-utran initial context setup success ratio')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
+                    }
+                    else if (networkType === 'kpi_5g') {
+                        if (h === 'nhà cung cấp') mappedCol = 'Nha_cung_cap';
+                        else if (h === 'tỉnh') mappedCol = 'Tinh';
+                        else if (h === 'tên gnodeb') mappedCol = 'Ten_GNODEB';
+                        else if (h === 'tên cell') mappedCol = 'Ten_CELL';
+                        else if (h === 'mã vnp') mappedCol = 'Ma_VNP';
+                        else if (h === 'loại ne') mappedCol = 'Loai_NE';
+                        else if (h === 'gnodeb_id') mappedCol = 'GNODEB_ID';
+                        else if (h === 'cell_id') mappedCol = 'CELL_ID';
+                        else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
+                        else if (h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
+                        else if (h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
+                        else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                        else if (h === 'cqi_5g' || h === 'cqi 5g') mappedCol = 'CQI_5G';
+                        else if (h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
+                        else if (h === 'average user number') mappedCol = 'Average_User_Number';
+                        else if (h.includes('downlink resource block ultilization') || h.includes('downlink resource block utilization')) mappedCol = 'Downlink_Resource_Block_Ultilization';
+                        else if (h.includes('uplink resource block ultilization') || h.includes('uplink resource block utilization')) mappedCol = 'Uplink_Resource_Block_Ultilization';
+                        else if (h.includes('cell avaibility rate') || h.includes('cell availability rate')) mappedCol = 'Cell_avaibility_rate';
+                        else if (h === 'maximum user number') mappedCol = 'Maximum_User_Number';
+                        else if (h === 'ul traffic volume (gb)') mappedCol = 'UL_Traffic_Volume_GB';
+                        else if (h === 'dl traffic volume (gb)') mappedCol = 'DL_Traffic_Volume_GB';
+                        else if (h.includes('cell uplink average throughput')) mappedCol = 'Cell_Uplink_Avg_Throughput';
+                        else if (h.includes('cell downlink average throughput')) mappedCol = 'Cell_Downlink_Avg_Throughput';
+                        else if (h.includes('sgnb abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
+                        else if (h.includes('sgnb addition success rate')) mappedCol = 'SgNB_Addition_Success_Rate';
+                        else if (h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change';
+                    }
+                    else if (networkType === 'kpi_3g') {
+                        if (h === 'stt') mappedCol = 'STT';
+                        else if (h === 'nhà cung cấp') mappedCol = 'Nha_cung_cap';
+                        else if (h === 'tỉnh') mappedCol = 'Tinh';
+                        else if (h === 'tên rnc') mappedCol = 'Ten_RNC';
+                        else if (h === 'tên cell') mappedCol = 'Ten_CELL';
+                        else if (h === 'mã vnp') mappedCol = 'Ma_VNP';
+                        else if (h === 'loại ne') mappedCol = 'Loai_NE';
+                        else if (h === 'lac') mappedCol = 'LAC';
+                        else if (h === 'ci') mappedCol = 'CI';
+                        else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
+                    }
+
+                    // Nếu không có trong danh sách đặc biệt, dùng thuật toán chuẩn hóa Fallback
+                    if (!mappedCol) {
+                        const normEx = normalizeStr(exHeader);
+                        if (normEx) {
+                            const match = dbCols.find(dbC => dbC.norm === normEx);
+                            if (match) mappedCol = match.original;
                         }
+                    }
+
+                    if (mappedCol) {
+                        colMapping.push({ excelIdx: idx, dbCol: mappedCol });
                     }
                 });
             }
@@ -309,7 +399,8 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     if (val === undefined || val === '') val = null;
 
-                    if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code'].includes(map.dbCol)) {
+                    // Parse tất cả số liệu dạng chuỗi thành Float
+                    if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan'].includes(map.dbCol)) {
                          if (/^-?\d+,\d+$/.test(val)) {
                              val = parseFloat(val.replace(',', '.'));
                          }
