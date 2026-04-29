@@ -183,6 +183,7 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
+    // TẢI TRƯỚC CẤU TRÚC BẢNG TRONG DATABASE ĐỂ ĐỐI CHIẾU
     let dbCols = [];
     try {
         const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
@@ -269,24 +270,26 @@ exports.handleImportData = async (req, res) => {
                 ];
             } else {
                 excelHeaders.forEach((exHeader, idx) => {
-                    let h = String(exHeader).toLowerCase().trim();
+                    // Dọn dẹp ký tự thừa và BOM character (\ufeff)
+                    let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                     let mappedCol = null;
 
+                    // MAPPING THÔNG MINH BẰNG INCLUDES (CHỐNG LỖI CHÍNH TẢ)
                     if (networkType === 'kpi_4g') {
-                        if (h === 'site name') mappedCol = 'Site_name';
+                        if (h.includes('site name')) mappedCol = 'Site_name';
                         else if (h.includes('celltype')) mappedCol = 'CellType';
-                        else if (h === 'district code') mappedCol = 'District_code';
-                        else if (h === 'cell name') mappedCol = 'Cell_name';
-                        else if (h === 'mimo') mappedCol = 'MIMO';
-                        else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
+                        else if (h.includes('district code')) mappedCol = 'District_code';
+                        else if (h.includes('cell name')) mappedCol = 'Cell_name';
+                        else if (h.includes('mimo')) mappedCol = 'MIMO';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
                         else if (h.includes('user downlink average')) mappedCol = 'User_DL_Avg_Throughput_Kbps';
                         else if (h.includes('user uplink average')) mappedCol = 'User_UL_Avg_Throughput_Kbps';
-                        else if (h.includes('untilizing rate downlink') || h.includes('utilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
-                        else if (h.includes('untilizing rate uplink') || h.includes('utilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
+                        else if (h.includes('utilizing rate downlink') || h.includes('untilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
+                        else if (h.includes('utilizing rate uplink') || h.includes('untilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
                         else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
                         else if (h.includes('cqi_4g') || h.includes('cqi 4g')) mappedCol = 'CQI_4G';
                         else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
-                        else if (h.includes('erab setup success rate') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
+                        else if (h.includes('erab setup success') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
                         else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
                         else if (h.includes('cs call setup success rate max')) mappedCol = 'CS_Call_Setup_SR_Max';
                         else if (h.includes('call drop rate (volte)')) mappedCol = 'Call_Drop_Rate_VoLTE';
@@ -294,13 +297,13 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('dl traffic volte')) mappedCol = 'DL_Traffic_VoLTE_GB';
                         else if (h.includes('avg ul throughput of services with a qci of 1')) mappedCol = 'Avg_UL_throughput_QCI_1';
                         else if (h.includes('avg dl throughput of services with a qci of 1')) mappedCol = 'Avg_DL_throughput_QCI_1';
-                        else if (h === 'volte traffic (erl)') mappedCol = 'VoLTE_Traffic_Erl';
-                        else if (h === 'total traffic volte (gb)') mappedCol = 'Total_Traffic_VoLTE_GB';
+                        else if (h.includes('volte traffic (erl)')) mappedCol = 'VoLTE_Traffic_Erl';
+                        else if (h.includes('total traffic volte')) mappedCol = 'Total_Traffic_VoLTE_GB';
                         else if (h.includes('volte e-rab call setup')) mappedCol = 'VoLTE_ERAB_Call_Setup_SR';
                         else if (h.includes('traffic volume ul')) mappedCol = 'Traffic_Volume_UL_GB';
                         else if (h.includes('traffic volumn dl') || h.includes('traffic volume dl')) mappedCol = 'Traffic_Volumn_DL_GB';
-                        else if (h === 'total ue') mappedCol = 'Total_UE';
-                        else if (h === 'csfb_att') mappedCol = 'CSFB_ATT';
+                        else if (h.includes('total ue')) mappedCol = 'Total_UE';
+                        else if (h.includes('csfb_att') || h.includes('csfb att')) mappedCol = 'CSFB_ATT';
                         else if (h.includes('intra-frequency ho success rates (volte)')) mappedCol = 'Intra_freq_HO_SR_VoLTE';
                         else if (h.includes('inter-frequency ho success rates (volte)')) mappedCol = 'Inter_freq_HO_SR_VoLTE';
                         else if (h.includes('srvcc success rate')) mappedCol = 'SRVCC_SR_LTE_to_WCDMA';
@@ -309,77 +312,101 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('intra enb ho sr total')) mappedCol = 'Intra_eNB_HO_SR_total';
                         else if (h.includes('inter-frequency ho (%)')) mappedCol = 'Inter_frequency_HO';
                         else if (h.includes('inter rat total ho sr')) mappedCol = 'Inter_RAT_Total_HO_SR';
-                        else if (h.includes('inter rat ho preparation success ratio')) mappedCol = 'Inter_RAT_HO_Prep_SR';
+                        else if (h.includes('inter rat ho preparation')) mappedCol = 'Inter_RAT_HO_Prep_SR';
                         else if (h.includes('inter-rat hosr (lte to wcdma)')) mappedCol = 'Inter_RAT_HOSR_LTE_to_WCDMA';
                         else if (h.includes('inter rat ho sr (execution phase)')) mappedCol = 'Inter_RAT_HO_SR_Exec';
-                        else if (h === 'call setup success rate') mappedCol = 'Call_Setup_SR';
-                        else if (h.includes('e-utran initial context setup success ratio')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
+                        else if (h.includes('call setup success rate')) mappedCol = 'Call_Setup_SR';
+                        else if (h.includes('initial context setup success ratio')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
                     }
                     else if (networkType === 'kpi_5g') {
-                        if (h === 'nhà cung cấp') mappedCol = 'Nha_cung_cap';
-                        else if (h === 'tỉnh') mappedCol = 'Tinh';
-                        else if (h === 'tên gnodeb') mappedCol = 'Ten_GNODEB';
-                        else if (h === 'tên cell') mappedCol = 'Ten_CELL';
-                        else if (h === 'mã vnp') mappedCol = 'Ma_VNP';
-                        else if (h === 'loại ne') mappedCol = 'Loai_NE';
-                        else if (h === 'gnodeb_id') mappedCol = 'GNODEB_ID';
-                        else if (h === 'cell_id') mappedCol = 'CELL_ID';
-                        else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
+                        if (h.includes('nhà cung cấp')) mappedCol = 'Nha_cung_cap';
+                        else if (h.includes('tỉnh')) mappedCol = 'Tinh';
+                        else if (h.includes('tên gnodeb')) mappedCol = 'Ten_GNODEB';
+                        else if (h.includes('tên cell')) mappedCol = 'Ten_CELL';
+                        else if (h.includes('mã vnp')) mappedCol = 'Ma_VNP';
+                        else if (h.includes('loại ne')) mappedCol = 'Loai_NE';
+                        else if (h.includes('gnodeb_id')) mappedCol = 'GNODEB_ID';
+                        else if (h.includes('cell_id')) mappedCol = 'CELL_ID';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
                         else if (h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
                         else if (h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
                         else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
-                        else if (h === 'cqi_5g' || h === 'cqi 5g') mappedCol = 'CQI_5G';
+                        else if (h.includes('cqi_5g') || h.includes('cqi 5g')) mappedCol = 'CQI_5G';
                         else if (h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
-                        else if (h === 'average user number') mappedCol = 'Average_User_Number';
-                        else if (h.includes('downlink resource block ultilization') || h.includes('downlink resource block utilization')) mappedCol = 'Downlink_Resource_Block_Ultilization';
-                        else if (h.includes('uplink resource block ultilization') || h.includes('uplink resource block utilization')) mappedCol = 'Uplink_Resource_Block_Ultilization';
-                        else if (h.includes('cell avaibility rate') || h.includes('cell availability rate')) mappedCol = 'Cell_avaibility_rate';
-                        else if (h === 'maximum user number') mappedCol = 'Maximum_User_Number';
-                        else if (h === 'ul traffic volume (gb)') mappedCol = 'UL_Traffic_Volume_GB';
-                        else if (h === 'dl traffic volume (gb)') mappedCol = 'DL_Traffic_Volume_GB';
-                        else if (h.includes('cell uplink average throughput')) mappedCol = 'Cell_Uplink_Avg_Throughput';
-                        else if (h.includes('cell downlink average throughput')) mappedCol = 'Cell_Downlink_Avg_Throughput';
-                        else if (h.includes('sgnb abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
-                        else if (h.includes('sgnb addition success rate')) mappedCol = 'SgNB_Addition_Success_Rate';
+                        else if (h.includes('average user number')) mappedCol = 'Average_User_Number';
+                        else if (h.includes('downlink resource block')) mappedCol = 'Downlink_Resource_Block_Ultilization';
+                        else if (h.includes('uplink resource block')) mappedCol = 'Uplink_Resource_Block_Ultilization';
+                        else if (h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
+                        else if (h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
+                        else if (h.includes('ul traffic volume')) mappedCol = 'UL_Traffic_Volume_GB';
+                        else if (h.includes('dl traffic volume')) mappedCol = 'DL_Traffic_Volume_GB';
+                        else if (h.includes('cell uplink average')) mappedCol = 'Cell_Uplink_Avg_Throughput';
+                        else if (h.includes('cell downlink average')) mappedCol = 'Cell_Downlink_Avg_Throughput';
+                        else if (h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
+                        else if (h.includes('addition success rate')) mappedCol = 'SgNB_Addition_Success_Rate';
                         else if (h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change';
                     }
                     else if (networkType === 'kpi_3g') {
                         if (h === 'stt') mappedCol = 'STT';
-                        else if (h === 'nhà cung cấp') mappedCol = 'Nha_cung_cap';
-                        else if (h === 'tỉnh') mappedCol = 'Tinh';
-                        else if (h === 'tên rnc') mappedCol = 'Ten_RNC';
-                        else if (h === 'tên cell') mappedCol = 'Ten_CELL';
-                        else if (h === 'mã vnp') mappedCol = 'Ma_VNP';
-                        else if (h === 'loại ne') mappedCol = 'Loai_NE';
-                        else if (h === 'lac') mappedCol = 'LAC';
-                        else if (h === 'ci') mappedCol = 'CI';
-                        else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
+                        else if (h.includes('nhà cung cấp')) mappedCol = 'Nha_cung_cap';
+                        else if (h.includes('tỉnh')) mappedCol = 'Tinh';
+                        else if (h.includes('tên rnc')) mappedCol = 'Ten_RNC';
+                        else if (h.includes('tên cell')) mappedCol = 'Ten_CELL';
+                        else if (h.includes('mã vnp')) mappedCol = 'Ma_VNP';
+                        else if (h.includes('loại ne')) mappedCol = 'Loai_NE';
+                        else if (h.includes('lac') && !h.includes('black')) mappedCol = 'LAC';
+                        else if (h.includes('ci') && h.length <= 4) mappedCol = 'CI';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
                     }
 
-                    if (!mappedCol) {
+                    // TẤM KHIÊN BẢO VỆ CSDL: Đối soát xem cột đó có thực sự tồn tại trong DB không
+                    let actualDbCol = null;
+                    if (mappedCol) {
+                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                        if (dbMatch) {
+                            actualDbCol = dbMatch.original;
+                        }
+                    }
+                    
+                    // Nếu không có ánh xạ sẵn, chạy thuật toán đồng bộ tên (Fallback)
+                    if (!actualDbCol) {
                         const normEx = normalizeStr(exHeader);
                         if (normEx) {
                             const match = dbCols.find(dbC => dbC.norm === normEx);
-                            if (match) mappedCol = match.original;
+                            if (match) actualDbCol = match.original;
                         }
                     }
 
-                    if (mappedCol) {
-                        colMapping.push({ excelIdx: idx, dbCol: mappedCol });
+                    if (actualDbCol) {
+                        colMapping.push({ excelIdx: idx, dbCol: actualDbCol });
                     }
                 });
             }
+
+            // Loại bỏ các cột ánh xạ trùng lặp để chống sập SQL
+            let uniqueMappings = [];
+            let seenDbCols = new Set();
+            colMapping.forEach(m => {
+                if (!seenDbCols.has(m.dbCol)) {
+                    seenDbCols.add(m.dbCol);
+                    uniqueMappings.push(m);
+                }
+            });
+            colMapping = uniqueMappings;
 
             if (colMapping.length === 0) {
                  errorLogs.push(`File ${file.originalname}: Không khớp được cột nào với CSDL.`);
                  continue;
             }
 
-            let hasTuanCol = weekPrefix ? dbCols.some(c => c.original === 'Tuan') : false;
+            let hasTuanCol = weekPrefix ? dbCols.some(c => c.original.toLowerCase() === 'tuan') : false;
             let lastValidDate = null; 
 
             const insertData = [];
             
+            // Danh sách các cột là Dạng Chữ (Còn lại là Dạng Số)
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan'];
+
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
                 if (!row || row.length === 0) continue; 
@@ -390,15 +417,17 @@ exports.handleImportData = async (req, res) => {
                 }
 
                 const rowObj = {};
-                let hasData = false;
+                let hasKpiData = false;
 
                 colMapping.forEach(map => {
                     let val = row[map.excelIdx];
                     if (val === undefined || val === '') val = null;
 
-                    if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan'].includes(map.dbCol)) {
+                    let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
+
+                    if (val !== null && typeof val === 'string' && !isStrCol) {
                          if (/^-?\d+,\d+$/.test(val)) {
-                             val = parseFloat(val.replace(',', '.'));
+                             val = parseFloat(val.replace(',', '.')); // Sửa lỗi dấu phẩy thập phân
                          }
                     }
 
@@ -413,32 +442,25 @@ exports.handleImportData = async (req, res) => {
                     }
                     
                     rowObj[map.dbCol] = val;
-                    if (val !== null) hasData = true;
+                    if (val !== null) hasKpiData = true;
                 });
 
-                if (weekPrefix && hasTuanCol) {
-                    rowObj['Tuan'] = weekPrefix;
-                    hasData = true;
-                }
-
-                if (hasData) {
+                if (hasKpiData) {
+                    if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
                     insertData.push(rowObj);
                 }
             }
 
             // =========================================================
-            // [CHỨC NĂNG MỚI] GHI ĐÈ KPI THEO NGÀY (CHỐNG TRÙNG LẶP)
-            // Quét các ngày có trong File để xóa dữ liệu cũ trong Database
+            // GHI ĐÈ KPI THEO NGÀY (CHỐNG TRÙNG LẶP DỮ LIỆU)
             // =========================================================
             if (insertData.length > 0 && isKpiImported) {
-                // Lấy ra danh sách các ngày duy nhất có trong file import
                 const uniqueDates = [...new Set(insertData.map(r => r.Thoi_gian).filter(Boolean))];
                 
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
                     try {
                         await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates);
-                        console.log(`Đã dọn dẹp dữ liệu cũ của các ngày: ${uniqueDates.join(', ')} trong bảng ${networkType} để ghi đè.`);
                     } catch (delErr) {
                         console.error(`Lỗi xóa dữ liệu cũ các ngày ${uniqueDates.join(', ')}:`, delErr);
                     }
@@ -461,7 +483,8 @@ exports.handleImportData = async (req, res) => {
 
         } catch (error) {
             console.error(`Lỗi khi xử lý file ${file.originalname}:`, error);
-            errorLogs.push(`File ${file.originalname} bị lỗi hoặc sai định dạng.`);
+            // Ghi nhận chính xác dòng lỗi văng ra màn hình
+            errorLogs.push(`File ${file.originalname} bị từ chối do lỗi cấu trúc (${error.message}).`);
         }
     } 
 
