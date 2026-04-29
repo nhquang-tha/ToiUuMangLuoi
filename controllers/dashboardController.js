@@ -156,7 +156,7 @@ exports.getImportPage = async (req, res) => {
 };
 
 // =====================================================================
-// THUẬT TOÁN IMPORT THÔNG MINH (BẮT TẤT CẢ LỖI CHÍNH TẢ)
+// THUẬT TOÁN IMPORT THÔNG MINH (TỰ ĐỘNG XÓA DỮ LIỆU CŨ TRƯỚC KHI GHI)
 // =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -183,7 +183,6 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
-    // Lấy cấu trúc bảng đích
     let dbCols = [];
     try {
         const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
@@ -196,7 +195,7 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
-    // GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN ĐÃ CÓ
+    // GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN (CHO QOE/QOS)
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
         try {
             await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]);
@@ -220,11 +219,11 @@ exports.handleImportData = async (req, res) => {
             let dataStartIdx = -1;
 
             if (networkType === 'mbb_qoe') {
-                headerRowIdx = 4; // Dòng 5 trong Excel
-                dataStartIdx = 5; // Dòng 6 bắt đầu dữ liệu
+                headerRowIdx = 4;
+                dataStartIdx = 5;
             } else if (networkType === 'mbb_qos') {
-                headerRowIdx = 4; // Dòng 5 trong Excel
-                dataStartIdx = 9; // Dòng 10 bắt đầu dữ liệu
+                headerRowIdx = 4;
+                dataStartIdx = 9;
             } else {
                 for (let i = 0; i < Math.min(20, rawData.length); i++) {
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
@@ -248,7 +247,6 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             let colMapping = [];
 
-            // [CHỨC NĂNG MỚI]: BỘ TỪ ĐIỂN ĐỐI CHIẾU CHUẨN XÁC 100% THEO FILE VNPT
             if (networkType === 'mbb_qoe') {
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
@@ -358,7 +356,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h === 'thời gian' || h === 'thoi gian') mappedCol = 'Thoi_gian';
                     }
 
-                    // Nếu không có trong danh sách đặc biệt, dùng thuật toán chuẩn hóa Fallback
                     if (!mappedCol) {
                         const normEx = normalizeStr(exHeader);
                         if (normEx) {
@@ -399,7 +396,6 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     if (val === undefined || val === '') val = null;
 
-                    // Parse tất cả số liệu dạng chuỗi thành Float
                     if (val !== null && typeof val === 'string' && !['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan'].includes(map.dbCol)) {
                          if (/^-?\d+,\d+$/.test(val)) {
                              val = parseFloat(val.replace(',', '.'));
@@ -430,6 +426,26 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
+            // =========================================================
+            // [CHỨC NĂNG MỚI] GHI ĐÈ KPI THEO NGÀY (CHỐNG TRÙNG LẶP)
+            // Quét các ngày có trong File để xóa dữ liệu cũ trong Database
+            // =========================================================
+            if (insertData.length > 0 && isKpiImported) {
+                // Lấy ra danh sách các ngày duy nhất có trong file import
+                const uniqueDates = [...new Set(insertData.map(r => r.Thoi_gian).filter(Boolean))];
+                
+                if (uniqueDates.length > 0) {
+                    const placeholders = uniqueDates.map(() => '?').join(',');
+                    try {
+                        await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates);
+                        console.log(`Đã dọn dẹp dữ liệu cũ của các ngày: ${uniqueDates.join(', ')} trong bảng ${networkType} để ghi đè.`);
+                    } catch (delErr) {
+                        console.error(`Lỗi xóa dữ liệu cũ các ngày ${uniqueDates.join(', ')}:`, delErr);
+                    }
+                }
+            }
+
+            // Bắt đầu Insert hàng loạt
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
@@ -475,7 +491,6 @@ exports.getDashboardData = async (req, res) => {
 exports.getWorstCellsData = async (req, res) => {
     const days = parseInt(req.query.days) || 1; 
     try {
-        // Lấy danh sách X ngày mới nhất có trong hệ thống
         const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
         if(datesRaw.length === 0) return res.json([]);
         
@@ -490,7 +505,6 @@ exports.getWorstCellsData = async (req, res) => {
         
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // Quét tìm trạm vi phạm LIÊN TỤC trong số ngày đã chọn (Tránh lỗi ONLY_FULL_GROUP_BY)
         const query = `
             SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
                    AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
@@ -513,7 +527,6 @@ exports.getWorstCellsData = async (req, res) => {
         
         const [rows] = await db.query(query, [...targetDates, days]);
         
-        // Định dạng lại kết quả trả về
         const formattedRows = rows.map(r => {
             let vios = [];
             if (r.User_DL_Avg_Throughput_Kbps < 7000) vios.push('Thput Thấp');
@@ -591,7 +604,6 @@ exports.getCongestion3gData = async (req, res) => {
 
 exports.getTrafficDownData = async (req, res) => {
     try {
-        // Lấy danh sách các ngày có dữ liệu
         const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
         
         let uniqueDates = datesRaw.map(r => r.Thoi_gian);
@@ -600,7 +612,6 @@ exports.getTrafficDownData = async (req, res) => {
             return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`).getTime() - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`).getTime();
         }); 
 
-        // Cần ít nhất 10 ngày để so sánh (Hôm nay->Hôm kia vs Cùng kỳ tuần trước) và tính Trung bình 7 ngày
         if(uniqueDates.length < 10) {
             return res.json({ error: "Cần ít nhất 10 ngày dữ liệu trong hệ thống để thực hiện thuật toán 'Suy giảm 3 ngày liên tiếp' và 'Tính trung bình 7 ngày'." });
         }
@@ -608,15 +619,13 @@ exports.getTrafficDownData = async (req, res) => {
         const targetDates = uniqueDates.slice(0, 10);
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // Khai báo Index ngày để dễ so sánh
-        const d0 = targetDates[0]; // Hôm nay
-        const d1 = targetDates[1]; // Hôm qua
-        const d2 = targetDates[2]; // Hôm kia
-        const d7 = targetDates[7]; // Tuần trước (cùng thứ hôm nay)
-        const d8 = targetDates[8]; // Tuần trước (cùng thứ hôm qua)
-        const d9 = targetDates[9]; // Tuần trước (cùng thứ hôm kia)
+        const d0 = targetDates[0]; 
+        const d1 = targetDates[1]; 
+        const d2 = targetDates[2]; 
+        const d7 = targetDates[7]; 
+        const d8 = targetDates[8]; 
+        const d9 = targetDates[9]; 
 
-        // 1. Quét dữ liệu mức CELL (Đã BỎ lọc CellType LIKE '%1800%' để quét toàn bộ trạm)
         const [rows] = await db.query(`
             SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB
             FROM kpi_4g 
@@ -640,16 +649,13 @@ exports.getTrafficDownData = async (req, res) => {
             let t0 = d[d0], t1 = d[d1], t2 = d[d2];
             let t7 = d[d7], t8 = d[d8], t9 = d[d9];
 
-            // Tính Traffic TB 7 ngày trước (Từ d1 đến d7)
             let sum7 = 0;
             for(let i = 1; i <= 7; i++) { sum7 += d[targetDates[i]]; }
             let avg7 = sum7 / 7;
 
-            // TIÊU CHÍ 1: Cell Không Lưu Lượng
             if (t0 < 0.1 && avg7 > 2) {
                 zeroTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), avg7: avg7.toFixed(2) });
             } 
-            // TIÊU CHÍ 2: Cell Suy Giảm (Hôm nay < 70% tuần trước AND Tuần trước > 1 AND 3 ngày gần nhất đều giảm)
             else if (t0 < (0.7 * t7) && t7 > 1 && t1 < t8 && t2 < t9) {
                 let ratio = ((t0 / t7) * 100).toFixed(1);
                 droppedTrafficCells.push({ Cell_name: cell, t0: t0.toFixed(2), t7: t7.toFixed(2), ratio: ratio });
@@ -658,7 +664,6 @@ exports.getTrafficDownData = async (req, res) => {
         zeroTrafficCells.sort((a,b) => b.avg7 - a.avg7);
         droppedTrafficCells.sort((a,b) => a.ratio - b.ratio);
 
-        // 2. Quét dữ liệu mức POI (Gộp tổng Cell trong POI)
         const [poiRows] = await db.query(`
             SELECT p.POI, k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as Total_Traffic
             FROM kpi_4g k
@@ -682,7 +687,6 @@ exports.getTrafficDownData = async (req, res) => {
             let pt0 = p[d0], pt1 = p[d1], pt2 = p[d2];
             let pt7 = p[d7], pt8 = p[d8], pt9 = p[d9];
 
-            // TIÊU CHÍ 3: POI Suy Giảm (Hôm nay < 70% tuần trước AND 3 ngày gần nhất đều giảm)
             if (pt0 < (0.7 * pt7) && pt1 < pt8 && pt2 < pt9) { 
                 let ratio = ((pt0 / pt7) * 100).toFixed(1);
                 droppedTrafficPOIs.push({ POI: poi, t0: pt0.toFixed(2), t7: pt7.toFixed(2), ratio: ratio });
@@ -704,9 +708,6 @@ exports.getTrafficDownData = async (req, res) => {
     }
 };
 
-// =====================================================================
-// CHỨC NĂNG MỚI: XÓA SẠCH DỮ LIỆU ĐA NĂNG (TỪ NÚT BẤM GIAO DIỆN)
-// =====================================================================
 exports.resetImportedData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     
