@@ -10,6 +10,14 @@ exports.getQoeQosAnalyticsPage = (req, res) => {
     res.render('qoe_qos_analytics', { title: 'QoE/QoS Analytics', page: 'QoE/QoS Analytics', currentUser: activeUser });
 };
 
+const cleanKeyword = (str) => {
+    if (!str) return '';
+    return String(str).toUpperCase()
+                      .replace(/^(3G|4G|5G)[-\s_]?/i, '') 
+                      .replace(/[-\s_]?(THA|TH)$/i, '')   
+                      .trim();
+};
+
 exports.getKpiData = async (req, res) => {
     const network = req.query.network || '4g';
     const type = req.query.type || 'keyword';
@@ -18,28 +26,44 @@ exports.getKpiData = async (req, res) => {
     if (!value) return res.json([]);
 
     try {
-        let query = `SELECT * FROM kpi_${network}`;
+        let query = `SELECT k.* FROM kpi_${network} k`;
         let params = [];
 
         if (type === 'keyword') {
-            const values = value.split(',').map(s => s.trim()).filter(s => s);
-            const placeholders = values.map(() => '?').join(',');
-            let cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
-            let siteCol = network === '4g' ? 'Site_name' : 'Ten_CELL';
-            query += ` WHERE ${cellCol} IN (${placeholders}) OR ${siteCol} IN (${placeholders})`;
-            params = [...values, ...values];
+            const rawValues = value.split(',').map(s => s.trim()).filter(s => s);
+            let conditions = [];
+            
+            rawValues.forEach(v => {
+                const cleanV = cleanKeyword(v);
+
+                if (network === '4g') {
+                    // Mạng 4G: Bắt chính xác Cell_name và Site_name theo DB
+                    conditions.push(`(k.Cell_name LIKE ? OR k.Site_name LIKE ?)`);
+                    params.push(`%${cleanV}%`, `%${cleanV}%`);
+                } else if (network === '3g') {
+                    conditions.push(`(k.Ten_CELL LIKE ? OR k.Ten_CELL IN (SELECT Cell_code FROM rf_3g WHERE Site_code LIKE ?) OR k.Ten_CELL IN (SELECT CELL_NAME FROM rf_3g WHERE Site_code LIKE ?))`);
+                    params.push(`%${cleanV}%`, `%${cleanV}%`, `%${cleanV}%`);
+                } else { 
+                    // Mạng 5G: Bắt chính xác Ten_CELL và Ten_GNODEB theo DB
+                    conditions.push(`(k.Ten_CELL LIKE ? OR k.Ten_GNODEB LIKE ?)`);
+                    params.push(`%${cleanV}%`, `%${cleanV}%`);
+                }
+            });
+
+            query += ` WHERE ` + conditions.join(' OR ');
+            
         } else if (type === 'poi') {
-            let poiCellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
-            query += ` JOIN poi_${network} ON kpi_${network}.${poiCellCol} = poi_${network}.Cell_Code WHERE poi_${network}.POI = ?`;
+            let poiCellCol = (network === '4g') ? 'Cell_name' : 'Ten_CELL';
+            query += ` JOIN poi_${network} p ON k.${poiCellCol} = p.Cell_Code WHERE p.POI = ?`;
             params = [value];
         }
         
-        query += ` ORDER BY id ASC LIMIT 5000`; 
+        query += ` ORDER BY k.id ASC LIMIT 5000`; 
         const [rows] = await db.query(query, params);
         res.json(rows);
 
     } catch (error) {
-        console.error("Lỗi lấy dữ liệu KPI:", error);
+        console.error("Lỗi lấy dữ liệu KPI:", error.message);
         res.status(500).json({ error: "Lỗi truy xuất CSDL." });
     }
 };
@@ -49,11 +73,17 @@ exports.getQoeQosData = async (req, res) => {
     if (!value) return res.json({ qoe: [], qos: [] });
 
     try {
-        const values = value.split(',').map(s => s.trim()).filter(s => s);
-        const placeholders = values.map(() => '?').join(',');
-        let params = [...values, ...values, ...values];
+        const rawValues = value.split(',').map(s => s.trim()).filter(s => s);
+        let conditions = [];
+        let params = [];
 
-        const queryStr = ` WHERE Cell_Name IN (${placeholders}) OR Cell_ID IN (${placeholders}) OR Site_Name IN (${placeholders}) ORDER BY id ASC LIMIT 5000`;
+        rawValues.forEach(v => {
+            const cleanV = cleanKeyword(v);
+            conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
+            params.push(`%${cleanV}%`, `%${cleanV}%`);
+        });
+
+        const queryStr = ` WHERE ` + conditions.join(' OR ') + ` ORDER BY id ASC LIMIT 5000`;
 
         const [qoeRows] = await db.query(`SELECT * FROM mbb_qoe` + queryStr, params);
         const [qosRows] = await db.query(`SELECT * FROM mbb_qos` + queryStr, params);
@@ -101,54 +131,57 @@ exports.getPoiData = async (req, res) => {
     const poi = req.query.poi;
     if (!poi) return res.json({ data: [], has4g: false, has5g: false });
 
+    let kpi4g = [];
+    let kpi5g = [];
+
     try {
-        const [kpi4g] = await db.query(`
+        const [rows] = await db.query(`
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g
             FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code
             WHERE p.POI = ? GROUP BY k.Thoi_gian
         `, [poi]);
+        kpi4g = rows;
+    } catch (error) { console.error("Lỗi POI 4G Fallback:", error.message); }
 
-        const [kpi5g] = await db.query(`
+    try {
+        const [rows] = await db.query(`
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g
             FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code
             WHERE p.POI = ? GROUP BY k.Thoi_gian
         `, [poi]);
+        kpi5g = rows;
+    } catch (error) { console.error("Bỏ qua lỗi POI 5G:", error.message); }
 
-        let combinedData = {};
-        
-        kpi4g.forEach(row => {
-            combinedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, traffic_4g: row.traffic_4g, thput_4g: row.thput_4g };
-        });
-
-        kpi5g.forEach(row => {
-            if (!combinedData[row.Thoi_gian]) {
-                combinedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
-            }
-            combinedData[row.Thoi_gian].traffic_5g = row.traffic_5g;
-            combinedData[row.Thoi_gian].thput_5g = row.thput_5g;
-        });
-
-        const sortedData = Object.values(combinedData).sort((a, b) => {
-            const dateA = a.Thoi_gian.split('/').reverse().join('');
-            const dateB = b.Thoi_gian.split('/').reverse().join('');
-            return dateA.localeCompare(dateB);
-        });
-
-        res.json({
-            data: sortedData,
-            has4g: kpi4g.length > 0,
-            has5g: kpi5g.length > 0
-        });
-
-    } catch (error) {
-        console.error("Lỗi lấy dữ liệu POI Chart:", error);
-        res.status(500).json({ error: "Lỗi CSDL khi load POI Data." });
+    if (kpi4g.length === 0 && kpi5g.length === 0) {
+        return res.json({ data: [], has4g: false, has5g: false });
     }
-};
 
-// =====================================================================
-// CHỨC NĂNG: TỐI ƯU QOE / QOS 5 BƯỚC KHÉP KÍN
-// =====================================================================
+    let combinedData = {};
+    
+    kpi4g.forEach(row => {
+        combinedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, traffic_4g: row.traffic_4g, thput_4g: row.thput_4g };
+    });
+
+    kpi5g.forEach(row => {
+        if (!combinedData[row.Thoi_gian]) {
+            combinedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
+        }
+        combinedData[row.Thoi_gian].traffic_5g = row.traffic_5g;
+        combinedData[row.Thoi_gian].thput_5g = row.thput_5g;
+    });
+
+    const sortedData = Object.values(combinedData).sort((a, b) => {
+        const dateA = a.Thoi_gian.split('/').reverse().join('');
+        const dateB = b.Thoi_gian.split('/').reverse().join('');
+        return dateA.localeCompare(dateB);
+    });
+
+    res.json({
+        data: sortedData,
+        has4g: kpi4g.length > 0,
+        has5g: kpi5g.length > 0
+    });
+};
 
 exports.getOptimizingPage = async (req, res) => {
     const activeUser = res.locals.currentUser || req.session.user || req.user;
@@ -185,7 +218,6 @@ exports.getOptimizingData = async (req, res) => {
     if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
 
     try {
-        // BƯỚC 1: TÌM VÙNG TRŨNG (BAD CELLS - Sử dụng cột Rank/Sao thay vì điểm Score phần trăm)
         const queryBadCells = `
             SELECT Cell_Name, QoE_Rank as Score, 'Vi phạm QoE' as Type FROM mbb_qoe WHERE Tuan = ? AND QoE_Rank < 3
             UNION
@@ -197,7 +229,6 @@ exports.getOptimizingData = async (req, res) => {
             return res.json({ message: "Mạng lưới rất tốt! Không tìm thấy Cell nào có điểm QoE/QoS < 3 trong tuần này.", data: null });
         }
 
-        // BƯỚC 2: ĐỐI SOÁT BLACKLIST (SÀNG LỌC)
         let blacklistedCount = 0;
         let validCellsObj = {};
         
@@ -229,26 +260,29 @@ exports.getOptimizingData = async (req, res) => {
              return res.json({ message: `Đã lọc ${blacklistedCount} trạm Blacklist bất khả kháng. Hiện không còn trạm nào cần phân tích khẩn cấp.`, data: null });
         }
 
-        // BƯỚC 3: PHÂN TÍCH VI MÔ (ÁNH XẠ SANG BẢNG KPI 4G ĐỂ BẮT BỆNH)
         const placeholders = targetCells.map(() => '?').join(',');
-        const queryKpi = `
-            SELECT Cell_name,
-                   AVG(User_DL_Avg_Throughput_Kbps) as thput,
-                   AVG(Downlink_Latency) as latency,
-                   AVG(RB_Util_Rate_DL) as prb,
-                   AVG(CQI_4G) as cqi,
-                   AVG(eRAB_Setup_SR_All) as erab,
-                   AVG(Service_Drop_all) as drop_rate
-            FROM kpi_4g
-            WHERE Cell_name IN (${placeholders})
-            GROUP BY Cell_name
-        `;
-        const [kpiData] = await db.query(queryKpi, targetCells);
+        let kpiData = [];
+        
+        try {
+            let queryKpi = `
+                SELECT Cell_name,
+                       AVG(User_DL_Avg_Throughput_Kbps) as thput,
+                       AVG(Downlink_Latency) as latency,
+                       AVG(RB_Util_Rate_DL) as prb,
+                       AVG(CQI_4G) as cqi,
+                       AVG(eRAB_Setup_SR_All) as erab,
+                       AVG(Service_Drop_all) as drop_rate
+                FROM kpi_4g
+                WHERE Cell_name IN (${placeholders})
+                GROUP BY Cell_name
+            `;
+            [kpiData] = await db.query(queryKpi, targetCells);
+        } catch (error) { console.error("Lỗi lấy dữ liệu KPI 4G cho Tối Ưu:", error); }
 
-        let group1 = []; // Core/Truyền dẫn
-        let group2 = []; // Nghẽn Vô tuyến
-        let group3 = []; // Nhiễu/Phần cứng/Vùng phủ
-        let groupUnknown = []; // Cần theo dõi thêm
+        let group1 = []; 
+        let group2 = []; 
+        let group3 = []; 
+        let groupUnknown = []; 
 
         kpiData.forEach(row => {
             const thput = parseFloat(row.thput) || 0;
@@ -271,19 +305,10 @@ exports.getOptimizingData = async (req, res) => {
                 }
             };
 
-            // THUẬT TOÁN CHẨN ĐOÁN BỆNH
-            if (thput < 15000 && latency > 100) {
-                group1.push(cellInfo);
-            } 
-            else if (prb > 65) {
-                group2.push(cellInfo);
-            } 
-            else if (cqi < 90 || erab < 98.5 || drop_rate > 1) {
-                group3.push(cellInfo);
-            } 
-            else {
-                groupUnknown.push(cellInfo);
-            }
+            if (thput < 15000 && latency > 100) { group1.push(cellInfo); } 
+            else if (prb > 65) { group2.push(cellInfo); } 
+            else if (cqi < 90 || erab < 98.5 || drop_rate > 1) { group3.push(cellInfo); } 
+            else { groupUnknown.push(cellInfo); }
             
             const idx = targetCells.indexOf(row.Cell_name);
             if (idx > -1) targetCells.splice(idx, 1);
