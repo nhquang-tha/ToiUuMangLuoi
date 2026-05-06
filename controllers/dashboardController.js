@@ -156,7 +156,7 @@ exports.getImportPage = async (req, res) => {
 };
 
 // =====================================================================
-// THUẬT TOÁN IMPORT THÔNG MINH (BẢN VÁ LỖI MAPPING 5G)
+// THUẬT TOÁN IMPORT THÔNG MINH (DUAL-MAPPING BẢO VỆ 100% KPI 5G)
 // =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -183,7 +183,6 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
-    // TẢI TRƯỚC CẤU TRÚC BẢNG TRONG DATABASE ĐỂ ĐỐI CHIẾU
     let dbCols = [];
     try {
         const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
@@ -310,34 +309,36 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('call setup success rate')) mappedCol = 'Call_Setup_SR';
                         else if (h.includes('initial context setup success ratio')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
                     }
-                    // BẢN VÁ 5G: FIX ÁNH XẠ CHUẨN XÁC VỚI DATABASE
+                    // BẢN VÁ 5G MỚI NHẤT: BẮT ĐÚNG CẢ FILE PMS CŨ VÀ FILE kpi5gprovince MỚI
                     else if (networkType === 'kpi_5g') {
-                        if (h.includes('nhà cung cấp')) mappedCol = 'Nha_cung_cap';
-                        else if (h.includes('tỉnh')) mappedCol = 'Tinh';
-                        else if (h.includes('tên gnodeb')) mappedCol = 'Ten_GNODEB';
-                        else if (h.includes('tên cell')) mappedCol = 'Ten_CELL';
-                        else if (h.includes('mã vnp')) mappedCol = 'Ma_VNP';
-                        else if (h.includes('loại ne')) mappedCol = 'Loai_NE';
-                        else if (h.includes('gnodeb_id')) mappedCol = 'GNODEB_ID';
-                        else if (h.includes('cell_id')) mappedCol = 'CELL_ID';
+                        if (h.includes('nhà cung cấp') || h === 'nha_cung_cap') mappedCol = 'Nha_cung_cap';
+                        else if (h.includes('tỉnh') || h === 'tinh') mappedCol = 'Tinh';
+                        else if (h.includes('tên gnodeb') || h === 'ten_gnodeb') mappedCol = 'Ten_GNODEB';
+                        else if (h.includes('tên cell') || h === 'ten_cell') mappedCol = 'Ten_CELL';
+                        else if (h.includes('mã vnp') || h === 'ma_vnp') mappedCol = 'Ma_VNP';
+                        else if (h.includes('loại ne') || h === 'loai_ne') mappedCol = 'Loai_NE';
+                        else if (h.includes('gnodeb_id') || h.includes('gnodeb id')) mappedCol = 'GNODEB_ID';
+                        else if (h.includes('cell_id') || h.includes('cell id')) mappedCol = 'CELL_ID';
                         else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
-                        else if (h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
-                        else if (h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
-                        else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
-                        else if (h.includes('cqi')) mappedCol = 'CQI_5G'; // Bao hàm cả cqi_5g và CQI 5G
-                        else if (h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
-                        else if (h.includes('average user number')) mappedCol = 'Average_User_Number';
-                        else if (h.includes('downlink resource block')) mappedCol = 'DL_RB_Ultilization'; // FIX
-                        else if (h.includes('uplink resource block')) mappedCol = 'UL_RB_Ultilization'; // FIX
-                        else if (h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
-                        else if (h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
-                        else if (h.includes('ul traffic volume')) mappedCol = 'UL_Traffic_Volume_GB';
-                        else if (h.includes('dl traffic volume')) mappedCol = 'DL_Traffic_Volume_GB';
-                        else if (h.includes('cell uplink average')) mappedCol = 'Cell_UL_Avg_Throughput'; // FIX
-                        else if (h.includes('cell downlink average')) mappedCol = 'Cell_DL_Avg_Throughput'; // FIX
-                        else if (h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
-                        else if (h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR'; // FIX
-                        else if (h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2'; // FIX
+                        
+                        // Ánh xạ linh hoạt nhận diện cả 2 cấu trúc file xuất của VNPT
+                        else if (h.includes('user_dl_avg_throughput') || h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
+                        else if (h.includes('user_ul_avg_throughput') || h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
+                        else if (h === 'traffic' || h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                        else if (h.includes('cqi_5g') || h.includes('cqi 5g') || h === 'cqi') mappedCol = 'CQI_5G';
+                        else if (h.includes('intra_sgnb_ps_change') || h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
+                        else if (h.includes('user_avg_number') || h.includes('average user number')) mappedCol = 'Average_User_Number';
+                        else if (h.includes('dlink_res_blk_ult') || h.includes('downlink resource block')) mappedCol = 'DL_RB_Ultilization';
+                        else if (h.includes('ulink_res_blk_ult') || h.includes('uplink resource block')) mappedCol = 'UL_RB_Ultilization';
+                        else if (h.includes('cell_avaibility_rate') || h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
+                        else if (h.includes('user_max_number') || h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
+                        else if (h.includes('ul_traffic_volume') || h.includes('ul traffic volume')) mappedCol = 'UL_Traffic_Volume_GB';
+                        else if (h.includes('dl_traffic_volume') || h.includes('dl traffic volume')) mappedCol = 'DL_Traffic_Volume_GB';
+                        else if (h.includes('cell_ul_avg_throughput') || h.includes('cell uplink average')) mappedCol = 'Cell_UL_Avg_Throughput';
+                        else if (h.includes('cell_dl_avg_throughput') || h.includes('cell downlink average')) mappedCol = 'Cell_DL_Avg_Throughput';
+                        else if (h.includes('sgnb_abn_release_rate') || h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
+                        else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
+                        else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
                     }
                     else if (networkType === 'kpi_3g') {
                         if (h === 'stt') mappedCol = 'STT';
