@@ -156,7 +156,7 @@ exports.getImportPage = async (req, res) => {
 };
 
 // =====================================================================
-// THUẬT TOÁN IMPORT THÔNG MINH (DUAL-MAPPING BẢO VỆ 100% KPI 5G)
+// THUẬT TOÁN IMPORT THÔNG MINH (DUAL-MAPPING & POI)
 // =====================================================================
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -181,24 +181,33 @@ exports.handleImportData = async (req, res) => {
     }
 
     let totalImported = 0;
+    let errorLogs = [];
+
+    // TẢI TRƯỚC CẤU TRÚC BẢNG TRONG DATABASE ĐỂ ĐỐI CHIẾU
+    let dbCols = [];
+    try {
+        const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
+        dbCols = cols.map(c => ({
+            original: c.Field,
+            norm: normalizeStr(c.Field)
+        }));
+    } catch (e) {
+        errorLogs.push(`Không tìm thấy bảng ${networkType} trong CSDL.`);
+        return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
+    }
+
     // GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN (CHO QOE/QOS)
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
         try {
             await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]);
-            console.log(`Đã dọn dẹp dữ liệu cũ của ${weekPrefix} trong bảng ${networkType} để chuẩn bị ghi đè.`);
-        } catch (delErr) {
-            console.error(`Lỗi khi xóa dữ liệu cũ của ${weekPrefix}:`, delErr);
-        }
+        } catch (delErr) { console.error(`Lỗi khi xóa dữ liệu cũ của ${weekPrefix}:`, delErr); }
     }
 
-    // [TÍNH NĂNG MỚI]: TỰ ĐỘNG XÓA DỮ LIỆU POI CŨ TRƯỚC KHI IMPORT MỚI
+    // TỰ ĐỘNG XÓA DỮ LIỆU CŨ CỦA POI TRƯỚC KHI IMPORT MỚI
     if (networkType === 'poi_4g' || networkType === 'poi_5g') {
         try {
             await db.query(`TRUNCATE TABLE ${networkType}`);
-            console.log(`Đã dọn dẹp dữ liệu cũ của bảng ${networkType} để ghi đè danh sách mới.`);
-        } catch (delErr) {
-            console.error(`Lỗi khi xóa dữ liệu cũ của ${networkType}:`, delErr);
-        }
+        } catch (delErr) { console.error(`Lỗi khi xóa dữ liệu cũ của ${networkType}:`, delErr); }
     }
 
     for (const file of req.files) {
@@ -309,7 +318,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('call setup success rate')) mappedCol = 'Call_Setup_SR';
                         else if (h.includes('initial context setup success ratio')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
                     }
-                    // BẢN VÁ 5G MỚI NHẤT: BẮT ĐÚNG CẢ FILE PMS CŨ VÀ FILE kpi5gprovince MỚI
                     else if (networkType === 'kpi_5g') {
                         if (h.includes('nhà cung cấp') || h === 'nha_cung_cap') mappedCol = 'Nha_cung_cap';
                         else if (h.includes('tỉnh') || h === 'tinh') mappedCol = 'Tinh';
@@ -320,8 +328,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('gnodeb_id') || h.includes('gnodeb id')) mappedCol = 'GNODEB_ID';
                         else if (h.includes('cell_id') || h.includes('cell id')) mappedCol = 'CELL_ID';
                         else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
-                        
-                        // Ánh xạ linh hoạt nhận diện cả 2 cấu trúc file xuất của VNPT
                         else if (h.includes('user_dl_avg_throughput') || h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
                         else if (h.includes('user_ul_avg_throughput') || h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
                         else if (h === 'traffic' || h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
@@ -352,7 +358,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('ci') && h.length <= 4) mappedCol = 'CI';
                         else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
                     }
-                    // [TÍNH NĂNG MỚI]: BỘ TỪ ĐIỂN MAP CỘT CHO BẢNG POI 4G VÀ 5G
                     else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
                         if (h.includes('cell_code') || h === 'cell code') mappedCol = 'Cell_Code';
                         else if (h.includes('site_code') || h === 'site code') mappedCol = 'Site_Code';
@@ -399,7 +404,6 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            // [CẬP NHẬT QUAN TRỌNG]: THÊM CÁC CỘT CỦA POI VÀO DANH SÁCH STRING ĐỂ KHÔNG BỊ ÉP KIỂU LỖI
             const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
@@ -726,7 +730,6 @@ exports.resetImportedData = async (req, res) => {
     }
 
     const table = req.params.table;
-    // [MỞ KHÓA QUYỀN]: THÊM BẢNG poi_4g VÀ poi_5g VÀO DANH SÁCH CHO PHÉP XÓA
     const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g'];
 
     if (!allowedTables.includes(table)) {
