@@ -181,24 +181,24 @@ exports.handleImportData = async (req, res) => {
     }
 
     let totalImported = 0;
-    let errorLogs = [];
-
-    let dbCols = [];
-    try {
-        const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
-        dbCols = cols.map(c => ({
-            original: c.Field,
-            norm: normalizeStr(c.Field)
-        }));
-    } catch (e) {
-        errorLogs.push(`Không tìm thấy bảng ${networkType} trong CSDL.`);
-        return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
-    }
-
+    // GHI ĐÈ DỮ LIỆU KHI IMPORT LẠI 1 TUẦN (CHO QOE/QOS)
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
         try {
             await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]);
-        } catch (delErr) { console.error(`Lỗi khi xóa dữ liệu cũ của ${weekPrefix}:`, delErr); }
+            console.log(`Đã dọn dẹp dữ liệu cũ của ${weekPrefix} trong bảng ${networkType} để chuẩn bị ghi đè.`);
+        } catch (delErr) {
+            console.error(`Lỗi khi xóa dữ liệu cũ của ${weekPrefix}:`, delErr);
+        }
+    }
+
+    // [TÍNH NĂNG MỚI]: TỰ ĐỘNG XÓA DỮ LIỆU POI CŨ TRƯỚC KHI IMPORT MỚI
+    if (networkType === 'poi_4g' || networkType === 'poi_5g') {
+        try {
+            await db.query(`TRUNCATE TABLE ${networkType}`);
+            console.log(`Đã dọn dẹp dữ liệu cũ của bảng ${networkType} để ghi đè danh sách mới.`);
+        } catch (delErr) {
+            console.error(`Lỗi khi xóa dữ liệu cũ của ${networkType}:`, delErr);
+        }
     }
 
     for (const file of req.files) {
@@ -352,6 +352,12 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('ci') && h.length <= 4) mappedCol = 'CI';
                         else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
                     }
+                    // [TÍNH NĂNG MỚI]: BỘ TỪ ĐIỂN MAP CỘT CHO BẢNG POI 4G VÀ 5G
+                    else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
+                        if (h.includes('cell_code') || h === 'cell code') mappedCol = 'Cell_Code';
+                        else if (h.includes('site_code') || h === 'site code') mappedCol = 'Site_Code';
+                        else if (h === 'poi') mappedCol = 'POI';
+                    }
 
                     // Đối soát với Database
                     let actualDbCol = null;
@@ -393,7 +399,8 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan'];
+            // [CẬP NHẬT QUAN TRỌNG]: THÊM CÁC CỘT CỦA POI VÀO DANH SÁCH STRING ĐỂ KHÔNG BỊ ÉP KIỂU LỖI
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -719,7 +726,8 @@ exports.resetImportedData = async (req, res) => {
     }
 
     const table = req.params.table;
-    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos'];
+    // [MỞ KHÓA QUYỀN]: THÊM BẢNG poi_4g VÀ poi_5g VÀO DANH SÁCH CHO PHÉP XÓA
+    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g'];
 
     if (!allowedTables.includes(table)) {
         return res.status(400).send("Bảng dữ liệu không hợp lệ.");
