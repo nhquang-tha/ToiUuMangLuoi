@@ -529,6 +529,7 @@ exports.getWorstCellsData = async (req, res) => {
             FROM kpi_4g
             WHERE Thoi_gian IN (${placeholders}) 
               AND (CellType IS NULL OR CellType NOT LIKE '%L900%')
+              AND (Cell_name NOT LIKE 'MBF_TH_HHA%')
               AND (
                User_DL_Avg_Throughput_Kbps < 7000 
                OR RB_Util_Rate_DL > 20 
