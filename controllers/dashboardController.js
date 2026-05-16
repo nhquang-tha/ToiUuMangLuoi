@@ -527,7 +527,9 @@ exports.getWorstCellsData = async (req, res) => {
                    AVG(Service_Drop_all) as Service_Drop_all,
                    COUNT(Thoi_gian) as So_Ngay_Vi_Pham
             FROM kpi_4g
-            WHERE Thoi_gian IN (${placeholders}) AND (
+            WHERE Thoi_gian IN (${placeholders}) 
+              AND (CellType IS NULL OR CellType NOT LIKE '%L900%')
+              AND (
                User_DL_Avg_Throughput_Kbps < 7000 
                OR RB_Util_Rate_DL > 20 
                OR CQI_4G < 93 
