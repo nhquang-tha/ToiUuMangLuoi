@@ -347,7 +347,7 @@
     // HÀM XỬ LÝ BẢNG TỔNG HỢP LIST TOÀN BỘ CELL VÀ XU HƯỚNG
     // =========================================================
     function getTrendHtml(trendVal) {
-        if (trendVal === 0 || isNaN(trendVal)) return `<span class="trend-flat">-</span>`;
+        if (trendVal === 0 || trendVal === null || isNaN(trendVal)) return `<span class="trend-flat">-</span>`;
         if (trendVal > 0) return `<span class="trend-up">▲ +${trendVal.toFixed(2)}</span>`;
         return `<span class="trend-down">▼ ${trendVal.toFixed(2)}</span>`;
     }
@@ -368,25 +368,25 @@
 
             let tbodyHtml = '';
             data.forEach((r, idx) => {
-                let qoeClass = (r.qoe.rank !== '-' && r.qoe.rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
-                let qosClass = (r.qos.rank !== '-' && r.qos.rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
+                let qoeClass = (r.QoE_Rank !== null && r.QoE_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
+                let qosClass = (r.QoS_Rank !== null && r.QoS_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
 
                 tbodyHtml += `
                     <tr>
                         <td>${idx + 1}</td>
-                        <td style="text-align:left;">${r.Site_name}</td>
-                        <td style="text-align:left; font-weight:bold; color:#2980b9;">${r.Cell_name}</td>
-                        <td>${r.District_code}</td>
-                        <td>${r.MIMO}</td>
-                        <td ${qoeClass}>${r.qoe.rank}</td>
-                        <td><span style="font-weight:bold;">${r.qoe.score !== '-' ? r.qoe.score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.qoe.trend)}</td>
-                        <td ${qosClass}>${r.qos.rank}</td>
-                        <td><span style="font-weight:bold;">${r.qos.score !== '-' ? r.qos.score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.qos.trend)}</td>
+                        <td style="text-align:left;">${r.Site_Name || ''}</td>
+                        <td style="text-align:left; font-weight:bold; color:#2980b9;">${r.Cell_Name}</td>
+                        <td>${r.District || ''}</td>
+                        <td>${r.MIMO || ''}</td>
+                        <td ${qoeClass}>${r.QoE_Rank !== null ? r.QoE_Rank : '-'}</td>
+                        <td><span style="font-weight:bold;">${r.QoE_Score !== null ? r.QoE_Score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.QoE_Trend)}</td>
+                        <td ${qosClass}>${r.QoS_Rank !== null ? r.QoS_Rank : '-'}</td>
+                        <td><span style="font-weight:bold;">${r.QoS_Score !== null ? r.QoS_Score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.QoS_Trend)}</td>
                         <td>
-                            <input type="text" class="note-input" value="${r.note}" placeholder="Ghi chú xử lý..." onchange="saveNote('${r.Cell_name}', this.value)">
+                            <input type="text" class="note-input" value="${r.lich_su_tac_dong || ''}" placeholder="Ghi chú xử lý..." onchange="saveNote('${r.Cell_Name}', this.value)">
                         </td>
                         <td>
-                            <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                            <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
                         </td>
                     </tr>
                 `;
@@ -397,7 +397,7 @@
 
         } catch (e) {
             document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('errorMsg').innerText = "Không thể tải danh sách. Vui lòng thử lại sau.";
+            document.getElementById('errorMsg').innerText = "Không thể tải danh sách. Vui lòng đảm bảo bạn đã Import dữ liệu KPI 4G và QoE/QoS để kích hoạt bảng đồng bộ.";
             document.getElementById('errorMsg').style.display = 'block';
         }
     }
@@ -409,13 +409,11 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({cell_name: cellName, note: noteValue})
             });
-            // Tự động lưu ngầm, không cần alert để tránh phiền người dùng
         } catch(e) {
             alert('Lưu lịch sử thất bại. Vui lòng kiểm tra kết nối mạng!');
         }
     }
 
-    // Chức năng lọc nhanh trên bảng
     function filterTable() {
         let input = document.getElementById("tableSearch");
         let filter = input.value.toUpperCase();
