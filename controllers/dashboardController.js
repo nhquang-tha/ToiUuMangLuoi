@@ -115,7 +115,9 @@ async function aggregateDashboardData() {
                 ON DUPLICATE KEY UPDATE sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G = VALUES(AVG_CQI_4G), sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), AVG_CQI_5G = VALUES(AVG_CQI_5G)
             `, [data.Thoi_gian, data.sum_TRAFFIC_4G, data.AVG_USER_DL_AVG_THPUT_4G, data.AVG_RES_BLK_DL_4G, data.AVG_CQI_4G, data.sum_TRAFFIC_5G, data.AVG_USER_DL_AVG_THPUT_5G, data.AVG_CQI_5G]);
         }
-    } catch (e) { console.error("Lỗi aggregateDashboardData:", e); }
+    } catch (e) {
+        console.error("Lỗi aggregateDashboardData:", e);
+    }
 }
 
 async function syncQoeQosSummary() {
@@ -138,9 +140,14 @@ async function syncQoeQosSummary() {
             )
         `);
 
-        const [cells] = await db.query(`SELECT Cell_name, MAX(Site_name) as Site_name, MAX(District_code) as District_code, MAX(MIMO) as MIMO FROM kpi_4g WHERE Cell_name IS NOT NULL AND Cell_name != '' GROUP BY Cell_name`);
-        const [qoe] = await db.query('SELECT Cell_Name, Tuan, QoE_Rank, QoE_Score FROM mbb_qoe');
-        const [qos] = await db.query('SELECT Cell_Name, Tuan, QoS_Rank, QoS_Score FROM mbb_qos');
+        // Bổ sung lấy District, MIMO từ kpi_4g để làm giàu dữ liệu phụ
+        const [cellsKpi] = await db.query(`SELECT Cell_name, MAX(District_code) as District_code, MAX(MIMO) as MIMO FROM kpi_4g WHERE Cell_name IS NOT NULL AND Cell_name != '' GROUP BY Cell_name`);
+        const kpiMap = {};
+        cellsKpi.forEach(c => kpiMap[c.Cell_name] = c);
+
+        // Lấy danh sách Site_Name và Cell_Name CHÍNH THỨC từ mbb_qoe và mbb_qos
+        const [qoe] = await db.query('SELECT Site_Name, Cell_Name, Tuan, QoE_Rank, QoE_Score FROM mbb_qoe');
+        const [qos] = await db.query('SELECT Site_Name, Cell_Name, Tuan, QoS_Rank, QoS_Score FROM mbb_qos');
         const [notes] = await db.query('SELECT cell_name, note_text FROM cell_notes');
         
         const noteMap = {}; notes.forEach(n => noteMap[n.cell_name] = n.note_text);
@@ -161,9 +168,30 @@ async function syncQoeQosSummary() {
         });
         let sortedQosWeeks = sortWeeks(Array.from(qosWeeksSet));
 
+        // ========================================================
+        // TÍNH NĂNG MỚI: CHỈ LẤY DANH SÁCH CELL CỦA TUẦN MỚI NHẤT
+        // ========================================================
+        let latestQoeWeek = sortedQoeWeeks.length > 0 ? sortedQoeWeeks[0] : null;
+        let latestQosWeek = sortedQosWeeks.length > 0 ? sortedQosWeeks[0] : null;
+
+        let cellBaseMap = {};
+        qoe.forEach(r => {
+            if (r.Tuan === latestQoeWeek && r.Cell_Name) {
+                cellBaseMap[r.Cell_Name] = r.Site_Name || '';
+            }
+        });
+        qos.forEach(r => {
+            if (r.Tuan === latestQosWeek && r.Cell_Name) {
+                cellBaseMap[r.Cell_Name] = r.Site_Name || cellBaseMap[r.Cell_Name] || '';
+            }
+        });
+
         let insertData = [];
-        cells.forEach(c => {
-            let cellName = c.Cell_name;
+        Object.keys(cellBaseMap).forEach(cellName => {
+            let siteName = cellBaseMap[cellName];
+            let district = kpiMap[cellName] ? (kpiMap[cellName].District_code || '') : '';
+            let mimo = kpiMap[cellName] ? (kpiMap[cellName].MIMO || '') : '';
+
             let qoeRank = null, qoeScore = null, qoeTrend = 0;
             let qosRank = null, qosScore = null, qosTrend = 0;
 
@@ -198,7 +226,7 @@ async function syncQoeQosSummary() {
             }
 
             insertData.push([
-                c.Site_name || '', cellName, c.District_code || '', c.MIMO || '',
+                siteName, cellName, district, mimo,
                 qoeRank, qoeScore, qoeTrend, qosRank, qosScore, qosTrend,
                 noteMap[cellName] || ''
             ]);
