@@ -11,13 +11,12 @@ const rfController = require('../controllers/rfController');
 const kpiController = require('../controllers/kpiController');
 const userController = require('../controllers/userController');
 const mapController = require('../controllers/mapController'); 
-const scriptController = require('../controllers/scriptController'); // Controller chức năng tạo Script mới
+const scriptController = require('../controllers/scriptController'); 
 
-// Cấu hình Multer để upload file vào RAM (memory buffer)
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
-// 1. CÁC TRANG CƠ BẢN (Dùng chung hàm renderPage)
+// 1. CÁC TRANG CƠ BẢN
 // ==========================================
 const pages = [
     { path: '/', name: 'Dashboard' },
@@ -31,7 +30,6 @@ pages.forEach(page => {
     router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
 });
 
-// ROUTE CHO TÍNH NĂNG TẠO SCRIPT
 router.get('/scrip', isAuthenticated, scriptController.getScriptPage);
 router.post('/scrip', isAuthenticated, upload.none(), scriptController.generateScript);
 
@@ -43,7 +41,7 @@ router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
 router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
 
 // ==========================================
-// 3. PHÂN TÍCH KPI VÀ QOE/QOS (ANALYTICS)
+// 3. PHÂN TÍCH KPI VÀ QOE/QOS
 // ==========================================
 router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
 router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
@@ -52,16 +50,18 @@ router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.
 router.get('/qoe-qos-analytics', isAuthenticated, kpiController.getQoeQosAnalyticsPage);
 router.get('/api/qoe-qos-data', isAuthenticated, kpiController.getQoeQosData);
 
+// [TÍNH NĂNG MỚI]: Lấy danh sách toàn bộ Cell 4G và lưu Note
+router.get('/api/qoe-qos-list-all', isAuthenticated, kpiController.getQoeQosListAll);
+router.post('/api/save-cell-note', isAuthenticated, kpiController.saveCellNote);
+
 router.get('/optimizing-qoe-qos', isAuthenticated, kpiController.getOptimizingPage);
 router.get('/api/optimizing-data', isAuthenticated, kpiController.getOptimizingData);
 
 // ==========================================
-// 4. IMPORT DỮ LIỆU (Excel/CSV)
+// 4. IMPORT DỮ LIỆU
 // ==========================================
 router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
 router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), dashboardController.handleImportData);
-
-// Xóa dữ liệu đa năng cho RF, TA, QoE, QoS
 router.post('/import-data/reset/:table', isAuthenticated, isAdmin, dashboardController.resetImportedData);
 
 // ==========================================
@@ -75,14 +75,13 @@ router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfCont
 router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
 
 // ==========================================
-// 6. CÁC CỔNG GIAO TIẾP API CHO BÁO CÁO (DASHBOARD & CẢNH BÁO)
+// 6. CÁC CỔNG GIAO TIẾP API CHO DASHBOARD
 // ==========================================
 router.get('/api/dashboard-data', isAuthenticated, dashboardController.getDashboardData);
 router.get('/api/worst-cells-data', isAuthenticated, dashboardController.getWorstCellsData);
 router.get('/api/congestion-3g-data', isAuthenticated, dashboardController.getCongestion3gData);
 router.get('/api/traffic-down-data', isAuthenticated, dashboardController.getTrafficDownData);
 
-// Bổ sung API cho trang POI Report
 if (kpiController.getPoiList) {
     router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
     router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
@@ -93,16 +92,13 @@ if (kpiController.getPoiList) {
 // ==========================================
 router.get('/system/profile', isAuthenticated, userController.getProfilePage);
 router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
-
 router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
 router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
 router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
 
-// Đăng xuất
 router.get('/logout', (req, res) => { 
     req.session.destroy(); 
     res.redirect('/login'); 
 });
 
-// DÒNG QUAN TRỌNG NHẤT KHÔNG ĐƯỢC THIẾU ĐỂ TRÁNH LỖI CRASH
 module.exports = router;
