@@ -96,145 +96,20 @@ exports.getQoeQosData = async (req, res) => {
     }
 };
 
-// =====================================================================
-// TÍNH NĂNG MỚI: DANH SÁCH TOÀN BỘ CELL KÈM TÍNH TOÁN XU HƯỚNG VÀ NOTE
-// =====================================================================
 exports.getQoeQosListAll = async (req, res) => {
     try {
-        // Tự động khởi tạo bảng Notes nếu chưa có
-        try { 
-            await db.query('SELECT 1 FROM cell_notes LIMIT 1'); 
-        } catch (e) {
-            await db.query(`
-                CREATE TABLE cell_notes (
-                    cell_name VARCHAR(255) PRIMARY KEY,
-                    note_text TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                )
-            `);
-        }
-
-        // Lấy dữ liệu cơ sở Cell 4G
-        const [cells] = await db.query(`
-            SELECT Cell_name, MAX(Site_name) as Site_name, MAX(District_code) as District_code, MAX(MIMO) as MIMO
-            FROM kpi_4g
-            WHERE Cell_name IS NOT NULL AND Cell_name != ''
-            GROUP BY Cell_name
+        // Chỉ việc Select trực tiếp từ bảng tĩnh đã được tạo sẵn
+        const [rows] = await db.query(`
+            SELECT Site_Name, Cell_Name, District, MIMO, 
+                   QoE_Rank, QoE_Score, QoE_Trend, 
+                   QoS_Rank, QoS_Score, QoS_Trend, lich_su_tac_dong 
+            FROM qoe_qos 
+            ORDER BY QoE_Score ASC
         `);
-
-        // Lấy QoE, QoS và Notes
-        const [qoe] = await db.query('SELECT Cell_Name, Tuan, QoE_Rank, QoE_Score FROM mbb_qoe');
-        const [qos] = await db.query('SELECT Cell_Name, Tuan, QoS_Rank, QoS_Score FROM mbb_qos');
-        const [notes] = await db.query('SELECT cell_name, note_text FROM cell_notes');
-        
-        const noteMap = {};
-        notes.forEach(n => noteMap[n.cell_name] = n.note_text);
-
-        // Sắp xếp Tuần
-        const sortWeeks = (arr) => {
-            return arr.sort((a, b) => {
-                let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
-                let matchB = b.match(/Tuần (\d+) \((\d+)\)/);
-                if (matchA && matchB) {
-                    if (matchA[2] !== matchB[2]) return parseInt(matchB[2]) - parseInt(matchA[2]);
-                    return parseInt(matchB[1]) - parseInt(matchA[1]);
-                }
-                return 0;
-            });
-        };
-
-        // Gộp dữ liệu QoE
-        let qoeMap = {};
-        let qoeWeeksSet = new Set();
-        qoe.forEach(r => {
-            if(!qoeMap[r.Cell_Name]) qoeMap[r.Cell_Name] = {};
-            qoeMap[r.Cell_Name][r.Tuan] = { rank: r.QoE_Rank, score: r.QoE_Score };
-            qoeWeeksSet.add(r.Tuan);
-        });
-        let sortedQoeWeeks = sortWeeks(Array.from(qoeWeeksSet));
-
-        // Gộp dữ liệu QoS
-        let qosMap = {};
-        let qosWeeksSet = new Set();
-        qos.forEach(r => {
-            if(!qosMap[r.Cell_Name]) qosMap[r.Cell_Name] = {};
-            qosMap[r.Cell_Name][r.Tuan] = { rank: r.QoS_Rank, score: r.QoS_Score };
-            qosWeeksSet.add(r.Tuan);
-        });
-        let sortedQosWeeks = sortWeeks(Array.from(qosWeeksSet));
-
-        let result = [];
-
-        cells.forEach(c => {
-            let cellName = c.Cell_name;
-            let obj = {
-                Site_name: c.Site_name || '',
-                Cell_name: cellName,
-                District_code: c.District_code || '',
-                MIMO: c.MIMO || '',
-                note: noteMap[cellName] || '',
-                qoe: { rank: '-', score: '-', trend: 0 },
-                qos: { rank: '-', score: '-', trend: 0 }
-            };
-
-            // Tính toán xu hướng QoE (Tuần mới nhất so với TB 4 tuần trước)
-            if (qoeMap[cellName] && sortedQoeWeeks.length > 0) {
-                let latestW = sortedQoeWeeks[0];
-                let latestData = qoeMap[cellName][latestW];
-                if (latestData) {
-                    obj.qoe.rank = latestData.rank;
-                    obj.qoe.score = parseFloat(latestData.score) || 0;
-
-                    let prevSum = 0; let prevCount = 0;
-                    for(let i = 1; i <= 4; i++) {
-                        if(sortedQoeWeeks[i] && qoeMap[cellName][sortedQoeWeeks[i]]) {
-                            prevSum += parseFloat(qoeMap[cellName][sortedQoeWeeks[i]].score) || 0;
-                            prevCount++;
-                        }
-                    }
-                    if (prevCount > 0) {
-                        let avg = prevSum / prevCount;
-                        obj.qoe.trend = obj.qoe.score - avg;
-                    }
-                }
-            }
-
-            // Tính toán xu hướng QoS (Tuần mới nhất so với TB 4 tuần trước)
-            if (qosMap[cellName] && sortedQosWeeks.length > 0) {
-                let latestW = sortedQosWeeks[0];
-                let latestData = qosMap[cellName][latestW];
-                if (latestData) {
-                    obj.qos.rank = latestData.rank;
-                    obj.qos.score = parseFloat(latestData.score) || 0;
-
-                    let prevSum = 0; let prevCount = 0;
-                    for(let i = 1; i <= 4; i++) {
-                        if(sortedQosWeeks[i] && qosMap[cellName][sortedQosWeeks[i]]) {
-                            prevSum += parseFloat(qosMap[cellName][sortedQosWeeks[i]].score) || 0;
-                            prevCount++;
-                        }
-                    }
-                    if (prevCount > 0) {
-                        let avg = prevSum / prevCount;
-                        obj.qos.trend = obj.qos.score - avg;
-                    }
-                }
-            }
-
-            result.push(obj);
-        });
-
-        // Sắp xếp những trạm điểm QoE thấp nhất lên trên cùng cho dễ nhìn
-        result.sort((a, b) => {
-            let aScore = a.qoe.score !== '-' ? a.qoe.score : 999;
-            let bScore = b.qoe.score !== '-' ? b.qoe.score : 999;
-            return aScore - bScore;
-        });
-
-        res.json(result);
+        res.json(rows);
     } catch (error) {
-        console.error("Lỗi tổng hợp danh sách QoE/QoS:", error);
-        res.status(500).json({error: "Lỗi Server"});
+        console.error("Lỗi lấy danh sách QoE/QoS tĩnh:", error);
+        res.status(500).json({error: "Lỗi Server - Hãy chắc chắn bạn đã chạy lệnh tạo bảng qoe_qos trong Database"});
     }
 };
 
@@ -242,18 +117,24 @@ exports.saveCellNote = async (req, res) => {
     const { cell_name, note } = req.body;
     if (!cell_name) return res.status(400).json({success: false});
     try {
+        // 1. Lưu dự phòng vào bảng cell_notes
         await db.query(`
             INSERT INTO cell_notes (cell_name, note_text) 
             VALUES (?, ?) 
             ON DUPLICATE KEY UPDATE note_text = VALUES(note_text)
         `, [cell_name, note || '']);
+        
+        // 2. Cập nhật trực tiếp vào bảng tĩnh qoe_qos để hiển thị nhanh
+        await db.query(`
+            UPDATE qoe_qos SET lich_su_tac_dong = ? WHERE Cell_Name = ?
+        `, [note || '', cell_name]);
+
         res.json({success: true});
     } catch (e) {
         console.error("Lỗi lưu note:", e);
         res.status(500).json({success: false});
     }
 };
-
 
 exports.resetData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
