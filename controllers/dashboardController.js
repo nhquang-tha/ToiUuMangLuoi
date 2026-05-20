@@ -41,6 +41,12 @@ function integerToDDMMYYYY(intDate) {
     return `${s.substring(6, 8)}/${s.substring(4, 6)}/${s.substring(0, 4)}`;
 }
 
+const getInt = (val) => {
+    if (val === undefined || val === null || val === "") return 0;
+    let n = Number(String(val).replace(/,/g, '').trim());
+    return isNaN(n) ? 0 : n;
+};
+
 const sortWeeks = (weeksArray) => {
     return weeksArray.sort((a, b) => {
         let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
@@ -112,12 +118,8 @@ async function aggregateDashboardData() {
     } catch (e) { console.error("Lỗi aggregateDashboardData:", e); }
 }
 
-// =====================================================================
-// [NEW]: THUẬT TOÁN TÍNH TOÁN VÀ ĐỒNG BỘ BẢNG QOE_QOS TỐC ĐỘ CAO
-// =====================================================================
 async function syncQoeQosSummary() {
     try {
-        // 1. Khởi tạo bảng nếu DB chưa có
         await db.query(`
             CREATE TABLE IF NOT EXISTS qoe_qos (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -136,7 +138,6 @@ async function syncQoeQosSummary() {
             )
         `);
 
-        // 2. Lấy toàn bộ dữ liệu thô
         const [cells] = await db.query(`SELECT Cell_name, MAX(Site_name) as Site_name, MAX(District_code) as District_code, MAX(MIMO) as MIMO FROM kpi_4g WHERE Cell_name IS NOT NULL AND Cell_name != '' GROUP BY Cell_name`);
         const [qoe] = await db.query('SELECT Cell_Name, Tuan, QoE_Rank, QoE_Score FROM mbb_qoe');
         const [qos] = await db.query('SELECT Cell_Name, Tuan, QoS_Rank, QoS_Score FROM mbb_qos');
@@ -160,7 +161,6 @@ async function syncQoeQosSummary() {
         });
         let sortedQosWeeks = sortWeeks(Array.from(qosWeeksSet));
 
-        // 3. Tính toán xu hướng
         let insertData = [];
         cells.forEach(c => {
             let cellName = c.Cell_name;
@@ -204,7 +204,6 @@ async function syncQoeQosSummary() {
             ]);
         });
 
-        // 4. Ghi đè vào bảng tốc độ cao qoe_qos
         await db.query('TRUNCATE TABLE qoe_qos');
         if (insertData.length > 0) {
             const chunkSize = 500;
@@ -389,7 +388,6 @@ exports.handleImportData = async (req, res) => {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                         if (dbMatch) actualDbCol = dbMatch.original;
                     }
-                    
                     if (!actualDbCol) {
                         const normEx = normalizeStr(exHeader);
                         if (normEx) {
@@ -397,7 +395,6 @@ exports.handleImportData = async (req, res) => {
                             if (match) actualDbCol = match.original;
                         }
                     }
-
                     if (actualDbCol) colMapping.push({ excelIdx: idx, dbCol: actualDbCol });
                 });
             }
@@ -470,7 +467,7 @@ exports.handleImportData = async (req, res) => {
 
     if (isKpiImported) await aggregateDashboardData();
     
-    // ĐỒNG BỘ BẢNG QOE_QOS TỰ ĐỘNG
+    // Tự động Đồng bộ bảng QoE/QoS sau khi Import
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
         await syncQoeQosSummary();
     }
@@ -479,9 +476,6 @@ exports.handleImportData = async (req, res) => {
     return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Đã Import/Ghi đè thành công ${totalImported} dòng.`, error: null });
 };
 
-// =====================================================================
-// CÁC HÀM API BÁO CÁO CŨ GIỮ NGUYÊN BÊN DƯỚI
-// =====================================================================
 exports.getDashboardData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM Dashboard ORDER BY thoi_gian ASC');
