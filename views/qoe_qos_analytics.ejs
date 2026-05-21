@@ -57,6 +57,10 @@
     .trend-up { color: #27ae60; font-weight: bold; font-size: 11px;}
     .trend-down { color: #e74c3c; font-weight: bold; font-size: 11px;}
     .trend-flat { color: #95a5a6; font-size: 11px;}
+    
+    /* Cải thiện bộ lọc trên bảng */
+    .table-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;}
+    .table-filter-select { padding: 6px 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; font-size: 13px; color: #34495e;}
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -118,11 +122,30 @@
 
             <!-- BẢNG TỔNG HỢP CELL -->
             <div class="table-wrapper" id="listTableContainer">
-                <div style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-weight: bold; color: #2c3e50;">Danh sách Tổng Hợp (<span id="totalCells">0</span> Cell)</div>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" id="tableSearch" placeholder="Lọc nhanh Cell/Site..." onkeyup="filterTable()" style="padding: 6px 12px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
-                        <button onclick="exportTableToExcel()" class="btn-primary" style="background:#27ae60; padding:6px 15px; font-size:12px;">📥 Xuất Excel</button>
+                <div style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="font-weight: bold; color: #2c3e50; font-size: 15px;">Danh sách (<span id="totalCells">0</span> Cell)</div>
+                    <div class="table-controls">
+                        <select id="districtFilter" class="table-filter-select" onchange="filterTable()">
+                            <option value="">-- Tất cả District --</option>
+                        </select>
+                        <select id="qoeRankFilter" class="table-filter-select" onchange="filterTable()">
+                            <option value="">-- Tất cả QoE Rank --</option>
+                            <option value="1">Rank 1</option>
+                            <option value="2">Rank 2</option>
+                            <option value="3">Rank 3</option>
+                            <option value="4">Rank 4</option>
+                            <option value="5">Rank 5</option>
+                        </select>
+                        <select id="qosRankFilter" class="table-filter-select" onchange="filterTable()">
+                            <option value="">-- Tất cả QoS Rank --</option>
+                            <option value="1">Rank 1</option>
+                            <option value="2">Rank 2</option>
+                            <option value="3">Rank 3</option>
+                            <option value="4">Rank 4</option>
+                            <option value="5">Rank 5</option>
+                        </select>
+                        <input type="text" id="tableSearch" placeholder="Tìm Cell/Site..." onkeyup="filterTable()" style="padding: 6px 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; font-size: 13px;">
+                        <button onclick="exportTableToExcel()" class="btn-primary" style="background:#27ae60; padding:6px 15px; font-size:12px; white-space: nowrap;">📥 Xuất Excel</button>
                     </div>
                 </div>
                 <table class="data-table" id="listTable">
@@ -374,16 +397,19 @@
             const data = await res.json();
 
             document.getElementById('loadingMsg').style.display = 'none';
-            document.getElementById('totalCells').innerText = data.length;
-
+            
             let tbodyHtml = '';
+            let districts = new Set(); // Lưu danh sách district để đưa vào dropdown
+
             data.forEach((r, idx) => {
                 let qoeClass = (r.QoE_Rank !== null && r.QoE_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
                 let qosClass = (r.QoS_Rank !== null && r.QoS_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
 
+                if(r.District) districts.add(r.District);
+
                 tbodyHtml += `
                     <tr>
-                        <td>${idx + 1}</td>
+                        <td class="stt-col">${idx + 1}</td>
                         <td style="text-align:left;">${r.Site_Name || ''}</td>
                         <td style="text-align:left; font-weight:bold; color:#2980b9;">${r.Cell_Name}</td>
                         <td>${r.District || ''}</td>
@@ -403,7 +429,20 @@
             });
 
             document.getElementById('listTableBody').innerHTML = tbodyHtml;
+            
+            // Đổ danh sách District vào dropdown
+            const districtSelect = document.getElementById('districtFilter');
+            // Xóa các option cũ (giữ lại option Tất cả)
+            districtSelect.innerHTML = '<option value="">-- Tất cả District --</option>';
+            Array.from(districts).sort().forEach(d => {
+                let opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d;
+                districtSelect.appendChild(opt);
+            });
+
             document.getElementById('listTableContainer').style.display = 'block';
+            filterTable(); // Chạy bộ lọc lần đầu để tính toán tổng số cell hiện tại
 
         } catch (e) {
             document.getElementById('loadingMsg').style.display = 'none';
@@ -425,24 +464,50 @@
     }
 
     function filterTable() {
-        let input = document.getElementById("tableSearch");
-        let filter = input.value.toUpperCase();
+        // Lấy giá trị từ các ô nhập liệu/dropdown
+        let searchInput = document.getElementById("tableSearch").value.toUpperCase();
+        let districtFilter = document.getElementById("districtFilter").value.toUpperCase();
+        let qoeRankFilter = document.getElementById("qoeRankFilter").value;
+        let qosRankFilter = document.getElementById("qosRankFilter").value;
+
         let table = document.getElementById("listTable");
         let tr = table.getElementsByTagName("tr");
+        let visibleCount = 0;
 
         for (let i = 1; i < tr.length; i++) {
+            // Lấy dữ liệu từng cột tương ứng
             let tdSite = tr[i].getElementsByTagName("td")[1];
             let tdCell = tr[i].getElementsByTagName("td")[2];
-            if (tdSite || tdCell) {
-                let txtValueSite = tdSite.textContent || tdSite.innerText;
-                let txtValueCell = tdCell.textContent || tdCell.innerText;
-                if (txtValueSite.toUpperCase().indexOf(filter) > -1 || txtValueCell.toUpperCase().indexOf(filter) > -1) {
+            let tdDistrict = tr[i].getElementsByTagName("td")[3];
+            let tdQoeRank = tr[i].getElementsByTagName("td")[5];
+            let tdQosRank = tr[i].getElementsByTagName("td")[7];
+
+            if (tdSite && tdCell && tdDistrict && tdQoeRank && tdQosRank) {
+                let siteText = tdSite.textContent || tdSite.innerText;
+                let cellText = tdCell.textContent || tdCell.innerText;
+                let districtText = tdDistrict.textContent || tdDistrict.innerText;
+                let qoeRankText = tdQoeRank.textContent || tdQoeRank.innerText;
+                let qosRankText = tdQosRank.textContent || tdQosRank.innerText;
+
+                // Kiểm tra điều kiện
+                let matchSearch = (siteText.toUpperCase().indexOf(searchInput) > -1 || cellText.toUpperCase().indexOf(searchInput) > -1);
+                let matchDistrict = (districtFilter === "" || districtText.toUpperCase() === districtFilter);
+                let matchQoeRank = (qoeRankFilter === "" || qoeRankText === qoeRankFilter);
+                let matchQosRank = (qosRankFilter === "" || qosRankText === qosRankFilter);
+
+                if (matchSearch && matchDistrict && matchQoeRank && matchQosRank) {
                     tr[i].style.display = "";
+                    visibleCount++;
+                    // Cập nhật lại số thứ tự (STT) khi lọc
+                    tr[i].querySelector('.stt-col').textContent = visibleCount;
                 } else {
                     tr[i].style.display = "none";
                 }
             }       
         }
+        
+        // Cập nhật lại tổng số dòng hiển thị
+        document.getElementById("totalCells").innerText = visibleCount;
     }
 
     function exportTableToExcel() {
@@ -453,21 +518,36 @@
         
         let table = document.getElementById('listTable').cloneNode(true);
         
-        // Loại bỏ cột cuối (Thao tác) và thay Input bằng Text thường
-        for (let i = 0; i < table.rows.length; i++) {
-            if (table.rows[i].cells.length > 0) {
-                // Xử lý cột Ghi chú (chuyển Input thành text)
-                if (i > 0) {
-                    let noteInput = table.rows[i].cells[9].querySelector('input');
-                    if (noteInput) {
-                        table.rows[i].cells[9].innerText = noteInput.value;
-                    }
+        // Tạo một bảng mới chỉ chứa các hàng đang hiển thị
+        let exportTable = document.createElement('table');
+        let thead = table.querySelector('thead').cloneNode(true);
+        exportTable.appendChild(thead);
+        let tbody = document.createElement('tbody');
+        
+        let rows = table.querySelectorAll('tbody tr');
+        for(let i=0; i<rows.length; i++) {
+            if(rows[i].style.display !== 'none'){
+                let clonedRow = rows[i].cloneNode(true);
+                
+                // Loại bỏ cột cuối (Thao tác) và thay Input bằng Text thường
+                if (clonedRow.cells.length > 0) {
+                     let noteInput = clonedRow.cells[9].querySelector('input');
+                     if (noteInput) {
+                         clonedRow.cells[9].innerText = noteInput.value;
+                     }
+                     clonedRow.deleteCell(-1); 
                 }
-                table.rows[i].deleteCell(-1); 
+                // Cũng cần bỏ cột cuối của thead
+                if(i === 0) {
+                     exportTable.querySelector('thead tr').deleteCell(-1);
+                }
+                
+                tbody.appendChild(clonedRow);
             }
         }
+        exportTable.appendChild(tbody);
         
-        let wb = XLSX.utils.table_to_book(table, {sheet: "Tong_Hop_QoE_QoS"});
+        let wb = XLSX.utils.table_to_book(exportTable, {sheet: "Tong_Hop_QoE_QoS"});
         XLSX.writeFile(wb, "Danh_Sach_Tong_Hop_QoE_QoS.xlsx");
     }
 </script>
