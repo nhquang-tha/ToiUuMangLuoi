@@ -44,10 +44,10 @@
     .modal-body { flex: 1; position: relative; width: 100%; height: 100%; }
 
     /* CSS Cho Bảng Danh Sách */
-    .table-wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: none; animation: fadeIn 0.5s ease; margin-bottom: 30px;}
-    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+    .table-wrapper { width: 100%; max-height: 600px; overflow: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: none; animation: fadeIn 0.5s ease; margin-bottom: 30px;}
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
     .data-table th, .data-table td { padding: 10px 15px; border-bottom: 1px solid #ecf0f1; text-align: center; }
-    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; position: sticky; top: 0; z-index: 10; font-size: 12px;}
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; position: sticky; top: 0; z-index: 10; font-size: 12px; border-bottom: 2px solid #bdc3c7;}
     .data-table tbody tr:hover { background-color: #fdf2f2; }
     .note-input { border: 1px solid #bdc3c7; border-radius: 4px; padding: 6px 10px; width: 100%; min-width: 150px; outline: none; transition: 0.2s; }
     .note-input:focus { border-color: #3498db; box-shadow: 0 0 5px rgba(52, 152, 219, 0.3); }
@@ -59,7 +59,7 @@
     .trend-flat { color: #95a5a6; font-size: 11px;}
     
     /* Cải thiện bộ lọc trên bảng */
-    .table-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;}
+    .table-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; position: sticky; left: 15px;}
     .table-filter-select { padding: 6px 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; font-size: 13px; color: #34495e;}
 </style>
 
@@ -80,7 +80,7 @@
                         <label style="display:block; margin-bottom:8px; font-weight:bold; color:#f39c12;">Nhập Tên Cell_Code hoặc Site_Code (Nhập nhiều cách nhau dấu phẩy):</label>
                         <input type="text" id="keywordInput" placeholder="Ví dụ: 4G-THA001M (tìm cả trạm), hoặc 4G-THA001M11, 4G-THA002M (so sánh các cell)" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; border-left: 4px solid #f1c40f; box-sizing: border-box;">
                     </div>
-                    <!-- CHỨC NĂNG MỚI: BỘ LỌC GIỚI HẠN SỐ TUẦN HIỂN THỊ TRÊN BIỂU ĐỒ -->
+                    <!-- BỘ LỌC GIỚI HẠN SỐ TUẦN HIỂN THỊ TRÊN BIỂU ĐỒ -->
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display:block; margin-bottom:8px; font-weight:bold; color:#f39c12;">Thời gian vẽ biểu đồ:</label>
                         <select id="chartWeeksLimit" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 14px; box-sizing: border-box; cursor: pointer;">
@@ -98,7 +98,6 @@
                 </div>
             </div>
 
-            <!-- Các thông báo hệ thống -->
             <div id="initMsg" style="text-align: center; padding: 50px; color: #7f8c8d; font-size: 15px; background: white; border-radius: 8px;">
                 <i>Vui lòng nhập Cell_Code hoặc Site_Code và bấm "Phân Tích Biểu Đồ" để vẽ line Chart.<br>Hoặc bấm vào nút bên dưới để xem dữ liệu QoE/QoS của Tuần Mới Nhất.</i>
             </div>
@@ -109,7 +108,6 @@
             
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
 
-            <!-- KHU VỰC CHỨA BIỂU ĐỒ ĐỘNG -->
             <div id="dynamicChartsArea" style="display: none;">
                 <div class="charts-grid">
                     <div class="chart-container" onclick="openModal('canvas_qoe')">
@@ -123,7 +121,6 @@
                 </div>
             </div>
 
-            <!-- NÚT BẬT BẢNG TỔNG HỢP -->
             <div style="text-align: center; margin: 30px 0;">
                 <button onclick="fetchAllList()" style="background: #27ae60; color: white; border: none; padding: 15px 40px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3);">
                     📋 Xem Bảng Danh Sách QoE/QoS (Tuần Mới Nhất)
@@ -132,8 +129,8 @@
 
             <!-- BẢNG TỔNG HỢP CELL -->
             <div class="table-wrapper" id="listTableContainer">
-                <div style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <div style="font-weight: bold; color: #2c3e50; font-size: 15px;">Danh sách (<span id="totalCells">0</span> Cell)</div>
+                <div style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; position: sticky; top: 0; left: 0; background: white; z-index: 11;">
+                    <div style="font-weight: bold; color: #2c3e50; font-size: 15px; white-space: nowrap;">Danh sách (<span id="totalCells">0</span> Cell)</div>
                     <div class="table-controls">
                         <select id="districtFilter" class="table-filter-select" onchange="filterTable()">
                             <option value="">-- Tất cả District --</option>
@@ -200,9 +197,10 @@
 
     window.chartDataStore = {}; 
     window.chartInstances = {}; 
+    window.allQoeQosData = []; // BIẾN CACHE LƯU TRỮ DỮ LIỆU ĐỂ LỌC SIÊU TỐC
     let modalChartInstance = null;
 
-    // Load thư viện SheetJS để hỗ trợ xuất Excel trực tiếp từ Bảng
+    // Load thư viện SheetJS để hỗ trợ xuất Excel trực tiếp
     document.addEventListener('DOMContentLoaded', function() {
         const xlsxScript = document.createElement('script');
         xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
@@ -262,7 +260,6 @@
 
             document.getElementById('dynamicChartsArea').style.display = 'block';
             
-            // Truyền tham số limitVal vào để hàm buildChart biết nên cắt bao nhiêu tuần
             buildChart('canvas_qoe', data.qoe, 'QoE_Score', '⭐ Điểm Trải Nghiệm (QoE Score)', limitVal);
             buildChart('canvas_qos', data.qos, 'QoS_Score', '⚙️ Điểm Dịch Vụ (QoS Score)', limitVal);
 
@@ -276,10 +273,8 @@
     function buildChart(canvasId, rawData, valueKey, titleText, limitVal) {
         if (!rawData || rawData.length === 0) return;
 
-        // Lấy tất cả các tuần hiện có trong dữ liệu tìm kiếm và sắp xếp từ cũ tới mới
         let allWeeks = sortWeeks([...new Set(rawData.map(d => d.Tuan))].filter(Boolean));
         
-        // GIỚI HẠN SỐ TUẦN HIỂN THỊ TRÊN BIỂU ĐỒ (Cắt từ dưới lên để lấy các tuần mới nhất)
         if (limitVal !== 'all') {
             let limit = parseInt(limitVal);
             if (allWeeks.length > limit) {
@@ -301,28 +296,13 @@
             });
 
             return {
-                label: cellName,
-                data: dataPoints,
-                borderColor: color,
-                baseColor: color, 
-                borderWidth: 3,
-                pointBackgroundColor: '#fff',
-                pointBorderColor: color,
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 8,
-                tension: 0.4,
-                fill: true, 
-                spanGaps: true 
+                label: cellName, data: dataPoints, borderColor: color, baseColor: color, 
+                borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: color,
+                pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 8, tension: 0.4, fill: true, spanGaps: true 
             };
         });
 
-        window.chartDataStore[canvasId] = {
-            labels: allWeeks,
-            datasets: datasets,
-            title: titleText
-        };
-
+        window.chartDataStore[canvasId] = { labels: allWeeks, datasets: datasets, title: titleText };
         const ctx = document.getElementById(canvasId).getContext('2d');
         
         datasets.forEach(ds => {
@@ -333,23 +313,15 @@
         });
 
         window.chartInstances[canvasId] = new Chart(ctx, {
-            type: 'line',
-            data: { labels: allWeeks, datasets: datasets },
+            type: 'line', data: { labels: allWeeks, datasets: datasets },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 15 } },
-                interaction: { mode: 'index', intersect: false },
+                responsive: true, maintainAspectRatio: false, layout: { padding: { top: 15 } }, interaction: { mode: 'index', intersect: false },
                 plugins: {
                     title: { display: true, text: titleText, font: { size: 16, weight: 'bold' }, color: '#34495e', padding: { bottom: 15 } },
                     legend: { display: datasets.length > 1, position: 'bottom', labels: { boxWidth: 15, font: { size: 12 } } },
-                    tooltip: { 
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)', titleColor: '#2c3e50', bodyColor: '#2c3e50', borderColor: '#ecf0f1', borderWidth: 1, padding: 12, boxPadding: 6, usePointStyle: true, titleFont: { size: 14 }, bodyFont: { size: 15, weight: 'bold' }
-                    } 
+                    tooltip: { backgroundColor: 'rgba(255, 255, 255, 0.95)', titleColor: '#2c3e50', bodyColor: '#2c3e50', borderColor: '#ecf0f1', borderWidth: 1, padding: 12, boxPadding: 6, usePointStyle: true, titleFont: { size: 14 }, bodyFont: { size: 15, weight: 'bold' } } 
                 },
-                scales: {
-                    x: { grid: { display: false } },
-                    y: { beginAtZero: false, grid: { borderDash: [5, 5] } } 
-                }
+                scales: { x: { grid: { display: false } }, y: { beginAtZero: false, grid: { borderDash: [5, 5] } } }
             }
         });
     }
@@ -369,27 +341,21 @@
                 let gradient = ctx.createLinearGradient(0, 0, 0, 600);
                 gradient.addColorStop(0, hexToRgba(ds.baseColor, 0.5));
                 gradient.addColorStop(1, hexToRgba(ds.baseColor, 0.0));
-
                 return {
                     label: ds.label, data: [...ds.data], borderColor: ds.borderColor, backgroundColor: gradient, borderWidth: 4, pointBackgroundColor: '#ffffff', pointBorderColor: ds.borderColor, pointBorderWidth: 3, pointRadius: 6, pointHoverRadius: 10, fill: true, tension: 0.4, spanGaps: true
                 };
             });
 
             modalChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: { labels: dataStore.labels, datasets: zoomedDatasets },
+                type: 'line', data: { labels: dataStore.labels, datasets: zoomedDatasets },
                 options: {
-                    responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' },
-                    interaction: { mode: 'index', intersect: false },
+                    responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, interaction: { mode: 'index', intersect: false },
                     plugins: {
                         title: { display: true, text: dataStore.title, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } },
                         legend: { display: zoomedDatasets.length > 1, position: 'bottom', labels: { font: { size: 16 } } },
                         tooltip: { backgroundColor: 'rgba(44, 62, 80, 0.95)', titleColor: '#fff', bodyColor: '#fff', titleFont: { size: 18 }, bodyFont: { size: 18, weight: 'bold' }, padding: 15, cornerRadius: 8, displayColors: true }
                     },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { font: { size: 16 } } },
-                        y: { beginAtZero: false, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 16 } } }
-                    }
+                    scales: { x: { grid: { display: false }, ticks: { font: { size: 16 } } }, y: { beginAtZero: false, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 16 } } } }
                 }
             });
         }, 50); 
@@ -399,7 +365,7 @@
     window.onclick = function(e) { if (e.target === document.getElementById('chartModal')) closeModal(); }
 
     // =========================================================
-    // HÀM XỬ LÝ BẢNG TỔNG HỢP LIST TOÀN BỘ CELL VÀ XU HƯỚNG
+    // HÀM VIRTUAL RENDERING CHO BẢNG DANH SÁCH (LỌC SIÊU TỐC)
     // =========================================================
     function getTrendHtml(trendVal) {
         if (trendVal === 0 || trendVal === null || isNaN(trendVal)) return `<span class="trend-flat">-</span>`;
@@ -416,55 +382,27 @@
         try {
             const res = await fetch('/api/qoe-qos-list-all');
             if(!res.ok) throw new Error("Lỗi API");
-            const data = await res.json();
+            
+            // Lưu dữ liệu vào cache để lọc mà không cần tải lại
+            window.allQoeQosData = await res.json();
 
             document.getElementById('loadingMsg').style.display = 'none';
             
-            let tbodyHtml = '';
-            let districts = new Set(); // Lưu danh sách district để đưa vào dropdown
+            let districts = new Set();
+            window.allQoeQosData.forEach(r => { if(r.District) districts.add(r.District); });
 
-            data.forEach((r, idx) => {
-                let qoeClass = (r.QoE_Rank !== null && r.QoE_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
-                let qosClass = (r.QoS_Rank !== null && r.QoS_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
-
-                if(r.District) districts.add(r.District);
-
-                tbodyHtml += `
-                    <tr>
-                        <td class="stt-col">${idx + 1}</td>
-                        <td style="text-align:left;">${r.Site_Name || ''}</td>
-                        <td style="text-align:left; font-weight:bold; color:#2980b9;">${r.Cell_Name}</td>
-                        <td>${r.District || ''}</td>
-                        <td>${r.MIMO || ''}</td>
-                        <td ${qoeClass}>${r.QoE_Rank !== null ? r.QoE_Rank : '-'}</td>
-                        <td><span style="font-weight:bold;">${r.QoE_Score !== null ? r.QoE_Score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.QoE_Trend)}</td>
-                        <td ${qosClass}>${r.QoS_Rank !== null ? r.QoS_Rank : '-'}</td>
-                        <td><span style="font-weight:bold;">${r.QoS_Score !== null ? r.QoS_Score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.QoS_Trend)}</td>
-                        <td>
-                            <input type="text" class="note-input" value="${r.lich_su_tac_dong || ''}" placeholder="Ghi chú xử lý..." onchange="saveNote('${r.Cell_Name}', this.value)">
-                        </td>
-                        <td>
-                            <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            document.getElementById('listTableBody').innerHTML = tbodyHtml;
-            
-            // Đổ danh sách District vào dropdown
             const districtSelect = document.getElementById('districtFilter');
-            // Xóa các option cũ (giữ lại option Tất cả)
             districtSelect.innerHTML = '<option value="">-- Tất cả District --</option>';
             Array.from(districts).sort().forEach(d => {
                 let opt = document.createElement('option');
-                opt.value = d;
-                opt.textContent = d;
+                opt.value = d; opt.textContent = d;
                 districtSelect.appendChild(opt);
             });
 
             document.getElementById('listTableContainer').style.display = 'block';
-            filterTable(); // Chạy bộ lọc lần đầu để tính toán tổng số cell hiện tại
+            
+            // Hiển thị lần đầu toàn bộ dữ liệu
+            renderTableHTML(window.allQoeQosData);
 
         } catch (e) {
             document.getElementById('loadingMsg').style.display = 'none';
@@ -473,103 +411,121 @@
         }
     }
 
+    // Nối chuỗi HTML cực nhanh, thay vì show/hide DOM
+    function renderTableHTML(dataToRender) {
+        let tbodyHtml = '';
+        dataToRender.forEach((r, idx) => {
+            let qoeClass = (r.QoE_Rank !== null && r.QoE_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
+            let qosClass = (r.QoS_Rank !== null && r.QoS_Rank < 3) ? 'style="color:#e74c3c; font-weight:bold"' : '';
+
+            tbodyHtml += `
+                <tr>
+                    <td class="stt-col">${idx + 1}</td>
+                    <td style="text-align:left;">${r.Site_Name || ''}</td>
+                    <td style="text-align:left; font-weight:bold; color:#2980b9;">${r.Cell_Name}</td>
+                    <td>${r.District || ''}</td>
+                    <td>${r.MIMO || ''}</td>
+                    <td ${qoeClass}>${r.QoE_Rank !== null ? r.QoE_Rank : '-'}</td>
+                    <td><span style="font-weight:bold;">${r.QoE_Score !== null ? r.QoE_Score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.QoE_Trend)}</td>
+                    <td ${qosClass}>${r.QoS_Rank !== null ? r.QoS_Rank : '-'}</td>
+                    <td><span style="font-weight:bold;">${r.QoS_Score !== null ? r.QoS_Score.toFixed(2) : '-'}</span><br>${getTrendHtml(r.QoS_Trend)}</td>
+                    <td>
+                        <input type="text" class="note-input" value="${r.lich_su_tac_dong || ''}" placeholder="Ghi chú xử lý..." onchange="saveNote('${r.Cell_Name}', this.value)">
+                    </td>
+                    <td>
+                        <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        document.getElementById('listTableBody').innerHTML = tbodyHtml;
+        document.getElementById("totalCells").innerText = dataToRender.length;
+    }
+
     async function saveNote(cellName, noteValue) {
         try {
             await fetch('/api/save-cell-note', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({cell_name: cellName, note: noteValue})
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({cell_name: cellName, note: noteValue})
             });
-        } catch(e) {
-            alert('Lưu lịch sử thất bại. Vui lòng kiểm tra kết nối mạng!');
-        }
+            // Cập nhật lại vào cache để khi lọc không bị mất Note vừa gõ
+            let cell = window.allQoeQosData.find(c => c.Cell_Name === cellName);
+            if (cell) cell.lich_su_tac_dong = noteValue;
+        } catch(e) { alert('Lưu lịch sử thất bại. Vui lòng kiểm tra kết nối mạng!'); }
     }
 
+    // Lọc bằng Debounce để chống lag khi gõ phím liên tục
+    let filterTimeout;
     function filterTable() {
-        // Lấy giá trị từ các ô nhập liệu/dropdown
+        clearTimeout(filterTimeout);
+        filterTimeout = setTimeout(() => {
+            let searchInput = document.getElementById("tableSearch").value.toUpperCase();
+            let districtFilter = document.getElementById("districtFilter").value.toUpperCase();
+            let qoeRankFilter = document.getElementById("qoeRankFilter").value;
+            let qosRankFilter = document.getElementById("qosRankFilter").value;
+
+            let filteredData = window.allQoeQosData.filter(r => {
+                let siteText = (r.Site_Name || '').toUpperCase();
+                let cellText = (r.Cell_Name || '').toUpperCase();
+                let districtText = (r.District || '').toUpperCase();
+                let qoeRankText = r.QoE_Rank !== null ? String(r.QoE_Rank) : '';
+                let qosRankText = r.QoS_Rank !== null ? String(r.QoS_Rank) : '';
+
+                let matchSearch = (siteText.includes(searchInput) || cellText.includes(searchInput));
+                let matchDistrict = (districtFilter === "" || districtText === districtFilter);
+                let matchQoeRank = (qoeRankFilter === "" || qoeRankText === qoeRankFilter);
+                let matchQosRank = (qosRankFilter === "" || qosRankText === qosRankFilter);
+
+                return matchSearch && matchDistrict && matchQoeRank && matchQosRank;
+            });
+
+            renderTableHTML(filteredData);
+        }, 150); // Chờ 150ms sau khi người dùng ngừng gõ mới render
+    }
+
+    function exportTableToExcel() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel chưa tải xong, vui lòng đợi...'); return;
+        }
+        
         let searchInput = document.getElementById("tableSearch").value.toUpperCase();
         let districtFilter = document.getElementById("districtFilter").value.toUpperCase();
         let qoeRankFilter = document.getElementById("qoeRankFilter").value;
         let qosRankFilter = document.getElementById("qosRankFilter").value;
 
-        let table = document.getElementById("listTable");
-        let tr = table.getElementsByTagName("tr");
-        let visibleCount = 0;
+        // Lấy đúng những dữ liệu đang được lọc
+        let filteredData = window.allQoeQosData.filter(r => {
+            let siteText = (r.Site_Name || '').toUpperCase();
+            let cellText = (r.Cell_Name || '').toUpperCase();
+            let districtText = (r.District || '').toUpperCase();
+            let qoeRankText = r.QoE_Rank !== null ? String(r.QoE_Rank) : '';
+            let qosRankText = r.QoS_Rank !== null ? String(r.QoS_Rank) : '';
 
-        for (let i = 1; i < tr.length; i++) {
-            // Lấy dữ liệu từng cột tương ứng
-            let tdSite = tr[i].getElementsByTagName("td")[1];
-            let tdCell = tr[i].getElementsByTagName("td")[2];
-            let tdDistrict = tr[i].getElementsByTagName("td")[3];
-            let tdQoeRank = tr[i].getElementsByTagName("td")[5];
-            let tdQosRank = tr[i].getElementsByTagName("td")[7];
+            return (siteText.includes(searchInput) || cellText.includes(searchInput)) &&
+                   (districtFilter === "" || districtText === districtFilter) &&
+                   (qoeRankFilter === "" || qoeRankText === qoeRankFilter) &&
+                   (qosRankFilter === "" || qosRankText === qosRankFilter);
+        });
 
-            if (tdSite && tdCell && tdDistrict && tdQoeRank && tdQosRank) {
-                let siteText = tdSite.textContent || tdSite.innerText;
-                let cellText = tdCell.textContent || tdCell.innerText;
-                let districtText = tdDistrict.textContent || tdDistrict.innerText;
-                let qoeRankText = tdQoeRank.textContent || tdQoeRank.innerText;
-                let qosRankText = tdQosRank.textContent || tdQosRank.innerText;
+        // Tạo cấu trúc JSON sạch sẽ cho Excel
+        let exportData = filteredData.map((r, i) => ({
+            "STT": i + 1,
+            "Site Name": r.Site_Name || '',
+            "Cell Name": r.Cell_Name || '',
+            "District": r.District || '',
+            "MIMO": r.MIMO || '',
+            "QoE Rank (Mới nhất)": r.QoE_Rank !== null ? r.QoE_Rank : '-',
+            "QoE Score (Mới nhất)": r.QoE_Score !== null ? r.QoE_Score.toFixed(2) : '-',
+            "QoE Trend (Biến động)": r.QoE_Trend ? r.QoE_Trend.toFixed(2) : '-',
+            "QoS Rank (Mới nhất)": r.QoS_Rank !== null ? r.QoS_Rank : '-',
+            "QoS Score (Mới nhất)": r.QoS_Score !== null ? r.QoS_Score.toFixed(2) : '-',
+            "QoS Trend (Biến động)": r.QoS_Trend ? r.QoS_Trend.toFixed(2) : '-',
+            "Lịch Sử Tác Động": r.lich_su_tac_dong || ''
+        }));
 
-                // Kiểm tra điều kiện
-                let matchSearch = (siteText.toUpperCase().indexOf(searchInput) > -1 || cellText.toUpperCase().indexOf(searchInput) > -1);
-                let matchDistrict = (districtFilter === "" || districtText.toUpperCase() === districtFilter);
-                let matchQoeRank = (qoeRankFilter === "" || qoeRankText === qoeRankFilter);
-                let matchQosRank = (qosRankFilter === "" || qosRankText === qosRankFilter);
-
-                if (matchSearch && matchDistrict && matchQoeRank && matchQosRank) {
-                    tr[i].style.display = "";
-                    visibleCount++;
-                    // Cập nhật lại số thứ tự (STT) khi lọc
-                    tr[i].querySelector('.stt-col').textContent = visibleCount;
-                } else {
-                    tr[i].style.display = "none";
-                }
-            }       
-        }
-        
-        // Cập nhật lại tổng số dòng hiển thị
-        document.getElementById("totalCells").innerText = visibleCount;
-    }
-
-    function exportTableToExcel() {
-        if (typeof XLSX === 'undefined') {
-            alert('Thư viện Excel chưa tải xong, vui lòng đợi...');
-            return;
-        }
-        
-        let table = document.getElementById('listTable').cloneNode(true);
-        
-        // Tạo một bảng mới chỉ chứa các hàng đang hiển thị
-        let exportTable = document.createElement('table');
-        let thead = table.querySelector('thead').cloneNode(true);
-        exportTable.appendChild(thead);
-        let tbody = document.createElement('tbody');
-        
-        let rows = table.querySelectorAll('tbody tr');
-        for(let i=0; i<rows.length; i++) {
-            if(rows[i].style.display !== 'none'){
-                let clonedRow = rows[i].cloneNode(true);
-                
-                // Loại bỏ cột cuối (Thao tác) và thay Input bằng Text thường
-                if (clonedRow.cells.length > 0) {
-                     let noteInput = clonedRow.cells[9].querySelector('input');
-                     if (noteInput) {
-                         clonedRow.cells[9].innerText = noteInput.value;
-                     }
-                     clonedRow.deleteCell(-1); 
-                }
-                // Cũng cần bỏ cột cuối của thead
-                if(i === 0) {
-                     exportTable.querySelector('thead tr').deleteCell(-1);
-                }
-                
-                tbody.appendChild(clonedRow);
-            }
-        }
-        exportTable.appendChild(tbody);
-        
-        let wb = XLSX.utils.table_to_book(exportTable, {sheet: "Tong_Hop_QoE_QoS"});
+        let ws = XLSX.utils.json_to_sheet(exportData);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_QoE_QoS");
         XLSX.writeFile(wb, "Danh_Sach_Tong_Hop_QoE_QoS.xlsx");
     }
 </script>
