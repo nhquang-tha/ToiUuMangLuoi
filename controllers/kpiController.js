@@ -98,7 +98,6 @@ exports.getQoeQosData = async (req, res) => {
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
-        // Chỉ việc Select trực tiếp từ bảng tĩnh đã được tạo sẵn
         const [rows] = await db.query(`
             SELECT Site_Name, Cell_Name, District, MIMO, 
                    QoE_Rank, QoE_Score, QoE_Trend, 
@@ -117,14 +116,12 @@ exports.saveCellNote = async (req, res) => {
     const { cell_name, note } = req.body;
     if (!cell_name) return res.status(400).json({success: false});
     try {
-        // 1. Lưu dự phòng vào bảng cell_notes
         await db.query(`
             INSERT INTO cell_notes (cell_name, note_text) 
             VALUES (?, ?) 
             ON DUPLICATE KEY UPDATE note_text = VALUES(note_text)
         `, [cell_name, note || '']);
         
-        // 2. Cập nhật trực tiếp vào bảng tĩnh qoe_qos để hiển thị nhanh
         await db.query(`
             UPDATE qoe_qos SET lich_su_tac_dong = ? WHERE Cell_Name = ?
         `, [note || '', cell_name]);
@@ -228,6 +225,7 @@ exports.getOptimizingPage = async (req, res) => {
         const [qosWeeks] = await db.query('SELECT DISTINCT Tuan FROM mbb_qos WHERE Tuan IS NOT NULL');
         
         let uniqueWeeks = [...new Set([...qoeWeeks.map(r => r.Tuan), ...qosWeeks.map(r => r.Tuan)])];
+        // Sắp xếp Giảm dần: Tuần mới nhất (To nhất) lên đầu
         uniqueWeeks.sort((a, b) => {
             let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
             let matchB = b.match(/Tuần (\d+) \((\d+)\)/);
@@ -236,7 +234,7 @@ exports.getOptimizingPage = async (req, res) => {
                 return parseInt(matchB[1]) - parseInt(matchA[1]);
             }
             return 0;
-        }).reverse(); 
+        }); 
 
         res.render('optimizing_qoe_qos', { 
             title: 'Tối Ưu QoE/QoS', 
