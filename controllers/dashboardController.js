@@ -47,6 +47,7 @@ const getInt = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
+// Hàm sắp xếp từ Cũ đến Mới (Tăng dần)
 const sortWeeks = (weeksArray) => {
     return weeksArray.sort((a, b) => {
         let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
@@ -76,6 +77,7 @@ async function getKpiHistory() {
         
         const processWeeks = (rows) => {
             let uniqueWeeks = [...new Set(rows.map(r => r.Tuan).filter(Boolean))];
+            // Lật ngược lại để Mới Nhất lên đầu
             return sortWeeks(uniqueWeeks).reverse(); 
         };
 
@@ -158,7 +160,9 @@ async function syncQoeQosSummary() {
             qoeMap[r.Cell_Name][r.Tuan] = { rank: r.QoE_Rank, score: r.QoE_Score };
             qoeWeeksSet.add(r.Tuan);
         });
-        let sortedQoeWeeks = sortWeeks(Array.from(qoeWeeksSet));
+        
+        // Sửa lỗi: Lật ngược mảng để index [0] luôn là TUẦN MỚI NHẤT
+        let sortedQoeWeeks = sortWeeks(Array.from(qoeWeeksSet)).reverse();
 
         let qosMap = {}; let qosWeeksSet = new Set();
         qos.forEach(r => {
@@ -166,11 +170,11 @@ async function syncQoeQosSummary() {
             qosMap[r.Cell_Name][r.Tuan] = { rank: r.QoS_Rank, score: r.QoS_Score };
             qosWeeksSet.add(r.Tuan);
         });
-        let sortedQosWeeks = sortWeeks(Array.from(qosWeeksSet));
+        
+        // Sửa lỗi: Lật ngược mảng để index [0] luôn là TUẦN MỚI NHẤT
+        let sortedQosWeeks = sortWeeks(Array.from(qosWeeksSet)).reverse();
 
-        // ========================================================
-        // TÍNH NĂNG MỚI: CHỈ LẤY DANH SÁCH CELL CỦA TUẦN MỚI NHẤT
-        // ========================================================
+        // CHỈ LẤY DANH SÁCH CELL CỦA TUẦN MỚI NHẤT ĐỂ RENDER RA BẢNG
         let latestQoeWeek = sortedQoeWeeks.length > 0 ? sortedQoeWeeks[0] : null;
         let latestQosWeek = sortedQosWeeks.length > 0 ? sortedQosWeeks[0] : null;
 
