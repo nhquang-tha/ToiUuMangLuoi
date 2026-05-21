@@ -75,13 +75,23 @@
         <div class="content-body">
             
             <div class="filter-card">
-                <div class="filter-row" style="width: 100%;">
-                    <div style="flex: 1; min-width: 300px;">
+                <div class="filter-row" style="width: 100%; align-items: flex-end;">
+                    <div style="flex: 2; min-width: 250px;">
                         <label style="display:block; margin-bottom:8px; font-weight:bold; color:#f39c12;">Nhập Tên Cell_Code hoặc Site_Code (Nhập nhiều cách nhau dấu phẩy):</label>
-                        <input type="text" id="keywordInput" placeholder="Ví dụ: 4G-THA001M (tìm cả trạm), hoặc 4G-THA001M11, 4G-THA002M (so sánh các cell)" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; border-left: 4px solid #f1c40f;">
+                        <input type="text" id="keywordInput" placeholder="Ví dụ: 4G-THA001M (tìm cả trạm), hoặc 4G-THA001M11, 4G-THA002M (so sánh các cell)" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; border-left: 4px solid #f1c40f; box-sizing: border-box;">
+                    </div>
+                    <!-- CHỨC NĂNG MỚI: BỘ LỌC GIỚI HẠN SỐ TUẦN HIỂN THỊ TRÊN BIỂU ĐỒ -->
+                    <div style="flex: 1; min-width: 150px;">
+                        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#f39c12;">Thời gian vẽ biểu đồ:</label>
+                        <select id="chartWeeksLimit" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 14px; box-sizing: border-box; cursor: pointer;">
+                            <option value="5">5 Tuần gần nhất</option>
+                            <option value="10" selected>10 Tuần gần nhất</option>
+                            <option value="20">20 Tuần gần nhất</option>
+                            <option value="all">Tất cả các tuần</option>
+                        </select>
                     </div>
                     <div style="text-align: right;">
-                        <button onclick="executeAnalysis()" class="btn-primary" style="background: #f39c12; color: white; border: none; padding: 12px 35px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 15px; transition: 0.2s; height: 44px;">
+                        <button onclick="executeAnalysis()" class="btn-primary" style="background: #f39c12; color: white; border: none; padding: 0 30px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 15px; transition: 0.2s; height: 44px; display: inline-flex; align-items: center; justify-content: center;">
                             ⭐ Phân Tích Biểu Đồ
                         </button>
                     </div>
@@ -220,6 +230,7 @@
 
     async function executeAnalysis() {
         const val = document.getElementById('keywordInput').value.trim();
+        const limitVal = document.getElementById('chartWeeksLimit').value;
         if (!val) return alert("Vui lòng nhập Tên Cell hoặc Site!");
 
         document.getElementById('initMsg').style.display = 'none';
@@ -251,8 +262,9 @@
 
             document.getElementById('dynamicChartsArea').style.display = 'block';
             
-            buildChart('canvas_qoe', data.qoe, 'QoE_Score', '⭐ Điểm Trải Nghiệm (QoE Score)');
-            buildChart('canvas_qos', data.qos, 'QoS_Score', '⚙️ Điểm Dịch Vụ (QoS Score)');
+            // Truyền tham số limitVal vào để hàm buildChart biết nên cắt bao nhiêu tuần
+            buildChart('canvas_qoe', data.qoe, 'QoE_Score', '⭐ Điểm Trải Nghiệm (QoE Score)', limitVal);
+            buildChart('canvas_qos', data.qos, 'QoS_Score', '⚙️ Điểm Dịch Vụ (QoS Score)', limitVal);
 
         } catch (error) {
             document.getElementById('loadingMsg').style.display = 'none';
@@ -261,10 +273,20 @@
         }
     }
 
-    function buildChart(canvasId, rawData, valueKey, titleText) {
+    function buildChart(canvasId, rawData, valueKey, titleText, limitVal) {
         if (!rawData || rawData.length === 0) return;
 
+        // Lấy tất cả các tuần hiện có trong dữ liệu tìm kiếm và sắp xếp từ cũ tới mới
         let allWeeks = sortWeeks([...new Set(rawData.map(d => d.Tuan))].filter(Boolean));
+        
+        // GIỚI HẠN SỐ TUẦN HIỂN THỊ TRÊN BIỂU ĐỒ (Cắt từ dưới lên để lấy các tuần mới nhất)
+        if (limitVal !== 'all') {
+            let limit = parseInt(limitVal);
+            if (allWeeks.length > limit) {
+                allWeeks = allWeeks.slice(-limit);
+            }
+        }
+
         let allCells = [...new Set(rawData.map(d => d.Cell_Name))].filter(Boolean);
 
         let datasets = allCells.map((cellName, colorIndex) => {
