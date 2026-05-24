@@ -50,7 +50,6 @@ router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.
 router.get('/qoe-qos-analytics', isAuthenticated, kpiController.getQoeQosAnalyticsPage);
 router.get('/api/qoe-qos-data', isAuthenticated, kpiController.getQoeQosData);
 
-// [TÍNH NĂNG MỚI]: Lấy danh sách toàn bộ Cell 4G và lưu Note
 router.get('/api/qoe-qos-list-all', isAuthenticated, kpiController.getQoeQosListAll);
 router.post('/api/save-cell-note', isAuthenticated, kpiController.saveCellNote);
 
@@ -78,6 +77,9 @@ router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfControlle
 // 6. CÁC CỔNG GIAO TIẾP API CHO DASHBOARD
 // ==========================================
 router.get('/api/dashboard-data', isAuthenticated, dashboardController.getDashboardData);
+// [MỚI]: API lấy danh sách District cho Dashboard
+router.get('/api/districts', isAuthenticated, dashboardController.getDistricts);
+
 router.get('/api/worst-cells-data', isAuthenticated, dashboardController.getWorstCellsData);
 router.get('/api/congestion-3g-data', isAuthenticated, dashboardController.getCongestion3gData);
 router.get('/api/traffic-down-data', isAuthenticated, dashboardController.getTrafficDownData);
