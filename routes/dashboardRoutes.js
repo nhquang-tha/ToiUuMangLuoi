@@ -77,8 +77,7 @@ router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfControlle
 // 6. CÁC CỔNG GIAO TIẾP API CHO DASHBOARD
 // ==========================================
 router.get('/api/dashboard-data', isAuthenticated, dashboardController.getDashboardData);
-// [MỚI]: API lấy danh sách District cho Dashboard
-router.get('/api/districts', isAuthenticated, dashboardController.getDistricts);
+router.get('/api/districts', isAuthenticated, dashboardController.getDistricts); // Lấy danh sách District
 
 router.get('/api/worst-cells-data', isAuthenticated, dashboardController.getWorstCellsData);
 router.get('/api/congestion-3g-data', isAuthenticated, dashboardController.getCongestion3gData);
