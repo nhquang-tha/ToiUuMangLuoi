@@ -47,7 +47,6 @@ const getInt = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
-// Hàm sắp xếp từ Cũ đến Mới (Tăng dần)
 const sortWeeks = (weeksArray) => {
     return weeksArray.sort((a, b) => {
         let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
@@ -508,11 +507,88 @@ exports.handleImportData = async (req, res) => {
     return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Đã Import/Ghi đè thành công ${totalImported} dòng.`, error: null });
 };
 
-exports.getDashboardData = async (req, res) => {
+// [MỚI] HÀM LẤY DANH SÁCH DISTRICT
+exports.getDistricts = async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM Dashboard ORDER BY thoi_gian ASC');
-        res.json(rows);
-    } catch (error) { res.status(500).json({ error: "Lỗi CSDL." }); }
+        const [rows] = await db.query('SELECT DISTINCT District_code FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != "" ORDER BY District_code');
+        res.json(rows.map(r => r.District_code));
+    } catch (error) {
+        console.error("Lỗi lấy danh sách District:", error);
+        res.status(500).json([]);
+    }
+};
+
+// [CẬP NHẬT] HÀM TÍNH TOÁN DASHBOARD TRỰC TIẾP (Thay vì đọc bảng tĩnh)
+exports.getDashboardData = async (req, res) => {
+    const district = req.query.district || 'all';
+
+    try {
+        let params4g = [];
+        let params5g = [];
+        let filter4g = '';
+        let filter5g = '';
+
+        // NẾU CÓ CHỌN DISTRICT, THÊM ĐIỀU KIỆN LỌC
+        if (district !== 'all') {
+            filter4g = 'AND District_code = ?';
+            params4g.push(district);
+            
+            // Thuật toán gán ghép 5G: Lấy các trạm 5G có phần thân tên giống trạm 4G thuộc District được chọn
+            // (Ví dụ: 5G-THA001 sẽ được lọc nếu 4G-THA001 thuộc huyện THA)
+            filter5g = 'AND SUBSTRING(Ten_CELL, 4) IN (SELECT SUBSTRING(Cell_name, 4) FROM kpi_4g WHERE District_code = ?)';
+            params5g.push(district);
+        }
+
+        const query4g = `
+            SELECT Thoi_gian as thoi_gian,
+                   SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_4G,
+                   AVG(User_DL_Avg_Throughput_Kbps) AS AVG_USER_DL_AVG_THPUT_4G,
+                   AVG(RB_Util_Rate_DL) AS AVG_RES_BLK_DL_4G,
+                   AVG(CQI_4G) AS AVG_CQI_4G
+            FROM kpi_4g
+            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' ${filter4g}
+            GROUP BY Thoi_gian
+        `;
+
+        const query5g = `
+            SELECT Thoi_gian as thoi_gian,
+                   SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_5G,
+                   AVG(A_User_DL_Avg_Throughput) AS AVG_USER_DL_AVG_THPUT_5G,
+                   AVG(CQI_5G) AS AVG_CQI_5G
+            FROM kpi_5g
+            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' ${filter5g}
+            GROUP BY Thoi_gian
+        `;
+
+        // Chạy song song 2 luồng truy vấn để tăng tốc
+        const [rows4g] = await db.query(query4g, params4g);
+        const [rows5g] = await db.query(query5g, params5g);
+
+        // Gộp dữ liệu 4G và 5G lại theo Ngày (Thoi_gian)
+        let mergedData = {};
+        
+        rows4g.forEach(r => {
+            mergedData[r.thoi_gian] = { ...r, sum_TRAFFIC_5G: 0, AVG_USER_DL_AVG_THPUT_5G: 0, AVG_CQI_5G: 0 };
+        });
+        
+        rows5g.forEach(r => {
+            if (!mergedData[r.thoi_gian]) {
+                mergedData[r.thoi_gian] = { 
+                    thoi_gian: r.thoi_gian, sum_TRAFFIC_4G: 0, AVG_USER_DL_AVG_THPUT_4G: 0, AVG_RES_BLK_DL_4G: 0, AVG_CQI_4G: 0 
+                };
+            }
+            mergedData[r.thoi_gian].sum_TRAFFIC_5G = r.sum_TRAFFIC_5G;
+            mergedData[r.thoi_gian].AVG_USER_DL_AVG_THPUT_5G = r.AVG_USER_DL_AVG_THPUT_5G;
+            mergedData[r.thoi_gian].AVG_CQI_5G = r.AVG_CQI_5G;
+        });
+
+        // Trả về mảng JSON
+        res.json(Object.values(mergedData));
+
+    } catch (error) { 
+        console.error("Lỗi tính toán getDashboardData:", error);
+        res.status(500).json({ error: "Lỗi CSDL." }); 
+    }
 };
 
 exports.getWorstCellsData = async (req, res) => {
