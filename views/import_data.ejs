@@ -76,10 +76,7 @@
                     <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
                         <form action="/kpi-data/reset/3g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ KPI 3G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 3G</button></form>
                         <form action="/kpi-data/reset/4g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ KPI 4G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 4G</button></form>
-                        <form action="/kpi-data/reset/5g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ KPI 5G?');"><button type="submit" class="btn-sm btn-danger">⚠ Reset KPI 5G</button></form>
-                    </div>
-
-                    <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">2. Dữ Liệu Cấu Hình Trạm (RF) & POI:</strong>
+                    <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">2. Dữ Liệu Cấu Hình Trạm (RF) & POI & CSHT:</strong>
                     <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
                         <form action="/import-data/reset/rf_3g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ Trạm 3G?');"><button type="submit" class="btn-sm btn-danger" style="background:#e67e22;">⚠ Reset RF 3G</button></form>
                         <form action="/import-data/reset/rf_4g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ Trạm 4G?');"><button type="submit" class="btn-sm btn-danger" style="background:#e67e22;">⚠ Reset RF 4G</button></form>
@@ -89,6 +86,9 @@
                         
                         <form action="/import-data/reset/poi_4g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ POI 4G?');"><button type="submit" class="btn-sm btn-danger" style="background:#1abc9c;">⚠ Reset POI 4G</button></form>
                         <form action="/import-data/reset/poi_5g" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ POI 5G?');"><button type="submit" class="btn-sm btn-danger" style="background:#1abc9c;">⚠ Reset POI 5G</button></form>
+
+                        <span style="color: #ccc;">|</span>
+                        <form action="/import-data/reset/csht_data" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ CSHT?');"><button type="submit" class="btn-sm btn-danger" style="background:#34495e;">⚠ Reset CSHT</button></form>
                     </div>
 
                     <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">3. Dữ Liệu Khác (QoE, QoS, TA):</strong>
@@ -110,6 +110,7 @@
                         <button class="tab-btn" onclick="openTab(event, 'tab-ta')">3. TA</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-qoe')">4. QoE/QoS</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-poi')">5. POI</button>
+                        <button class="tab-btn" onclick="openTab(event, 'tab-csht')">6. CSHT</button>
                     </div>
 
                     <!-- TAB 1: IMPORT RF -->
@@ -218,6 +219,26 @@
                                 </div>
                             </div>
                             <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #27ae60; border-color: #27ae60;">🚀 Bắt đầu Import POI</button>
+                        </form>
+                    </div>
+
+                    <!-- TAB 6: IMPORT CSHT -->
+                    <div id="tab-csht" class="tab-content">
+                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu Cơ Sở Hạ Tầng (CSHT).</p>
+                        <form action="/import-data" method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="networkType" value="csht_data">
+                            <div class="form-group">
+                                <label>Bảng Database lưu trữ đích:</label>
+                                <div style="padding: 10px; background: #eee; border-radius: 4px; font-weight: bold; color: #555; border: 1px solid #ccc;">
+                                    <i style="margin-right: 5px;">🏢</i> Database: CSHT_Data
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 15px;">
+                                <div style="border: 2px dashed #34495e; padding: 20px 10px; text-align: center; border-radius: 6px; background: #f8f9fa;">
+                                    <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #34495e; border-color: #34495e;">🚀 Bắt đầu Import CSHT</button>
                         </form>
                     </div>
 
