@@ -148,7 +148,8 @@
         ],
         '5g': [
             { key: 'Total_Data_Traffic_Volume_GB', title: 'TRAFFIC (Total Data Volume GB)' },
-            { key: 'Cell_DL_Avg_Throughput', title: 'CELL DL AVG THROUGHPUT (Kbps)' },
+            // Đã cập nhật thành User DL Avg Throughput thay cho Cell
+            { key: 'A_User_DL_Avg_Throughput', title: 'USER DL AVG THPUT (Mbps)' },
             { key: 'CQI_5G', title: 'CQI 5G' }
         ]
     };
@@ -238,7 +239,6 @@
         document.getElementById('initMsg').style.display = 'none';
         document.getElementById('errorMsg').style.display = 'none';
         
-        // --- THUẬT TOÁN DỌN RÁC (CHỐNG LỖI CHART.JS CRASH) ---
         if (window.chartInstances) {
             for (let key in window.chartInstances) {
                 if (window.chartInstances[key]) {
@@ -317,18 +317,21 @@
                 
                 const dataPoints = allDates.map(date => {
                     const row = cellRows.find(r => r.Thoi_gian === date);
-                    if (!row) return null;
+                    // XỬ LÝ LỖI MẤT DATA: Nếu row không tồn tại, trả về 0 để vẽ tuyến nối dưới đáy
+                    if (!row) return 0; 
+                    
                     let rawVal = row[config.key];
                     if (rawVal === undefined && config.key.includes('Kbps')) rawVal = row[config.key.replace('Kbps', 'kbps')];
+                    
                     let val = parseFloat(rawVal);
-                    return isNaN(val) ? null : val; 
+                    // Ép các giá trị Rỗng/Null từ Database thành 0
+                    return isNaN(val) ? 0 : val; 
                 });
 
                 return {
                     label: cellName,
                     data: dataPoints,
                     borderColor: color,
-                    // Chỉ dùng màu nền nhẹ, gradient sẽ được thêm vào bên dưới ctx
                     baseColor: color, 
                     borderWidth: 2.5,
                     pointBackgroundColor: '#fff',
@@ -338,7 +341,7 @@
                     pointHoverRadius: 6,
                     tension: 0.4,
                     fill: true, 
-                    spanGaps: true // NÂNG CẤP: Băng qua ngày thiếu dữ liệu
+                    spanGaps: true 
                 };
             });
 
@@ -350,7 +353,6 @@
 
             const ctx = document.getElementById(canvasId).getContext('2d');
             
-            // Xử lý tạo Gradient fill cho từng bộ dữ liệu
             datasets.forEach(ds => {
                 let gradient = ctx.createLinearGradient(0, 0, 0, 300);
                 gradient.addColorStop(0, hexToRgba(ds.baseColor, 0.4));
@@ -405,7 +407,6 @@
             }
 
             const zoomedDatasets = dataStore.datasets.map(ds => {
-                // Tạo Gradient cho khung lớn hơn
                 let gradient = ctx.createLinearGradient(0, 0, 0, 600);
                 gradient.addColorStop(0, hexToRgba(ds.baseColor, 0.5));
                 gradient.addColorStop(1, hexToRgba(ds.baseColor, 0.0));
@@ -423,7 +424,7 @@
                     pointHoverRadius: 8,
                     fill: true,
                     tension: 0.4,
-                    spanGaps: true // NÂNG CẤP: Băng qua ngày thiếu dữ liệu (Modal)
+                    spanGaps: true
                 };
             });
 
