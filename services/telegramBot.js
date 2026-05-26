@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const db = require('../models/db'); 
 
 // THAY TOKEN CỦA BẠN VÀO ĐÂY NẾU KHÔNG DÙNG BIẾN MÔI TRƯỜNG ENV
-const token = process.env.TELEGRAM_BOT_TOKEN || 'ĐIỀN_TOKEN_CỦA_BẠN_VÀO_ĐÂY';
+const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8tn7Z3Ya7donSHpo';
 let bot;
 
 try {
@@ -38,7 +38,7 @@ if (bot) {
                      `📡 \`/rf <tên trạm>\`: Tra cứu thông số trạm phát sóng.\n` +
                      `📊 \`/kpi <tên trạm>\`: Xem thông số chất lượng mạng (CQI, Drop Rate...)\n` +
                      `⭐ \`/qoe <tên trạm>\`: Tra cứu Điểm Trải nghiệm & Điểm Dịch vụ (QoS)\n\n` +
-                     `_Lưu ý: Bạn có thể gõ trực tiếp tên lệnh mà không cần dấu / (VD: rf 4G-THA001)_`;
+                     `_Lưu ý: Bạn có thể gõ trực tiếp tên lệnh mà không cần dấu / (VD: csht 01358)_`;
         bot.sendMessage(msg.chat.id, resp, { parse_mode: 'MarkdownV2' });
     });
 
@@ -54,14 +54,29 @@ if (bot) {
             
             if (rows.length > 0) {
                 let r = rows[0];
-                // Tạo link Google Maps chuẩn
-                let mapLink = `https://www.google.com/maps?q=${r.Latitude},${r.Longitude}`;
+                // Tạo link Google Maps chuẩn xác
+                let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
                 
                 let text = `🏢 *THÔNG TIN CƠ SỞ HẠ TẦNG*\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n` +
                            `▪️ *Tên CSHT:* ${escapeMarkdown(r.Ten_CSHT)}\n` +
                            `▪️ *Mã CSHT:* ${escapeMarkdown(r.Ma_CSHT)}\n` +
-                           `▪️ *Địa chỉ:* ${escapeMarkdown(r.Dia_Chi)}\n` +
-                           `\n🗺️ [📍 CHỈ ĐƯỜNG GOOGLE MAPS](${escapeMarkdown(mapLink)})`;
+                           `▪️ *Địa chỉ:* ${escapeMarkdown(r.Dia_Chi)}\n`;
+                
+                // Trích xuất thêm các thông tin phụ hữu ích (nếu CSDL có)
+                if (r.Loai_Nha_Tram) text += `▪️ *Loại trạm:* ${escapeMarkdown(r.Loai_Nha_Tram)}\n`;
+                if (r.Don_Vi_Quan_Ly) text += `▪️ *Đơn vị QL:* ${escapeMarkdown(r.Don_Vi_Quan_Ly)}\n`;
+                
+                let tramList = [];
+                if (r.Ma_Tram_2G) tramList.push(`2G: ${r.Ma_Tram_2G}`);
+                if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
+                if (r.Ma_Tram_4G) tramList.push(`4G: ${r.Ma_Tram_4G}`);
+                if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
+                
+                if (tramList.length > 0) {
+                    text += `▪️ *Trạm phát sóng:* ${escapeMarkdown(tramList.join(' | '))}\n`;
+                }
+
+                text += `\n🗺️ [📍 BẤM VÀO ĐÂY ĐỂ MỞ GOOGLE MAPS](${escapeMarkdown(mapLink)})`;
                 
                 bot.sendMessage(chatId, text, { parse_mode: 'MarkdownV2', disable_web_page_preview: false });
             } else {
@@ -96,7 +111,7 @@ if (bot) {
 
             if (rows.length > 0) {
                 let r = rows[0]; 
-                let mapLink = `https://www.google.com/maps?q=${r.Latitude},${r.Longitude}`;
+                let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
                 let responseText = `📡 *KẾT QUẢ TÌM KIẾM RF:*\n🌐 *Mạng:* ${r.Net}\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n`;
                 for (let key in r) {
                     if (key !== 'id' && key !== 'created_at' && key !== 'Net' && r[key] !== null && r[key] !== '') {
