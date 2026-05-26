@@ -19,40 +19,42 @@ app.use(session({
 }));
 
 // ==========================================
-// MIDDLEWARE: THIẾT LẬP BIẾN TOÀN CỤC
+// MIDDLEWARE: THIẾT LẬP BIẾN TOÀN CỤC (FIX LỖI TITLE IS NOT DEFINED)
+// Đảm bảo mọi tệp EJS luôn có các biến cơ bản, tránh sập trang 500
 // ==========================================
 app.use((req, res, next) => {
-    res.locals.title = 'VNPT Dashboard'; 
-    res.locals.error = null;            
-    res.locals.message = null;          
+    res.locals.title = 'VNPT Dashboard'; // Tiêu đề mặc định
+    res.locals.error = null;            // Lỗi mặc định
+    res.locals.message = null;          // Thông báo mặc định
     res.locals.currentUser = req.session.user || null;
     next();
 });
 
-// ==========================================
-// KÍCH HOẠT TELEGRAM BOT TẠI ĐÂY
-// ==========================================
+// Khởi động Telegram Bot (Có bẫy lỗi để tránh sập server nếu thiếu Token)
 try {
     require('./services/telegramBot');
-    console.log('✅ Đã nạp thành công module Telegram Bot vào máy chủ.');
 } catch (error) {
-    console.error('❌ Lỗi khởi động Telegram Bot:', error.message);
+    console.error('Lỗi khởi động Telegram Bot:', error.message);
 }
 
 // ==========================================
-// IMPORT VÀ KIỂM TRA ROUTES ĐỊNH TUYẾN
+// IMPORT VÀ KIỂM TRA ROUTES (BẪY LỖI RENDER)
 // ==========================================
 const authRoutes = require('./routes/authRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 
+// 1. Kiểm tra file authRoutes.js
 if (typeof authRoutes !== 'function') {
     console.error('❌ LỖI NGHIÊM TRỌNG: authRoutes đang trả về một', typeof authRoutes, 'thay vì Router hợp lệ.');
+    console.error('👉 CÁCH SỬA: Hãy kiểm tra file routes/authRoutes.js và đảm bảo dòng cuối cùng là: module.exports = router;');
 } else {
     app.use('/', authRoutes);
 }
 
+// 2. Kiểm tra file dashboardRoutes.js
 if (typeof dashboardRoutes !== 'function') {
     console.error('❌ LỖI NGHIÊM TRỌNG: dashboardRoutes đang trả về một', typeof dashboardRoutes, 'thay vì Router hợp lệ.');
+    console.error('👉 CÁCH SỬA: Hãy kiểm tra file routes/dashboardRoutes.js và đảm bảo dòng cuối cùng là: module.exports = router;');
 } else {
     app.use('/', dashboardRoutes);
 }
@@ -64,6 +66,7 @@ app.use('*', (req, res) => {
 
 // ==========================================
 // BẮT LỖI 500 (INTERNAL SERVER ERROR)
+// In trực tiếp chi tiết lỗi ra màn hình để dễ dàng sửa chữa
 // ==========================================
 app.use((err, req, res, next) => {
     console.error('🔥 LỖI HỆ THỐNG (500):', err.stack);
