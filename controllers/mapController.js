@@ -10,7 +10,6 @@ exports.getMapData = async (req, res) => {
     let tableName = `rf_${network}`;
     
     try {
-        // Lấy TOÀN BỘ dữ liệu của trạm và lấy cả cấu trúc cột (fields) để giữ đúng thứ tự
         const query = `
             SELECT * FROM ${tableName} 
             WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL 
@@ -18,16 +17,13 @@ exports.getMapData = async (req, res) => {
         `;
         const [rows, fields] = await db.query(query);
         
-        // Trích xuất danh sách tên cột đúng y hệt thứ tự trong Database
         const columnOrder = fields.map(f => f.name);
         
-        // Chuẩn hóa dữ liệu trả về cho Frontend vẽ bản đồ
         const cleanedData = rows.map(r => {
             const lat = parseFloat(r.Latitude);
             const lng = parseFloat(r.Longitude);
             const azimuth = parseFloat(r.Azimuth) || 0;
             
-            // Xây dựng mảng dữ liệu dựa trên thứ tự chuẩn của Database
             const orderedRfData = [];
             for (let col of columnOrder) {
                 if (col !== 'id' && col !== 'created_at' && r[col] !== null && r[col] !== '') {
@@ -41,7 +37,6 @@ exports.getMapData = async (req, res) => {
                 lat: lat,
                 lng: lng,
                 azimuth: azimuth,
-                // TRÍCH XUẤT CÁC ID QUAN TRỌNG ĐỂ NỐI LOG FILE ITS VÀ TA
                 lac: String(r.BSC_LAC || '').trim(),
                 ci: String(r.CI || '').trim(),
                 enodeb: String(r.ENodeBID || '').trim(),
@@ -59,7 +54,6 @@ exports.getMapData = async (req, res) => {
 
 exports.getTAData = async (req, res) => {
     try {
-        // Lấy dữ liệu TA để vẽ lên Map
         const [rows] = await db.query(`SELECT * FROM TA_Query LIMIT 10000`);
         res.json(rows);
     } catch (error) {
@@ -68,7 +62,45 @@ exports.getTAData = async (req, res) => {
     }
 };
 
-// Hàm Reset toàn bộ dữ liệu TA_Query
+// [MỚI] API lấy dữ liệu Cơ Sở Hạ Tầng (CSHT)
+exports.getCshtData = async (req, res) => {
+    try {
+        const query = `
+            SELECT * FROM csht_data 
+            WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL 
+              AND Latitude != '' AND Longitude != ''
+        `;
+        const [rows, fields] = await db.query(query);
+        
+        const columnOrder = fields.map(f => f.name);
+
+        const cleanedData = rows.map(r => {
+            const lat = parseFloat(r.Latitude);
+            const lng = parseFloat(r.Longitude);
+            
+            const orderedData = [];
+            for (let col of columnOrder) {
+                if (col !== 'id' && col !== 'created_at' && r[col] !== null && r[col] !== '') {
+                    orderedData.push({ key: col, value: r[col] });
+                }
+            }
+            
+            return {
+                Ma_CSHT: r.Ma_CSHT || '',
+                Ten_CSHT: r.Ten_CSHT || 'Unknown',
+                lat: lat,
+                lng: lng,
+                allData: orderedData
+            };
+        }).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
+
+        res.json(cleanedData);
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu CSHT:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL CSHT." });
+    }
+};
+
 exports.resetTAData = async (req, res) => {
     try {
         await db.query(`TRUNCATE TABLE TA_Query`);
