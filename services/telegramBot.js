@@ -1,231 +1,333 @@
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('../models/db'); 
 
-// THAY TOKEN CỦA BẠN VÀO ĐÂY NẾU KHÔNG DÙNG BIẾN MÔI TRƯỜNG ENV
+// ĐIỀN TOKEN BẠN LẤY TỪ @BotFather VÀO ĐÂY
 const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8tn7Z3Ya7donSHpo';
-let bot;
 
+let bot;
 try {
     bot = new TelegramBot(token, { polling: true });
-    console.log("🤖 Telegram Bot đã khởi động với chức năng tra cứu RF, KPI, QoE/QoS và CSHT...");
-} catch (error) { 
-    console.error("❌ Lỗi khởi động Telegram Bot! Vui lòng kiểm tra lại Token.", error); 
+    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng & Full RF...");
+} catch (error) {
+    console.error("❌ Lỗi khởi động Telegram Bot!", error);
 }
 
 if (bot) {
-    // Hàm bóc tách từ khóa (Ví dụ: "4g tha001" -> net: 4g, kw: tha001)
+    // ==========================================
+    // HÀM HỖ TRỢ 1: TẠO URL BIỂU ĐỒ ẢNH TỪ QUICKCHART
+    // ==========================================
+    const generateChartUrl = (chartConfig) => {
+        return `https://quickchart.io/chart?w=600&h=350&c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
+    };
+
+    // ==========================================
+    // HÀM HỖ TRỢ 2: BỘ LỌC TỪ KHÓA THÔNG MINH (PHIÊN BẢN MỚI)
+    // Tự động nhận diện mạng cần tìm (nếu có gõ 3G-, 4G-, 5G-)
+    // ==========================================
     const parseKeyword = (str) => {
         if (!str) return { net: null, kw: '' };
         let kw = String(str).toUpperCase().trim();
         let net = null;
+        
+        // Nhận diện người dùng muốn tìm mạng nào
         if (/^3G[- ]/i.test(kw)) { net = '3g'; kw = kw.replace(/^3G[- ]/i, ''); }
         else if (/^4G[- ]/i.test(kw)) { net = '4g'; kw = kw.replace(/^4G[- ]/i, ''); }
         else if (/^5G[- ]/i.test(kw)) { net = '5g'; kw = kw.replace(/^5G[- ]/i, ''); }
+        
+        // Xóa đuôi -THA
         kw = kw.replace(/-THA$/i, '').replace(/-TH$/i, ''); 
         return { net, kw };
     };
 
-    // Hàm chống lỗi ký tự đặc biệt của Telegram MarkdownV2
+    // Hàm chuẩn hóa text để không bị Telegram Markdown cắt xén lỗi
     const escapeMarkdown = (text) => {
-        return text === null || text === undefined ? '' : String(text).replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+        if (text === null || text === undefined) return '';
+        return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
     };
 
-    // LỆNH: /start HOẶC /help
+    // ==========================================
+    // MENU HƯỚNG DẪN (START)
+    // ==========================================
     bot.onText(/^(?:\/)?(?:start|help)$/i, (msg) => {
-        const resp = `👋 *HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT*\n\n` +
-                     `*Danh sách lệnh hỗ trợ:*\n` +
-                     `🏢 \`/csht <mã CSHT>\`: Tra cứu Cơ sở hạ tầng (VD: csht 01358).\n` +
-                     `📡 \`/rf <tên trạm>\`: Tra cứu thông số trạm phát sóng.\n` +
-                     `📊 \`/kpi <tên trạm>\`: Xem thông số chất lượng mạng (CQI, Drop Rate...)\n` +
-                     `⭐ \`/qoe <tên trạm>\`: Tra cứu Điểm Trải nghiệm & Điểm Dịch vụ (QoS)\n\n` +
-                     `_Lưu ý: Bạn có thể gõ trực tiếp tên lệnh mà không cần dấu / (VD: csht 01358)_`;
-        bot.sendMessage(msg.chat.id, resp, { parse_mode: 'MarkdownV2' });
-    });
-
-    // LỆNH: /csht <mã CSHT>
-    bot.onText(/^(?:\/)?csht\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
-        const keyword = match[1].trim();
-        bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: *${escapeMarkdown(keyword)}*...`, { parse_mode: 'MarkdownV2' });
+        const resp = `
+👋 *HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT*
 
-        try {
-            // Truy vấn lấy dữ liệu CSHT (Tìm theo mã hoặc tên đều được)
-            const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
-            
-            if (rows.length > 0) {
-                let r = rows[0];
-                // Tạo link Google Maps chuẩn xác
-                let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
-                
-                let text = `🏢 *THÔNG TIN CƠ SỞ HẠ TẦNG*\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n` +
-                           `▪️ *Tên CSHT:* ${escapeMarkdown(r.Ten_CSHT)}\n` +
-                           `▪️ *Mã CSHT:* ${escapeMarkdown(r.Ma_CSHT)}\n` +
-                           `▪️ *Địa chỉ:* ${escapeMarkdown(r.Dia_Chi)}\n`;
-                
-                // Trích xuất thêm các thông tin phụ hữu ích (nếu CSDL có)
-                if (r.Loai_Nha_Tram) text += `▪️ *Loại trạm:* ${escapeMarkdown(r.Loai_Nha_Tram)}\n`;
-                if (r.Don_Vi_Quan_Ly) text += `▪️ *Đơn vị QL:* ${escapeMarkdown(r.Don_Vi_Quan_Ly)}\n`;
-                
-                let tramList = [];
-                if (r.Ma_Tram_2G) tramList.push(`2G: ${r.Ma_Tram_2G}`);
-                if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
-                if (r.Ma_Tram_4G) tramList.push(`4G: ${r.Ma_Tram_4G}`);
-                if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
-                
-                if (tramList.length > 0) {
-                    text += `▪️ *Trạm phát sóng:* ${escapeMarkdown(tramList.join(' | '))}\n`;
-                }
+*Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):*
+📡 \`rf <cell_code>\`: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
+📊 \`kpi <cell_code>\`: Tra thông tin KPI mới nhất của cell.
+⭐ \`qoe <cell_code>\`: Tra thông tin QOE tuần mới nhất của cell.
+⚙️ \`qos <cell_code>\`: Tra thông tin QOS tuần mới nhất của cell.
 
-                text += `\n🗺️ [📍 BẤM VÀO ĐÂY ĐỂ MỞ GOOGLE MAPS](${escapeMarkdown(mapLink)})`;
-                
-                bot.sendMessage(chatId, text, { parse_mode: 'MarkdownV2', disable_web_page_preview: false });
-            } else {
-                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin CSHT cho từ khóa: *${escapeMarkdown(keyword)}*`, { parse_mode: 'MarkdownV2' });
-            }
-        } catch (e) {
-            console.error(e);
-            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới cơ sở dữ liệu CSHT.`, { parse_mode: 'MarkdownV2' });
-        }
+*Vẽ Biểu đồ (Charts):*
+📈 \`charkpi <cell_code>\`: Vẽ biểu đồ biến động KPI 7 ngày gần nhất.
+📉 \`charqoe <cell_code>\`: Vẽ biểu đồ biến động QoE 4 tuần gần nhất.
+📉 \`charqos <cell_code>\`: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
+
+_Ví dụ: rf 4G-THA001M11-THA_
+        `;
+        bot.sendMessage(chatId, resp, { parse_mode: 'Markdown' });
     });
 
-    // LỆNH: /rf <tên trạm>
+    // ==========================================
+    // 1. LỆNH: rf <cell_code> (HIỂN THỊ TOÀN BỘ CỘT RF)
+    // ==========================================
     bot.onText(/^(?:\/)?rf\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
-        const { net: targetNet, kw: keyword } = parseKeyword(match[1]);
-        bot.sendMessage(chatId, `⏳ Đang tìm kiếm tọa độ & cấu hình trạm: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'MarkdownV2' });
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        const targetNet = parsed.net;
+        
+        bot.sendMessage(chatId, `⏳ Đang trích xuất toàn bộ dữ liệu RF cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
 
         try {
             let rows = [];
+            
+            // Danh sách các câu lệnh truy vấn
             const queries = [
                 { net: '4g', sql: `SELECT '4G' as Net, rf_4g.* FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1` },
                 { net: '5g', sql: `SELECT '5G' as Net, rf_5g.* FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 1` },
                 { net: '3g', sql: `SELECT '3G' as Net, rf_3g.* FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1` }
             ];
 
+            // Chạy truy vấn (Nếu có chỉ định targetNet thì chỉ chạy mạng đó)
             for (let q of queries) {
-                if (targetNet && q.net !== targetNet) continue; 
-                if (rows.length > 0) break; 
+                if (targetNet && q.net !== targetNet) continue; // Bỏ qua mạng không đúng yêu cầu
+                if (rows.length > 0) break; // Nếu tìm thấy rồi thì dừng lại
+                
                 let [res] = await db.query(q.sql, [`%${keyword}%`, `%${keyword}%`]);
                 if (res.length > 0) rows = res;
             }
 
             if (rows.length > 0) {
-                let r = rows[0]; 
+                let r = rows[0]; // Chỉ lấy 1 trạm chuẩn nhất để tránh lỗi Full Text của Telegram
                 let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
-                let responseText = `📡 *KẾT QUẢ TÌM KIẾM RF:*\n🌐 *Mạng:* ${r.Net}\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n`;
+                
+                let responseText = `📡 *KẾT QUẢ RF CHI TIẾT:*\n`;
+                responseText += `🌐 *Mạng:* ${r.Net}\n---------------------------\n`;
+                
+                // Duyệt qua toàn bộ các cột trong Database và in ra
                 for (let key in r) {
-                    if (key !== 'id' && key !== 'created_at' && key !== 'Net' && r[key] !== null && r[key] !== '') {
-                        responseText += `▪️ *${escapeMarkdown(key.replace(/_/g, ' ').toUpperCase())}:* ${escapeMarkdown(r[key])}\n`;
+                    if (key !== 'id' && key !== 'created_at' && key !== 'Net') {
+                        if (r[key] !== null && r[key] !== '') {
+                            let niceKey = key.replace(/_/g, ' ').toUpperCase();
+                            let safeVal = escapeMarkdown(r[key]);
+                            responseText += `▪️ *${niceKey}:* ${safeVal}\n`;
+                        }
                     }
                 }
-                responseText += `\n🗺️ [📍 MỞ BẢN ĐỒ GOOGLE MAPS](${escapeMarkdown(mapLink)})`;
-                
-                if (responseText.length > 4000) responseText = responseText.substring(0, 4000) + '...\n_\\(Đã cắt bớt do quá dài\\)_';
-                bot.sendMessage(chatId, responseText, { parse_mode: 'MarkdownV2', disable_web_page_preview: false });
-            } else { 
-                bot.sendMessage(chatId, `❌ Không tìm thấy dữ liệu trạm: *${escapeMarkdown(match[1])}*`, { parse_mode: 'MarkdownV2' }); 
+                responseText += `\n🗺️ [📍 MỞ CHỈ ĐƯỜNG GOOGLE MAP](${mapLink})`;
+
+                // Telegram giới hạn tin nhắn ~4000 ký tự
+                if (responseText.length > 4000) {
+                    responseText = responseText.substring(0, 4000) + '...\n_(Dữ liệu đã bị cắt bớt do quá dài)_';
+                }
+
+                bot.sendMessage(chatId, responseText, { parse_mode: 'Markdown', disable_web_page_preview: false });
+            } else {
+                bot.sendMessage(chatId, `❌ Không tìm thấy Cell nào khớp với: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
             }
         } catch (e) { 
-            console.error(e);
-            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới CSDL TiDB.`, { parse_mode: 'MarkdownV2' }); 
+            bot.sendMessage(chatId, `❌ Lỗi CSDL RF. Chi tiết: ${e.message}`); 
+            console.error(e); 
         }
     });
 
-    // LỆNH: /kpi <tên trạm>
+    // ==========================================
+    // 2. LỆNH: kpi <cell_code> (Hỗ trợ 4G, 5G, 3G)
+    // ==========================================
     bot.onText(/^(?:\/)?kpi\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
-        const { net: targetNet, kw: keyword } = parseKeyword(match[1]);
-        bot.sendMessage(chatId, `⏳ Đang truy xuất KPI mới nhất của: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'MarkdownV2' });
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        const targetNet = parsed.net;
 
         try {
-            let kpiData = null;
-            let networkName = '';
-            
-            // Tìm KPI 4G
+            // Tìm 4G
             if (!targetNet || targetNet === '4g') {
-                const [rows] = await db.query(`SELECT * FROM kpi_4g WHERE Cell_name LIKE ? OR Site_name LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
-                if (rows.length > 0) { kpiData = rows[0]; networkName = '4G LTE'; }
-            }
-            // Tìm KPI 5G
-            if ((!targetNet || targetNet === '5g') && !kpiData) {
-                const [rows] = await db.query(`SELECT * FROM kpi_5g WHERE Ten_CELL LIKE ? OR Ten_GNODEB LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
-                if (rows.length > 0) { kpiData = rows[0]; networkName = '5G NR'; }
-            }
-            // Tìm KPI 3G
-            if ((!targetNet || targetNet === '3g') && !kpiData) {
-                const [rows] = await db.query(`SELECT * FROM kpi_3g WHERE Ten_CELL LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
-                if (rows.length > 0) { kpiData = rows[0]; networkName = '3G WCDMA'; }
+                let [rows] = await db.query(`SELECT '4G' as Net, Thoi_gian, Cell_name as Cell, Total_Data_Traffic_Volume_GB as Traffic, User_DL_Avg_Throughput_Kbps as Thput, RB_Util_Rate_DL as PRB, CQI_4G as CQI, Service_Drop_all as DropRate FROM kpi_4g WHERE Cell_name LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
+                if (rows.length > 0) {
+                    const r = rows[0];
+                    let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
+                    text += `📦 Traffic: *${parseFloat(r.Traffic).toFixed(2)} GB*\n`;
+                    text += `🚀 Tốc độ (DL): *${parseFloat(r.Thput).toFixed(2)} Kbps*\n`;
+                    text += `🎯 CQI: *${parseFloat(r.CQI).toFixed(2)}%*\n`;
+                    text += `⚠️ Tải PRB DL: *${parseFloat(r.PRB).toFixed(2)}%*\n`;
+                    text += `✂️ Drop Rate: *${parseFloat(r.DropRate).toFixed(3)}%*`;
+                    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+                }
             }
 
-            if (kpiData) {
-                let cellName = kpiData.Cell_name || kpiData.Ten_CELL || "Unknown";
-                let dateStr = kpiData.Thoi_gian || "N/A";
-                let text = `📊 *BÁO CÁO KPI MỚI NHẤT \\(${escapeMarkdown(networkName)}\\)*\n` +
-                           `📍 *Trạm:* ${escapeMarkdown(cellName)}\n` +
-                           `📅 *Ngày cập nhật:* ${escapeMarkdown(dateStr)}\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n`;
-                
-                if (networkName === '4G LTE') {
-                    text += `🔹 *Traffic:* ${escapeMarkdown(kpiData.Total_Data_Traffic_Volume_GB)} GB\n` +
-                            `🔹 *Throughput DL:* ${escapeMarkdown(kpiData.User_DL_Avg_Throughput_Kbps)} Kbps\n` +
-                            `🔹 *PRB DL:* ${escapeMarkdown(kpiData.RB_Util_Rate_DL)} %\n` +
-                            `🔹 *CQI:* ${escapeMarkdown(kpiData.CQI_4G)} %\n` +
-                            `🔹 *Drop Rate:* ${escapeMarkdown(kpiData.Service_Drop_all)} %\n`;
-                } else if (networkName === '5G NR') {
-                    text += `🔹 *Traffic:* ${escapeMarkdown(kpiData.Total_Data_Traffic_Volume_GB)} GB\n` +
-                            `🔹 *Throughput DL:* ${escapeMarkdown(kpiData.A_User_DL_Avg_Throughput)} Mbps\n` +
-                            `🔹 *CQI:* ${escapeMarkdown(kpiData.CQI_5G)} %\n`;
-                } else {
-                    text += `🔹 *CS Congestion:* ${escapeMarkdown(kpiData.CSCONGES)} %\n` +
-                            `🔹 *PS Congestion:* ${escapeMarkdown(kpiData.PSCONGES)} %\n` +
-                            `🔹 *Traffic:* ${escapeMarkdown(kpiData.TRAFFIC)} Erl/GB\n`;
+            // Tìm 5G
+            if (!targetNet || targetNet === '5g') {
+                let [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE Ten_CELL LIKE ? OR CELL_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+                if (rows.length > 0) {
+                    const r = rows[0];
+                    let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
+                    text += `📦 Traffic: *${parseFloat(r.Traffic).toFixed(2)} GB*\n`;
+                    text += `🚀 Tốc độ (DL): *${parseFloat(r.Thput).toFixed(2)} Mbps*\n`;
+                    text += `🎯 CQI 5G: *${parseFloat(r.CQI).toFixed(2)}%*\n`;
+                    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
                 }
-                
-                bot.sendMessage(chatId, text, { parse_mode: 'MarkdownV2' });
-            } else {
-                bot.sendMessage(chatId, `❌ Không có dữ liệu KPI cho trạm: *${escapeMarkdown(match[1])}*`, { parse_mode: 'MarkdownV2' });
             }
-        } catch (e) {
-            console.error(e);
-            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối CSDL.`, { parse_mode: 'MarkdownV2' });
-        }
+
+            // Tìm 3G
+            if (!targetNet || targetNet === '3g') {
+                let [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+                if (rows.length > 0) {
+                    const r = rows[0];
+                    let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
+                    text += `📦 Traffic: *${parseFloat(r.Traffic).toFixed(2)} Erl/GB*\n`;
+                    text += `🚀 CSSR: *${parseFloat(r.CSSR).toFixed(2)}%*\n`;
+                    text += `✂️ Drop Rate (DCR): *${parseFloat(r.DCR).toFixed(3)}%*\n`;
+                    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+                }
+            }
+
+            bot.sendMessage(chatId, `❌ Không tìm thấy dữ liệu KPI nào cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+
+        } catch (e) { bot.sendMessage(chatId, `❌ Lỗi CSDL KPI.`); console.error(e); }
     });
 
-    // LỆNH: /qoe HOẶC /qos <tên trạm>
-    bot.onText(/^(?:\/)?(?:qoe|qos)\s+(.+)$/i, async (msg, match) => {
+    // ==========================================
+    // 3. LỆNH: qoe & qos <cell_code>
+    // ==========================================
+    bot.onText(/^(?:\/)?qoe\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
-        let keyword = match[1].trim();
-        let cleanKw = keyword.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').trim();
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        try {
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+            if (rows.length > 0) {
+                const r = rows[0];
+                bot.sendMessage(chatId, `⭐ *CHỈ SỐ TRẢI NGHIỆM (QoE)*\n🔹 Cell: \`${r.Cell_Name}\`\n📅 Tuần đánh giá: *${r.Tuan}*\n---------------------------\n🏆 *Điểm QoE:* ${r.QoE_Score}\n🏅 *Hạng (Rank):* ${r.QoE_Rank}`, { parse_mode: 'Markdown' });
+            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoE cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+        } catch (e) {}
+    });
 
-        bot.sendMessage(chatId, `⏳ Đang tra cứu trải nghiệm khách hàng (QoE/QoS) cho trạm: *${escapeMarkdown(keyword)}*...`, { parse_mode: 'MarkdownV2' });
+    bot.onText(/^(?:\/)?qos\s+(.+)$/i, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        try {
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+            if (rows.length > 0) {
+                const r = rows[0];
+                bot.sendMessage(chatId, `⚙️ *CHỈ SỐ DỊCH VỤ (QoS)*\n🔹 Cell: \`${r.Cell_Name}\`\n📅 Tuần đánh giá: *${r.Tuan}*\n---------------------------\n🏆 *Điểm QoS:* ${r.QoS_Score}\n🏅 *Hạng (Rank):* ${r.QoS_Rank}`, { parse_mode: 'Markdown' });
+            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoS cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+        } catch (e) {}
+    });
+
+    // ==========================================
+    // 4. LỆNH: charkpi <cell_code> (Gửi Nhóm Ảnh)
+    // ==========================================
+    bot.onText(/^(?:\/)?charkpi\s+(.+)$/i, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        const targetNet = parsed.net;
+        
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ KPI 7 ngày cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
 
         try {
-            // Truy vấn trực tiếp vào bảng qoe_qos siêu tốc
-            const [rows] = await db.query(`SELECT * FROM qoe_qos WHERE Cell_Name LIKE ? OR Site_Name LIKE ? LIMIT 1`, [`%${cleanKw}%`, `%${cleanKw}%`]);
-            
-            if (rows.length > 0) {
-                let r = rows[0];
-                let text = `⭐ *ĐÁNH GIÁ CHẤT LƯỢNG MẠNG \\(QoE / QoS\\)*\n` +
-                           `📍 *Trạm:* ${escapeMarkdown(r.Cell_Name)}\n` +
-                           `🏢 *Khu vực:* ${escapeMarkdown(r.District || 'N/A')}\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n` +
-                           `⭐ *QoE Rank:* ${escapeMarkdown(r.QoE_Rank !== null ? r.QoE_Rank : 'N/A')} Sao\n` +
-                           `📈 *QoE Score:* ${escapeMarkdown(r.QoE_Score !== null ? parseFloat(r.QoE_Score).toFixed(2) : 'N/A')} ` +
-                           `${r.QoE_Trend > 0 ? '🔺' : (r.QoE_Trend < 0 ? '🔻' : '➖')}\n\n` +
-                           `⚙️ *QoS Rank:* ${escapeMarkdown(r.QoS_Rank !== null ? r.QoS_Rank : 'N/A')} Sao\n` +
-                           `📉 *QoS Score:* ${escapeMarkdown(r.QoS_Score !== null ? parseFloat(r.QoS_Score).toFixed(2) : 'N/A')} ` +
-                           `${r.QoS_Trend > 0 ? '🔺' : (r.QoS_Trend < 0 ? '🔻' : '➖')}\n\n`;
-                
-                if (r.lich_su_tac_dong) {
-                    text += `📝 *Ghi chú xử lý:* ${escapeMarkdown(r.lich_su_tac_dong)}\n`;
-                }
+            let title1 = 'Traffic (GB)', title2 = 'Throughput DL (Kbps)', title3 = 'CQI (%)';
+            let rows = [];
 
-                bot.sendMessage(chatId, text, { parse_mode: 'MarkdownV2' });
-            } else {
-                bot.sendMessage(chatId, `❌ Trạm *${escapeMarkdown(keyword)}* không có đánh giá QoE/QoS trong tuần mới nhất.`, { parse_mode: 'MarkdownV2' });
+            if (!targetNet || targetNet === '4g') {
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, User_DL_Avg_Throughput_Kbps as thput, CQI_4G as cqi FROM kpi_4g WHERE Cell_name LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`]);
             }
-        } catch (e) {
-            console.error(e);
-            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi tra cứu QoE/QoS.`, { parse_mode: 'MarkdownV2' });
-        }
+            
+            if (rows.length < 2 && (!targetNet || targetNet === '5g')) {
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, A_User_DL_Avg_Throughput as thput, CQI_5G as cqi FROM kpi_5g WHERE Ten_CELL LIKE ? OR CELL_ID LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
+                title2 = 'Throughput DL (Mbps)';
+            }
+            
+            if (rows.length < 2 && (!targetNet || targetNet === '3g')) {
+                [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
+                title1 = 'Traffic (Erl/GB)';
+                title2 = 'CSSR (%)';
+                title3 = 'Drop Rate (%)';
+            }
+
+            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất 2 ngày dữ liệu để vẽ biểu đồ cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+
+            const data = rows.reverse();
+            const labels = data.map(d => d.Thoi_gian.substring(0, 5)); 
+            const cellFound = keyword.toUpperCase();
+
+            const chart1 = generateChartUrl({
+                type: 'line', data: { labels: labels, datasets: [{ label: title1, data: data.map(d => d.traf), borderColor: '#3498db', fill: false }] },
+                options: { title: { display: true, text: `Biến động ${title1} - ${cellFound}` } }
+            });
+
+            const chart2 = generateChartUrl({
+                type: 'line', data: { labels: labels, datasets: [{ label: title2, data: data.map(d => d.thput), borderColor: '#9b59b6', fill: false }] },
+                options: { title: { display: true, text: `Biến động ${title2} - ${cellFound}` } }
+            });
+
+            const chart3 = generateChartUrl({
+                type: 'line', data: { labels: labels, datasets: [{ label: title3, data: data.map(d => d.cqi), borderColor: '#2ecc71', fill: false }] },
+                options: { title: { display: true, text: `Biến động ${title3} - ${cellFound}` } }
+            });
+
+            bot.sendMediaGroup(chatId, [
+                { type: 'photo', media: chart1, caption: `📈 Biểu đồ KPI 7 ngày: ${cellFound}` },
+                { type: 'photo', media: chart2 },
+                { type: 'photo', media: chart3 }
+            ]);
+
+        } catch (e) { bot.sendMessage(chatId, `❌ Lỗi vẽ biểu đồ KPI.`); console.error(e); }
+    });
+
+    // ==========================================
+    // 5. LỆNH: charqoe & charqos <cell_code>
+    // ==========================================
+    bot.onText(/^(?:\/)?charqoe\s+(.+)$/i, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoE 4 tuần cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
+
+        try {
+            const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
+            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoE.`);
+
+            const data = rows.reverse();
+            const chartUrl = generateChartUrl({
+                type: 'line', 
+                data: { 
+                    labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan),
+                    datasets: [{ label: 'Điểm QoE', data: data.map(d => d.QoE_Score), borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', fill: true, borderWidth: 3 }] 
+                },
+                options: { title: { display: true, text: `Biến động Điểm QoE (4 Tuần) - ${keyword.toUpperCase()}` } }
+            });
+
+            bot.sendPhoto(chatId, chartUrl, { caption: `⭐ Biểu đồ Trải nghiệm QoE: ${keyword.toUpperCase()}` });
+        } catch (e) {}
+    });
+
+    bot.onText(/^(?:\/)?charqos\s+(.+)$/i, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const parsed = parseKeyword(match[1]);
+        const keyword = parsed.kw;
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoS 4 tuần cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
+
+        try {
+            const [rows] = await db.query(`SELECT Tuan, QoS_Score FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
+            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
+
+            const data = rows.reverse();
+            const chartUrl = generateChartUrl({
+                type: 'bar', 
+                data: { 
+                    labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
+                    datasets: [{ label: 'Điểm QoS', data: data.map(d => d.QoS_Score), backgroundColor: '#e74c3c' }] 
+                },
+                options: { title: { display: true, text: `Biến động Điểm QoS (4 Tuần) - ${keyword.toUpperCase()}` } }
+            });
+
+            bot.sendPhoto(chatId, chartUrl, { caption: `⚙️ Biểu đồ Dịch vụ QoS: ${keyword.toUpperCase()}` });
+        } catch (e) {}
     });
 
     bot.on("polling_error", (err) => console.log("Lỗi Polling Telegram:", err.message));
