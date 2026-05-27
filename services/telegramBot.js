@@ -7,7 +7,7 @@ const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8
 let bot;
 try {
     bot = new TelegramBot(token, { polling: true });
-    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng & Full RF...");
+    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng, Full RF và CSHT...");
 } catch (error) {
     console.error("❌ Lỗi khởi động Telegram Bot!", error);
 }
@@ -54,6 +54,7 @@ if (bot) {
 👋 *HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT*
 
 *Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):*
+🏢 \`csht <mã_CSHT>\`: Tra cứu thông tin Cơ Sở Hạ Tầng (VD: csht 01358).
 📡 \`rf <cell_code>\`: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
 📊 \`kpi <cell_code>\`: Tra thông tin KPI mới nhất của cell.
 ⭐ \`qoe <cell_code>\`: Tra thông tin QOE tuần mới nhất của cell.
@@ -67,6 +68,55 @@ if (bot) {
 _Ví dụ: rf 4G-THA001M11-THA_
         `;
         bot.sendMessage(chatId, resp, { parse_mode: 'Markdown' });
+    });
+
+    // ==========================================
+    // LỆNH MỚI: csht <mã CSHT> (TRA CỨU CƠ SỞ HẠ TẦNG)
+    // ==========================================
+    bot.onText(/^(?:\/)?csht\s+(.+)$/i, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const keyword = match[1].trim();
+        bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: *${escapeMarkdown(keyword)}*...`, { parse_mode: 'Markdown' });
+
+        try {
+            // Truy vấn dữ liệu từ bảng csht_data (Tìm theo Mã hoặc Tên CSHT)
+            const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+            
+            if (rows.length > 0) {
+                let r = rows[0];
+                // Tạo link Google Maps chuẩn xác
+                let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
+                
+                let text = `🏢 *THÔNG TIN CƠ SỞ HẠ TẦNG*\n---------------------------\n` +
+                           `▪️ *Tên CSHT:* ${escapeMarkdown(r.Ten_CSHT)}\n` +
+                           `▪️ *Mã CSHT:* ${escapeMarkdown(r.Ma_CSHT)}\n` +
+                           `▪️ *Địa chỉ:* ${escapeMarkdown(r.Dia_Chi)}\n`;
+                
+                // Trích xuất thêm các thông tin phụ hữu ích (nếu CSDL có)
+                if (r.Loai_Nha_Tram) text += `▪️ *Loại trạm:* ${escapeMarkdown(r.Loai_Nha_Tram)}\n`;
+                if (r.Don_Vi_Quan_Ly) text += `▪️ *Đơn vị QL:* ${escapeMarkdown(r.Don_Vi_Quan_Ly)}\n`;
+                
+                // Hiển thị danh sách các trạm đang phát
+                let tramList = [];
+                if (r.Ma_Tram_2G) tramList.push(`2G: ${r.Ma_Tram_2G}`);
+                if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
+                if (r.Ma_Tram_4G) tramList.push(`4G: ${r.Ma_Tram_4G}`);
+                if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
+                
+                if (tramList.length > 0) {
+                    text += `▪️ *Trạm phát sóng:* ${escapeMarkdown(tramList.join(' | '))}\n`;
+                }
+
+                text += `\n🗺️ [📍 CHỈ ĐƯỜNG GOOGLE MAPS](${mapLink})`;
+                
+                bot.sendMessage(chatId, text, { parse_mode: 'Markdown', disable_web_page_preview: false });
+            } else {
+                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin CSHT cho từ khóa: *${escapeMarkdown(keyword)}*`, { parse_mode: 'Markdown' });
+            }
+        } catch (e) {
+            console.error(e);
+            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới cơ sở dữ liệu CSHT.`, { parse_mode: 'Markdown' });
+        }
     });
 
     // ==========================================
