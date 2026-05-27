@@ -22,28 +22,27 @@ if (bot) {
 
     // ==========================================
     // HÀM HỖ TRỢ 2: BỘ LỌC TỪ KHÓA THÔNG MINH (PHIÊN BẢN MỚI)
-    // Tự động nhận diện mạng cần tìm (nếu có gõ 3G-, 4G-, 5G-)
     // ==========================================
     const parseKeyword = (str) => {
         if (!str) return { net: null, kw: '' };
         let kw = String(str).toUpperCase().trim();
         let net = null;
         
-        // Nhận diện người dùng muốn tìm mạng nào
         if (/^3G[- ]/i.test(kw)) { net = '3g'; kw = kw.replace(/^3G[- ]/i, ''); }
         else if (/^4G[- ]/i.test(kw)) { net = '4g'; kw = kw.replace(/^4G[- ]/i, ''); }
         else if (/^5G[- ]/i.test(kw)) { net = '5g'; kw = kw.replace(/^5G[- ]/i, ''); }
         
-        // Xóa đuôi -THA
         kw = kw.replace(/-THA$/i, '').replace(/-TH$/i, ''); 
         return { net, kw };
     };
 
-    // Hàm chuẩn hóa text để không bị Telegram Markdown cắt xén lỗi
-    // Đã Fix: Chỉ bọc các ký tự gây lỗi cho Markdown V1 (*, _, `, [) để tránh hiển thị dấu \ thừa
-    const escapeMarkdown = (text) => {
+    // Hàm mã hóa HTML để hiển thị an toàn, KHÔNG DÙNG DẤU \ GÂY RỐI MẮT NỮA
+    const escapeHTML = (text) => {
         if (text === null || text === undefined) return '';
-        return String(text).replace(/([_*\[`])/g, '\\$1');
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     };
 
     // ==========================================
@@ -52,23 +51,23 @@ if (bot) {
     bot.onText(/^(?:\/)?(?:start|help)$/i, (msg) => {
         const chatId = msg.chat.id;
         const resp = `
-👋 *HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT*
+👋 <b>HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT</b>
 
-*Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):*
-🏢 \`csht <mã_CSHT>\`: Tra cứu thông tin Cơ Sở Hạ Tầng (VD: csht 01358).
-📡 \`rf <cell_code>\`: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
-📊 \`kpi <cell_code>\`: Tra thông tin KPI mới nhất của cell.
-⭐ \`qoe <cell_code>\`: Tra thông tin QOE tuần mới nhất của cell.
-⚙️ \`qos <cell_code>\`: Tra thông tin QOS tuần mới nhất của cell.
+<b>Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):</b>
+🏢 <code>csht &lt;mã_CSHT&gt;</code>: Tra cứu thông tin Cơ Sở Hạ Tầng (VD: csht 01358).
+📡 <code>rf &lt;cell_code&gt;</code>: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
+📊 <code>kpi &lt;cell_code&gt;</code>: Tra thông tin KPI mới nhất của cell.
+⭐ <code>qoe &lt;cell_code&gt;</code>: Tra thông tin QOE tuần mới nhất của cell.
+⚙️ <code>qos &lt;cell_code&gt;</code>: Tra thông tin QOS tuần mới nhất của cell.
 
-*Vẽ Biểu đồ (Charts):*
-📈 \`charkpi <cell_code>\`: Vẽ biểu đồ biến động KPI 7 ngày gần nhất.
-📉 \`charqoe <cell_code>\`: Vẽ biểu đồ biến động QoE 4 tuần gần nhất.
-📉 \`charqos <cell_code>\`: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
+<b>Vẽ Biểu đồ (Charts):</b>
+📈 <code>charkpi &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động KPI 7 ngày gần nhất.
+📉 <code>charqoe &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoE 4 tuần gần nhất.
+📉 <code>charqos &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
 
-_Ví dụ: rf 4G-THA001M11-THA_
+<i>Ví dụ: rf 4G-THA001M11-THA</i>
         `;
-        bot.sendMessage(chatId, resp, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, resp, { parse_mode: 'HTML' });
     });
 
     // ==========================================
@@ -77,27 +76,23 @@ _Ví dụ: rf 4G-THA001M11-THA_
     bot.onText(/^(?:\/)?csht\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const keyword = match[1].trim();
-        bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: *${escapeMarkdown(keyword)}*...`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            // Truy vấn dữ liệu từ bảng csht_data (Tìm theo Mã hoặc Tên CSHT)
             const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             
             if (rows.length > 0) {
                 let r = rows[0];
-                // Tạo link Google Maps chuẩn xác
                 let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
                 
-                let text = `🏢 *THÔNG TIN CƠ SỞ HẠ TẦNG*\n---------------------------\n` +
-                           `▪️ *Tên CSHT:* ${escapeMarkdown(r.Ten_CSHT)}\n` +
-                           `▪️ *Mã CSHT:* ${escapeMarkdown(r.Ma_CSHT)}\n` +
-                           `▪️ *Địa chỉ:* ${escapeMarkdown(r.Dia_Chi)}\n`;
+                let text = `🏢 <b>THÔNG TIN CƠ SỞ HẠ TẦNG</b>\n---------------------------\n` +
+                           `▪️ <b>Tên CSHT:</b> ${escapeHTML(r.Ten_CSHT)}\n` +
+                           `▪️ <b>Mã CSHT:</b> ${escapeHTML(r.Ma_CSHT)}\n` +
+                           `▪️ <b>Địa chỉ:</b> ${escapeHTML(r.Dia_Chi)}\n`;
                 
-                // Trích xuất thêm các thông tin phụ hữu ích (nếu CSDL có)
-                if (r.Loai_Nha_Tram) text += `▪️ *Loại trạm:* ${escapeMarkdown(r.Loai_Nha_Tram)}\n`;
-                if (r.Don_Vi_Quan_Ly) text += `▪️ *Đơn vị QL:* ${escapeMarkdown(r.Don_Vi_Quan_Ly)}\n`;
+                if (r.Loai_Nha_Tram) text += `▪️ <b>Loại trạm:</b> ${escapeHTML(r.Loai_Nha_Tram)}\n`;
+                if (r.Don_Vi_Quan_Ly) text += `▪️ <b>Đơn vị QL:</b> ${escapeHTML(r.Don_Vi_Quan_Ly)}\n`;
                 
-                // Hiển thị danh sách các trạm đang phát
                 let tramList = [];
                 if (r.Ma_Tram_2G) tramList.push(`2G: ${r.Ma_Tram_2G}`);
                 if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
@@ -105,18 +100,18 @@ _Ví dụ: rf 4G-THA001M11-THA_
                 if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
                 
                 if (tramList.length > 0) {
-                    text += `▪️ *Trạm phát sóng:* ${escapeMarkdown(tramList.join(' | '))}\n`;
+                    text += `▪️ <b>Trạm phát sóng:</b> ${escapeHTML(tramList.join(' | '))}\n`;
                 }
 
-                text += `\n🗺️ [📍 CHỈ ĐƯỜNG GOOGLE MAPS](${mapLink})`;
+                text += `\n🗺️ <a href="${mapLink}">📍 CHỈ ĐƯỜNG GOOGLE MAPS</a>`;
                 
-                bot.sendMessage(chatId, text, { parse_mode: 'Markdown', disable_web_page_preview: false });
+                bot.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: false });
             } else {
-                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin CSHT cho từ khóa: *${escapeMarkdown(keyword)}*`, { parse_mode: 'Markdown' });
+                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin CSHT cho từ khóa: <b>${escapeHTML(keyword)}</b>`, { parse_mode: 'HTML' });
             }
         } catch (e) {
             console.error(e);
-            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới cơ sở dữ liệu CSHT.`, { parse_mode: 'Markdown' });
+            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới cơ sở dữ liệu CSHT.`, { parse_mode: 'HTML' });
         }
     });
 
@@ -129,54 +124,49 @@ _Ví dụ: rf 4G-THA001M11-THA_
         const keyword = parsed.kw;
         const targetNet = parsed.net;
         
-        bot.sendMessage(chatId, `⏳ Đang trích xuất toàn bộ dữ liệu RF cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⏳ Đang trích xuất toàn bộ dữ liệu RF cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
 
         try {
             let rows = [];
-            
-            // Danh sách các câu lệnh truy vấn
             const queries = [
                 { net: '4g', sql: `SELECT '4G' as Net, rf_4g.* FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1` },
                 { net: '5g', sql: `SELECT '5G' as Net, rf_5g.* FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 1` },
                 { net: '3g', sql: `SELECT '3G' as Net, rf_3g.* FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1` }
             ];
 
-            // Chạy truy vấn (Nếu có chỉ định targetNet thì chỉ chạy mạng đó)
             for (let q of queries) {
-                if (targetNet && q.net !== targetNet) continue; // Bỏ qua mạng không đúng yêu cầu
-                if (rows.length > 0) break; // Nếu tìm thấy rồi thì dừng lại
+                if (targetNet && q.net !== targetNet) continue; 
+                if (rows.length > 0) break; 
                 
                 let [res] = await db.query(q.sql, [`%${keyword}%`, `%${keyword}%`]);
                 if (res.length > 0) rows = res;
             }
 
             if (rows.length > 0) {
-                let r = rows[0]; // Chỉ lấy 1 trạm chuẩn nhất để tránh lỗi Full Text của Telegram
+                let r = rows[0]; 
                 let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
                 
-                let responseText = `📡 *KẾT QUẢ RF CHI TIẾT:*\n`;
-                responseText += `🌐 *Mạng:* ${r.Net}\n---------------------------\n`;
+                let responseText = `📡 <b>KẾT QUẢ RF CHI TIẾT:</b>\n`;
+                responseText += `🌐 <b>Mạng:</b> ${r.Net}\n---------------------------\n`;
                 
-                // Duyệt qua toàn bộ các cột trong Database và in ra
                 for (let key in r) {
                     if (key !== 'id' && key !== 'created_at' && key !== 'Net') {
                         if (r[key] !== null && r[key] !== '') {
                             let niceKey = key.replace(/_/g, ' ').toUpperCase();
-                            let safeVal = escapeMarkdown(r[key]);
-                            responseText += `▪️ *${niceKey}:* ${safeVal}\n`;
+                            let safeVal = escapeHTML(r[key]);
+                            responseText += `▪️ <b>${niceKey}:</b> ${safeVal}\n`;
                         }
                     }
                 }
-                responseText += `\n🗺️ [📍 MỞ CHỈ ĐƯỜNG GOOGLE MAP](${mapLink})`;
+                responseText += `\n🗺️ <a href="${mapLink}">📍 MỞ CHỈ ĐƯỜNG GOOGLE MAP</a>`;
 
-                // Telegram giới hạn tin nhắn ~4000 ký tự
                 if (responseText.length > 4000) {
-                    responseText = responseText.substring(0, 4000) + '...\n_(Dữ liệu đã bị cắt bớt do quá dài)_';
+                    responseText = responseText.substring(0, 4000) + '...\n<i>(Dữ liệu đã bị cắt bớt do quá dài)</i>';
                 }
 
-                bot.sendMessage(chatId, responseText, { parse_mode: 'Markdown', disable_web_page_preview: false });
+                bot.sendMessage(chatId, responseText, { parse_mode: 'HTML', disable_web_page_preview: false });
             } else {
-                bot.sendMessage(chatId, `❌ Không tìm thấy Cell nào khớp với: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+                bot.sendMessage(chatId, `❌ Không tìm thấy Cell nào khớp với: <b>${escapeHTML(match[1])}</b>`, { parse_mode: 'HTML' });
             }
         } catch (e) { 
             bot.sendMessage(chatId, `❌ Lỗi CSDL RF. Chi tiết: ${e.message}`); 
@@ -199,13 +189,13 @@ _Ví dụ: rf 4G-THA001M11-THA_
                 let [rows] = await db.query(`SELECT '4G' as Net, Thoi_gian, Cell_name as Cell, Total_Data_Traffic_Volume_GB as Traffic, User_DL_Avg_Throughput_Kbps as Thput, RB_Util_Rate_DL as PRB, CQI_4G as CQI, Service_Drop_all as DropRate FROM kpi_4g WHERE Cell_name LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
-                    let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
-                    text += `📦 Traffic: *${parseFloat(r.Traffic).toFixed(2)} GB*\n`;
-                    text += `🚀 Tốc độ (DL): *${parseFloat(r.Thput).toFixed(2)} Kbps*\n`;
-                    text += `🎯 CQI: *${parseFloat(r.CQI).toFixed(2)}%*\n`;
-                    text += `⚠️ Tải PRB DL: *${parseFloat(r.PRB).toFixed(2)}%*\n`;
-                    text += `✂️ Drop Rate: *${parseFloat(r.DropRate).toFixed(3)}%*`;
-                    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
+                    text += `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} GB</b>\n`;
+                    text += `🚀 Tốc độ (DL): <b>${parseFloat(r.Thput).toFixed(2)} Kbps</b>\n`;
+                    text += `🎯 CQI: <b>${parseFloat(r.CQI).toFixed(2)}%</b>\n`;
+                    text += `⚠️ Tải PRB DL: <b>${parseFloat(r.PRB).toFixed(2)}%</b>\n`;
+                    text += `✂️ Drop Rate: <b>${parseFloat(r.DropRate).toFixed(3)}%</b>`;
+                    return bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
                 }
             }
 
@@ -214,11 +204,11 @@ _Ví dụ: rf 4G-THA001M11-THA_
                 let [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE Ten_CELL LIKE ? OR CELL_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
-                    let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
-                    text += `📦 Traffic: *${parseFloat(r.Traffic).toFixed(2)} GB*\n`;
-                    text += `🚀 Tốc độ (DL): *${parseFloat(r.Thput).toFixed(2)} Mbps*\n`;
-                    text += `🎯 CQI 5G: *${parseFloat(r.CQI).toFixed(2)}%*\n`;
-                    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
+                    text += `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} GB</b>\n`;
+                    text += `🚀 Tốc độ (DL): <b>${parseFloat(r.Thput).toFixed(2)} Mbps</b>\n`;
+                    text += `🎯 CQI 5G: <b>${parseFloat(r.CQI).toFixed(2)}%</b>\n`;
+                    return bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
                 }
             }
 
@@ -227,15 +217,15 @@ _Ví dụ: rf 4G-THA001M11-THA_
                 let [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
-                    let text = `📊 *KPI MỚI NHẤT (${r.Net}):* \`${r.Cell}\`\n📅 Ngày: *${r.Thoi_gian}*\n---------------------------\n`;
-                    text += `📦 Traffic: *${parseFloat(r.Traffic).toFixed(2)} Erl/GB*\n`;
-                    text += `🚀 CSSR: *${parseFloat(r.CSSR).toFixed(2)}%*\n`;
-                    text += `✂️ Drop Rate (DCR): *${parseFloat(r.DCR).toFixed(3)}%*\n`;
-                    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
+                    text += `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} Erl/GB</b>\n`;
+                    text += `🚀 CSSR: <b>${parseFloat(r.CSSR).toFixed(2)}%</b>\n`;
+                    text += `✂️ Drop Rate (DCR): <b>${parseFloat(r.DCR).toFixed(3)}%</b>\n`;
+                    return bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
                 }
             }
 
-            bot.sendMessage(chatId, `❌ Không tìm thấy dữ liệu KPI nào cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+            bot.sendMessage(chatId, `❌ Không tìm thấy dữ liệu KPI nào cho: <b>${escapeHTML(match[1])}</b>`, { parse_mode: 'HTML' });
 
         } catch (e) { bot.sendMessage(chatId, `❌ Lỗi CSDL KPI.`); console.error(e); }
     });
@@ -251,8 +241,8 @@ _Ví dụ: rf 4G-THA001M11-THA_
             const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
-                bot.sendMessage(chatId, `⭐ *CHỈ SỐ TRẢI NGHIỆM (QoE)*\n🔹 Cell: \`${r.Cell_Name}\`\n📅 Tuần đánh giá: *${r.Tuan}*\n---------------------------\n🏆 *Điểm QoE:* ${r.QoE_Score}\n🏅 *Hạng (Rank):* ${r.QoE_Rank}`, { parse_mode: 'Markdown' });
-            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoE cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+                bot.sendMessage(chatId, `⭐ <b>CHỈ SỐ TRẢI NGHIỆM (QoE)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm QoE:</b> ${r.QoE_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoE_Rank}`, { parse_mode: 'HTML' });
+            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoE cho: <b>${escapeHTML(match[1])}</b>`, { parse_mode: 'HTML' });
         } catch (e) {}
     });
 
@@ -264,8 +254,8 @@ _Ví dụ: rf 4G-THA001M11-THA_
             const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
-                bot.sendMessage(chatId, `⚙️ *CHỈ SỐ DỊCH VỤ (QoS)*\n🔹 Cell: \`${r.Cell_Name}\`\n📅 Tuần đánh giá: *${r.Tuan}*\n---------------------------\n🏆 *Điểm QoS:* ${r.QoS_Score}\n🏅 *Hạng (Rank):* ${r.QoS_Rank}`, { parse_mode: 'Markdown' });
-            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoS cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+                bot.sendMessage(chatId, `⚙️ <b>CHỈ SỐ DỊCH VỤ (QoS)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm QoS:</b> ${r.QoS_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoS_Rank}`, { parse_mode: 'HTML' });
+            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoS cho: <b>${escapeHTML(match[1])}</b>`, { parse_mode: 'HTML' });
         } catch (e) {}
     });
 
@@ -278,7 +268,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
         const keyword = parsed.kw;
         const targetNet = parsed.net;
         
-        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ KPI 7 ngày cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ KPI 7 ngày cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
 
         try {
             let title1 = 'Traffic (GB)', title2 = 'Throughput DL (Kbps)', title3 = 'CQI (%)';
@@ -300,7 +290,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
                 title3 = 'Drop Rate (%)';
             }
 
-            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất 2 ngày dữ liệu để vẽ biểu đồ cho: *${escapeMarkdown(match[1])}*`, { parse_mode: 'Markdown' });
+            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất 2 ngày dữ liệu để vẽ biểu đồ cho: <b>${escapeHTML(match[1])}</b>`, { parse_mode: 'HTML' });
 
             const data = rows.reverse();
             const labels = data.map(d => d.Thoi_gian.substring(0, 5)); 
@@ -337,7 +327,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
-        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoE 4 tuần cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoE 4 tuần cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
 
         try {
             const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
@@ -361,7 +351,7 @@ _Ví dụ: rf 4G-THA001M11-THA_
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
-        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoS 4 tuần cho: *${escapeMarkdown(match[1])}*...`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoS 4 tuần cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
 
         try {
             const [rows] = await db.query(`SELECT Tuan, QoS_Score FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
