@@ -40,9 +40,10 @@ if (bot) {
     };
 
     // Hàm chuẩn hóa text để không bị Telegram Markdown cắt xén lỗi
+    // Đã Fix: Chỉ bọc các ký tự gây lỗi cho Markdown V1 (*, _, `, [) để tránh hiển thị dấu \ thừa
     const escapeMarkdown = (text) => {
         if (text === null || text === undefined) return '';
-        return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+        return String(text).replace(/([_*\[`])/g, '\\$1');
     };
 
     // ==========================================
