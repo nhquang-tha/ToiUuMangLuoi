@@ -30,11 +30,21 @@ app.use((req, res, next) => {
     next();
 });
 
-// Khởi động Telegram Bot (Có bẫy lỗi để tránh sập server nếu thiếu Token)
+// ==========================================
+// API GIỮ SERVER LUÔN THỨC (DÀNH CHO CRON-JOB)
+// ==========================================
+app.get('/ping', (req, res) => {
+    res.status(200).send('PONG - Server is alive!');
+});
+
+// ==========================================
+// KÍCH HOẠT TELEGRAM BOT
+// ==========================================
 try {
     require('./services/telegramBot');
+    console.log('✅ Đã nạp thành công module Telegram Bot vào máy chủ.');
 } catch (error) {
-    console.error('Lỗi khởi động Telegram Bot:', error.message);
+    console.error('❌ Lỗi khởi động Telegram Bot:', error.message);
 }
 
 // ==========================================
@@ -59,7 +69,22 @@ if (typeof dashboardRoutes !== 'function') {
     app.use('/', dashboardRoutes);
 }
 
-// Xử lý lỗi 404 (Trang không tồn tại)
+// 3. Kích hoạt Viber Bot (Bẫy lỗi an toàn nếu chưa tạo file viberBot.js)
+try {
+    const viberBotRoutes = require('./services/viberBot');
+    if (typeof viberBotRoutes !== 'function') {
+        console.error('❌ LỖI NGHIÊM TRỌNG: viberBotRoutes không hợp lệ.');
+    } else {
+        app.use('/', viberBotRoutes);
+        console.log('✅ Đã nạp thành công module Viber Bot vào máy chủ.');
+    }
+} catch (error) {
+    console.error('⚠️ Chưa tìm thấy module Viber Bot (Bỏ qua nếu bạn không dùng tính năng này).');
+}
+
+// ==========================================
+// XỬ LÝ LỖI 404 (Trang không tồn tại)
+// ==========================================
 app.use('*', (req, res) => {
     res.status(404).send('<div style="text-align:center; padding:50px; font-family:Arial; background-color:#f4f6f8; height:100vh;"><h2 style="color:#e74c3c;">404 - Trang không tồn tại</h2><p>Đường dẫn bạn truy cập không đúng hoặc đã bị gỡ bỏ.</p><a href="/" style="display:inline-block; padding:10px 20px; background:#3498db; color:white; text-decoration:none; border-radius:5px; font-weight:bold;">Về Trang Chủ</a></div>');
 });
