@@ -115,7 +115,7 @@ if (bot) {
     });
 
     // ==========================================
-    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỰ ĐỘNG (FIX REGEX)
+    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỰ ĐỘNG (FIX REGEX HW)
     // ==========================================
     bot.onText(/^(?:\/)?alarm\s+([\s\S]+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -128,10 +128,10 @@ if (bot) {
             let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
-            // 2. Quét Hardware Position (VD: Cabinet No.=0, Subrack No.=61, Slot No.=0)
-            // Cải tiến Regex để không bỏ sót dấu bằng (=) và xử lý trường hợp khuyết Cabinet
-            let hwMatch = alarmText.match(/(?:Cabinet\s*No\.?\s*=\s*\d+\s*,\s*)?Subrack\s*No\.?\s*=\s*\d+\s*,\s*Slot\s*No\.?\s*=\s*\d+/i);
-            let hwPos = hwMatch ? hwMatch[0] : null;
+            // 2. Quét Hardware Position (VD: Cabinet No.=0, Subrack No.=0, Slot No.=3, Port No.=4, Sub Port No.=0, Board Type=UBBP)
+            // Cải tiến Regex để quét mở rộng linh hoạt thêm Port No, Sub Port No, Board Type
+            let hwMatch = alarmText.match(/(?:Cabinet\s*No\.?\s*=\s*\d+\s*,\s*)?Subrack\s*No\.?\s*=\s*\d+(?:\s*,\s*Slot\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Sub\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Board\s*Type\s*=\s*[^,\]|]+)?/i);
+            let hwPos = hwMatch ? hwMatch[0].trim() : null;
 
             // 3. Quét Specific Problem (VD: Specific Problem=Receive Power Too Low)
             let spMatch = alarmText.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
