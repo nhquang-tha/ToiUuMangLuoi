@@ -7,19 +7,19 @@ const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8
 let bot;
 try {
     bot = new TelegramBot(token, { polling: true });
-    console.log("🤖 Telegram Bot đã khởi động với Phân tích Alarm, Lọc Đa Mạng, Full RF và CSHT...");
+    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng, Full RF, CSHT và Phân tích Alarm...");
 } catch (error) {
     console.error("❌ Lỗi khởi động Telegram Bot!", error);
 }
 
 // ==========================================
-// CẨM NANG XỬ LÝ VÔ TUYẾN MÔ HÌNH ĐIỀU HÀNH (TÍCH HỢP SẴN)
+// CẨM NANG XỬ LÝ VÔ TUYẾN MÔ HÌNH ĐIỀU HÀNH (CHUẨN THEO FILE EXCEL)
 // ==========================================
 const ALARM_HANDBOOK = [
     {
-        keywords: ['NodeB Unavailable', 'Site Out Of Service', 'SITE_OOS'],
-        cause: 'Mất toàn bộ sóng của khu vực NodeB/eNodeB/gNodeB phủ sóng. Nguyên nhân do mất điện lưới, đứt truyền dẫn, hoặc lỗi thiết bị phần cứng.',
-        action: '- Liên hệ bộ phận Điều hành (852214) để kiểm tra thông tin mất điện/cáp.\n- Kiểm tra nguồn cấp, truyền dẫn, trạng thái card.\n- Trường hợp lỗi card chuyển phiếu lên hỗ trợ mức 1.'
+        keywords: ['NodeB Unavailable', 'Site Out Of Service', 'SITE_OOS', 'eNodeB Unavailable', 'gNodeB Unavailable'],
+        cause: 'Mất liên lạc trạm. Mất toàn bộ sóng của khu vực NodeB/eNodeB/gNodeB phủ sóng. Nguyên nhân do mất điện lưới, đứt truyền dẫn, hoặc lỗi thiết bị phần cứng.',
+        action: '- Liên hệ bộ phận Điều hành (852214) để kiểm tra thông tin mất điện/cáp.\n- Kiểm tra nguồn cấp, truyền dẫn, trạng thái card.\n- Trường hợp lỗi card chuyển phiếu lên hỗ trợ mức 1.\n- Tiến hành xử lý khôi phục cảnh báo và đóng phiếu.'
     },
     {
         keywords: ['Cell Unavailable', 'Local Cell Unusable', 'UMTS Cell Unavailable', 'GSM Cell out of Service', 'CELL_OOS'],
@@ -57,9 +57,9 @@ const ALARM_HANDBOOK = [
         action: '- Đo kiểm tra công suất thu phát quang của port truyền dẫn.\n- Kiểm tra dây LAN/quang từ thiết bị viễn thông sang thiết bị truyền dẫn (Router/Switch).\n- Phối hợp OMC kiểm tra cấu hình.'
     },
     {
-        keywords: ['RX Channel RTWP/RSSI Unbalanced', 'Interference Noise Power', 'RTWP/RSSI Too Low'],
-        cause: 'Lỗi mất cân bằng suy hao thu (RX) giữa các nhánh hoặc có nhiễu băng tần (Interference).',
-        action: '- Dập nhiễu PIM: Kiểm tra, vệ sinh và bọc lại keo chống nước cáp Jumper/Feeder.\n- Kiểm tra cáp nối từ RRU lên Ăng-ten có bị lỏng hoặc đấu sai port không.\n- RNO kiểm tra biểu đồ nhiễu quét tần số.'
+        keywords: ['RX Channel RTWP/RSSI Unbalanced', 'Interference Noise Power', 'RTWP/RSSI Too Low', 'Receive Power Too Low'],
+        cause: 'Lỗi mất cân bằng suy hao thu (RX), công suất thu quá thấp hoặc có nhiễu băng tần (Interference).',
+        action: '- Dập nhiễu PIM: Kiểm tra, vệ sinh và bọc lại keo chống nước cáp Jumper/Feeder.\n- Kiểm tra cáp nối từ RRU lên Ăng-ten có bị lỏng hoặc đấu sai port không.\n- Kỹ sư RNO kiểm tra biểu đồ nhiễu quét tần số.'
     }
 ];
 
@@ -78,11 +78,9 @@ if (bot) {
         if (!str) return { net: null, kw: '' };
         let kw = String(str).toUpperCase().trim();
         let net = null;
-        
         if (/^3G[- ]/i.test(kw)) { net = '3g'; kw = kw.replace(/^3G[- ]/i, ''); }
         else if (/^4G[- ]/i.test(kw)) { net = '4g'; kw = kw.replace(/^4G[- ]/i, ''); }
         else if (/^5G[- ]/i.test(kw)) { net = '5g'; kw = kw.replace(/^5G[- ]/i, ''); }
-        
         kw = kw.replace(/-THA$/i, '').replace(/-TH$/i, ''); 
         return { net, kw };
     };
@@ -100,24 +98,24 @@ if (bot) {
         const resp = `
 👋 <b>HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT</b>
 
-<b>Tra cứu Thông tin:</b>
-🚑 <code>alarm &lt;bản_tin_lỗi&gt;</code>: Phân tích nguyên nhân & Cách xử lý cảnh báo.
-🏢 <code>csht &lt;mã_CSHT&gt;</code>: Tra cứu thông tin Cơ Sở Hạ Tầng.
-📡 <code>rf &lt;cell_code&gt;</code>: Tra toàn bộ thông tin RF của cell.
+<b>Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):</b>
+🚑 <code>alarm &lt;bản_tin&gt;</code>: Phân tích nguyên nhân & Cách xử lý cảnh báo.
+🏢 <code>csht &lt;mã_CSHT&gt;</code>: Tra cứu thông tin Cơ Sở Hạ Tầng (VD: csht 01358).
+📡 <code>rf &lt;cell_code&gt;</code>: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
 📊 <code>kpi &lt;cell_code&gt;</code>: Tra thông tin KPI mới nhất của cell.
-⭐ <code>qoe &lt;cell_code&gt;</code>: Tra thông tin QOE tuần mới nhất.
+⭐ <code>qoe &lt;cell_code&gt;</code>: Tra thông tin QOE tuần mới nhất của cell.
+⚙️ <code>qos &lt;cell_code&gt;</code>: Tra thông tin QOS tuần mới nhất của cell.
 
 <b>Vẽ Biểu đồ (Charts):</b>
-📈 <code>charkpi &lt;cell_code&gt;</code>: Biểu đồ biến động KPI 7 ngày.
-📉 <code>charqoe &lt;cell_code&gt;</code>: Biểu đồ biến động QoE 4 tuần.
-
-<i>Ví dụ: alarm [SITE_OOS -> NODEB -> 3G_TXN061M_THA] - NodeB Unavailable</i>
+📈 <code>charkpi &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động KPI 7 ngày gần nhất.
+📉 <code>charqoe &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoE 4 tuần gần nhất.
+📉 <code>charqos &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
         `;
         bot.sendMessage(chatId, resp, { parse_mode: 'HTML' });
     });
 
     // ==========================================
-    // [TÍNH NĂNG MỚI]: ALARM - PHÂN TÍCH CẢNH BÁO TỪ BẢN TIN
+    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỰ ĐỘNG
     // ==========================================
     bot.onText(/^(?:\/)?alarm\s+([\s\S]+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -125,11 +123,19 @@ if (bot) {
         bot.sendMessage(chatId, `⏳ <b>Đang phân tích bản tin Alarm...</b>`, { parse_mode: 'HTML' });
 
         try {
-            // Bước 1: Dùng Regex trích xuất tên trạm từ bản tin (Ví dụ bắt 4G-SSN019M-THA, 3G_HTG019M_THA, 5G-...)
-            let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+[_-][A-Z0-9]+/i);
+            // 1. Quét Tên Trạm / Cell (VD: 3G_QSN016M_THA, 3G_QSN516M14_THA, 4G-SSN019M-THA)
+            let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[_-][A-Z0-9]+)+/i);
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
-            // Bước 2: Dùng Cẩm nang để tìm nguyên nhân và phương án
+            // 2. Quét Hardware Position (VD: Cabinet No.=0, Subrack No.=61, Slot No.=0)
+            let hwMatch = alarmText.match(/(?:Cabinet No\.[^,]+,\s*)?Subrack No\.[^,]+,\s*Slot No\.[0-9]+/i);
+            let hwPos = hwMatch ? hwMatch[0] : null;
+
+            // 3. Quét Specific Problem (VD: Specific Problem=Receive Power Too Low)
+            let spMatch = alarmText.match(/Specific Problem\s*=\s*([^,\]|]+)/i);
+            let specificProblem = spMatch ? spMatch[1].trim() : null;
+
+            // 4. Tìm kiếm Nguyên nhân & Giải pháp trong Cẩm nang
             let cause = "Cảnh báo hệ thống chưa được định nghĩa rõ ràng hoặc lỗi logic phần mềm.";
             let action = "- Liên hệ OMC/NOC để kiểm tra thêm thông tin chi tiết trên phần mềm giám sát.\n- Reset lại thiết bị nếu cần thiết.";
             let matchedKeyword = "Không xác định";
@@ -144,18 +150,20 @@ if (bot) {
                 }
             }
 
-            // Bước 3: Nếu tìm thấy tên trạm, tra cứu tên CSHT từ Database
-            let cshtInfo = `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
+            // 5. Móc nối tra cứu CSHT
+            let cshtInfo = ``;
             if (cellName) {
-                cshtInfo = `▪️ <b>Tên Trạm/Cell:</b> <code>${escapeHTML(cellName)}</code>\n`;
+                cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> <code>${escapeHTML(cellName)}</code>\n`;
                 
-                // Lọc bỏ phần đuôi sector (-THA) để lấy mã trạm gốc đi tìm CSHT
-                let baseCode = cellName.replace(/-THA$/i, '').replace(/-TH$/i, '').trim();
-                
+                // Thuật toán lấy "Mã gốc" để tra cứu CSHT (Ví dụ: QSN516M14 -> Cắt lấy 7 ký tự QSN516M)
+                let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{6,7})/i);
+                let coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
+
                 const [cshtRows] = await db.query(
                     `SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data 
-                     WHERE Ma_Tram_2G LIKE ? OR Ma_Tram_3G LIKE ? OR Ma_Tram_4G LIKE ? OR Ma_Tram_5G LIKE ? LIMIT 1`,
-                    [`%${baseCode}%`, `%${baseCode}%`, `%${baseCode}%`, `%${baseCode}%`]
+                     WHERE Ma_CSHT LIKE ? 
+                     OR Ma_Tram_2G LIKE ? OR Ma_Tram_3G LIKE ? OR Ma_Tram_4G LIKE ? OR Ma_Tram_5G LIKE ? LIMIT 1`,
+                    [`%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`]
                 );
 
                 if (cshtRows.length > 0) {
@@ -167,9 +175,14 @@ if (bot) {
                 } else {
                     cshtInfo += `▪️ <b>Tên CSHT:</b> Chưa có dữ liệu CSHT khớp với trạm này.\n`;
                 }
+            } else {
+                cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
             }
 
-            // Bước 4: Trả kết quả cuối cùng
+            if (hwPos) cshtInfo += `▪️ <b>Vị trí thiết bị (HW):</b> <code>${escapeHTML(hwPos)}</code>\n`;
+            if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
+
+            // 6. Trả kết quả
             let responseText = `🚑 <b>KẾT QUẢ PHÂN TÍCH CẢNH BÁO</b>\n---------------------------\n`;
             responseText += cshtInfo;
             responseText += `---------------------------\n`;
@@ -186,9 +199,8 @@ if (bot) {
     });
 
     // ==========================================
-    // CÁC LỆNH CŨ (CSHT, RF, KPI, QOE, QOS, CHARTS) GIỮ NGUYÊN
+    // CÁC LỆNH TRA CỨU CSHT, RF, KPI, QOE, QOS, CHARTS (GIỮ NGUYÊN)
     // ==========================================
-
     bot.onText(/^(?:\/)?csht\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const keyword = match[1].trim();
@@ -196,29 +208,38 @@ if (bot) {
 
         try {
             const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+            
             if (rows.length > 0) {
                 let r = rows[0];
                 let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
+                
                 let text = `🏢 <b>THÔNG TIN CƠ SỞ HẠ TẦNG</b>\n---------------------------\n` +
                            `▪️ <b>Tên CSHT:</b> ${escapeHTML(r.Ten_CSHT)}\n` +
                            `▪️ <b>Mã CSHT:</b> ${escapeHTML(r.Ma_CSHT)}\n` +
                            `▪️ <b>Địa chỉ:</b> ${escapeHTML(r.Dia_Chi)}\n`;
+                
                 if (r.Loai_Nha_Tram) text += `▪️ <b>Loại trạm:</b> ${escapeHTML(r.Loai_Nha_Tram)}\n`;
                 if (r.Don_Vi_Quan_Ly) text += `▪️ <b>Đơn vị QL:</b> ${escapeHTML(r.Don_Vi_Quan_Ly)}\n`;
+                
                 let tramList = [];
                 if (r.Ma_Tram_2G) tramList.push(`2G: ${r.Ma_Tram_2G}`);
                 if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
                 if (r.Ma_Tram_4G) tramList.push(`4G: ${r.Ma_Tram_4G}`);
                 if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
-                if (tramList.length > 0) text += `▪️ <b>Trạm phát sóng:</b> ${escapeHTML(tramList.join(' | '))}\n`;
+                
+                if (tramList.length > 0) {
+                    text += `▪️ <b>Trạm phát sóng:</b> ${escapeHTML(tramList.join(' | '))}\n`;
+                }
+
                 text += `\n🗺️ <a href="${mapLink}">📍 CHỈ ĐƯỜNG GOOGLE MAPS</a>`;
+                
                 bot.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: false });
             } else {
                 bot.sendMessage(chatId, `❌ Không tìm thấy thông tin CSHT cho từ khóa: <b>${escapeHTML(keyword)}</b>`, { parse_mode: 'HTML' });
             }
         } catch (e) {
             console.error(e);
-            bot.sendMessage(chatId, `❌ Lỗi cơ sở dữ liệu CSHT.`, { parse_mode: 'HTML' });
+            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới cơ sở dữ liệu CSHT.`, { parse_mode: 'HTML' });
         }
     });
 
@@ -227,6 +248,7 @@ if (bot) {
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
         const targetNet = parsed.net;
+        
         bot.sendMessage(chatId, `⏳ Đang trích xuất toàn bộ dữ liệu RF cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
 
         try {
@@ -236,16 +258,19 @@ if (bot) {
                 { net: '5g', sql: `SELECT '5G' as Net, rf_5g.* FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 1` },
                 { net: '3g', sql: `SELECT '3G' as Net, rf_3g.* FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1` }
             ];
+
             for (let q of queries) {
                 if (targetNet && q.net !== targetNet) continue; 
                 if (rows.length > 0) break; 
                 let [res] = await db.query(q.sql, [`%${keyword}%`, `%${keyword}%`]);
                 if (res.length > 0) rows = res;
             }
+
             if (rows.length > 0) {
                 let r = rows[0]; 
                 let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
                 let responseText = `📡 <b>KẾT QUẢ RF CHI TIẾT:</b>\n🌐 <b>Mạng:</b> ${r.Net}\n---------------------------\n`;
+                
                 for (let key in r) {
                     if (key !== 'id' && key !== 'created_at' && key !== 'Net') {
                         if (r[key] !== null && r[key] !== '') {
@@ -255,13 +280,18 @@ if (bot) {
                     }
                 }
                 responseText += `\n🗺️ <a href="${mapLink}">📍 MỞ CHỈ ĐƯỜNG GOOGLE MAP</a>`;
-                if (responseText.length > 4000) responseText = responseText.substring(0, 4000) + '...\n<i>(Dữ liệu đã bị cắt bớt do quá dài)</i>';
+
+                if (responseText.length > 4000) {
+                    responseText = responseText.substring(0, 4000) + '...\n<i>(Dữ liệu đã bị cắt bớt do quá dài)</i>';
+                }
+
                 bot.sendMessage(chatId, responseText, { parse_mode: 'HTML', disable_web_page_preview: false });
             } else {
                 bot.sendMessage(chatId, `❌ Không tìm thấy Cell nào khớp với: <b>${escapeHTML(match[1])}</b>`, { parse_mode: 'HTML' });
             }
         } catch (e) { 
-            bot.sendMessage(chatId, `❌ Lỗi CSDL RF. Chi tiết: ${e.message}`); console.error(e); 
+            bot.sendMessage(chatId, `❌ Lỗi CSDL RF. Chi tiết: ${e.message}`); 
+            console.error(e); 
         }
     });
 
@@ -270,15 +300,18 @@ if (bot) {
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
         const targetNet = parsed.net;
+
         try {
             if (!targetNet || targetNet === '4g') {
                 let [rows] = await db.query(`SELECT '4G' as Net, Thoi_gian, Cell_name as Cell, Total_Data_Traffic_Volume_GB as Traffic, User_DL_Avg_Throughput_Kbps as Thput, RB_Util_Rate_DL as PRB, CQI_4G as CQI, Service_Drop_all as DropRate FROM kpi_4g WHERE Cell_name LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
-                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n` +
-                               `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} GB</b>\n🚀 Tốc độ (DL): <b>${parseFloat(r.Thput).toFixed(2)} Kbps</b>\n` +
-                               `🎯 CQI: <b>${parseFloat(r.CQI).toFixed(2)}%</b>\n⚠️ Tải PRB DL: <b>${parseFloat(r.PRB).toFixed(2)}%</b>\n` +
-                               `✂️ Drop Rate: <b>${parseFloat(r.DropRate).toFixed(3)}%</b>`;
+                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
+                    text += `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} GB</b>\n`;
+                    text += `🚀 Tốc độ (DL): <b>${parseFloat(r.Thput).toFixed(2)} Kbps</b>\n`;
+                    text += `🎯 CQI: <b>${parseFloat(r.CQI).toFixed(2)}%</b>\n`;
+                    text += `⚠️ Tải PRB DL: <b>${parseFloat(r.PRB).toFixed(2)}%</b>\n`;
+                    text += `✂️ Drop Rate: <b>${parseFloat(r.DropRate).toFixed(3)}%</b>`;
                     return bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
                 }
             }
@@ -286,9 +319,10 @@ if (bot) {
                 let [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE Ten_CELL LIKE ? OR CELL_ID LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
-                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n` +
-                               `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} GB</b>\n🚀 Tốc độ (DL): <b>${parseFloat(r.Thput).toFixed(2)} Mbps</b>\n` +
-                               `🎯 CQI 5G: <b>${parseFloat(r.CQI).toFixed(2)}%</b>\n`;
+                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
+                    text += `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} GB</b>\n`;
+                    text += `🚀 Tốc độ (DL): <b>${parseFloat(r.Thput).toFixed(2)} Mbps</b>\n`;
+                    text += `🎯 CQI 5G: <b>${parseFloat(r.CQI).toFixed(2)}%</b>\n`;
                     return bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
                 }
             }
@@ -296,9 +330,10 @@ if (bot) {
                 let [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
-                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n` +
-                               `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} Erl/GB</b>\n🚀 CSSR: <b>${parseFloat(r.CSSR).toFixed(2)}%</b>\n` +
-                               `✂️ Drop Rate (DCR): <b>${parseFloat(r.DCR).toFixed(3)}%</b>\n`;
+                    let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
+                    text += `📦 Traffic: <b>${parseFloat(r.Traffic).toFixed(2)} Erl/GB</b>\n`;
+                    text += `🚀 CSSR: <b>${parseFloat(r.CSSR).toFixed(2)}%</b>\n`;
+                    text += `✂️ Drop Rate (DCR): <b>${parseFloat(r.DCR).toFixed(3)}%</b>\n`;
                     return bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
                 }
             }
@@ -336,9 +371,11 @@ if (bot) {
         const keyword = parsed.kw;
         const targetNet = parsed.net;
         bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ KPI 7 ngày cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
+
         try {
             let title1 = 'Traffic (GB)', title2 = 'Throughput DL (Kbps)', title3 = 'CQI (%)';
             let rows = [];
+
             if (!targetNet || targetNet === '4g') {
                 [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, User_DL_Avg_Throughput_Kbps as thput, CQI_4G as cqi FROM kpi_4g WHERE Cell_name LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`]);
             }
@@ -350,6 +387,7 @@ if (bot) {
                 [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE Ten_CELL LIKE ? OR CI LIKE ? ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
                 title1 = 'Traffic (Erl/GB)'; title2 = 'CSSR (%)'; title3 = 'Drop Rate (%)';
             }
+
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất 2 ngày dữ liệu để vẽ biểu đồ.`, { parse_mode: 'HTML' });
 
             const data = rows.reverse();
@@ -385,7 +423,7 @@ if (bot) {
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
         try {
-            const [rows] = await db.query(`SELECT Tuan, QoS_Score FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE Cell_Name LIKE ? OR Cell_ID LIKE ? ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
             const data = rows.reverse();
             const chartUrl = generateChartUrl({
