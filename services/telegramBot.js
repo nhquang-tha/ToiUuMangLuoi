@@ -115,7 +115,7 @@ if (bot) {
     });
 
     // ==========================================
-    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỰ ĐỘNG
+    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỰ ĐỘNG (FIX REGEX)
     // ==========================================
     bot.onText(/^(?:\/)?alarm\s+([\s\S]+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -124,15 +124,17 @@ if (bot) {
 
         try {
             // 1. Quét Tên Trạm / Cell (VD: 3G_QSN016M_THA, 3G_QSN516M14_THA, 4G-SSN019M-THA)
-            let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[_-][A-Z0-9]+)+/i);
+            // Cải tiến Regex để bắt đúng cả dấu gạch dưới và gạch ngang nối tiếp nhau
+            let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
             // 2. Quét Hardware Position (VD: Cabinet No.=0, Subrack No.=61, Slot No.=0)
-            let hwMatch = alarmText.match(/(?:Cabinet No\.[^,]+,\s*)?Subrack No\.[^,]+,\s*Slot No\.[0-9]+/i);
+            // Cải tiến Regex để không bỏ sót dấu bằng (=) và xử lý trường hợp khuyết Cabinet
+            let hwMatch = alarmText.match(/(?:Cabinet\s*No\.?\s*=\s*\d+\s*,\s*)?Subrack\s*No\.?\s*=\s*\d+\s*,\s*Slot\s*No\.?\s*=\s*\d+/i);
             let hwPos = hwMatch ? hwMatch[0] : null;
 
             // 3. Quét Specific Problem (VD: Specific Problem=Receive Power Too Low)
-            let spMatch = alarmText.match(/Specific Problem\s*=\s*([^,\]|]+)/i);
+            let spMatch = alarmText.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
             let specificProblem = spMatch ? spMatch[1].trim() : null;
 
             // 4. Tìm kiếm Nguyên nhân & Giải pháp trong Cẩm nang
@@ -156,7 +158,7 @@ if (bot) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> <code>${escapeHTML(cellName)}</code>\n`;
                 
                 // Thuật toán lấy "Mã gốc" để tra cứu CSHT (Ví dụ: QSN516M14 -> Cắt lấy 7 ký tự QSN516M)
-                let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{6,7})/i);
+                let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
                 let coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
 
                 const [cshtRows] = await db.query(
@@ -179,6 +181,7 @@ if (bot) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
             }
 
+            // In ra thông số Vị trí HW và Specific Problem nếu có
             if (hwPos) cshtInfo += `▪️ <b>Vị trí thiết bị (HW):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
