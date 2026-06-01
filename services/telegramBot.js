@@ -64,7 +64,7 @@ if (bot) {
     });
 
     // ==========================================
-    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỪ DATABASE (CẨM NANG)
+    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỪ DATABASE
     // ==========================================
     bot.onText(/^(?:\/)?alarm\s+([\s\S]+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -76,7 +76,7 @@ if (bot) {
             let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
-            // 2. Quét Hardware Position (Cabinet, Subrack, Slot, Port, Sub Port, Board Type)
+            // 2. Quét Hardware Position
             let hwMatch = alarmText.match(/(?:Cabinet\s*No\.?\s*=\s*\d+\s*,\s*)?Subrack\s*No\.?\s*=\s*\d+(?:\s*,\s*Slot\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Sub\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Board\s*Type\s*=\s*[^,\]|]+)?/i);
             let hwPos = hwMatch ? hwMatch[0].trim() : null;
 
@@ -85,13 +85,14 @@ if (bot) {
             let specificProblem = spMatch ? spMatch[1].trim() : null;
 
             // 4. Tìm kiếm Nguyên nhân & Giải pháp bằng cách Vét CSDL `alarm_data`
-            let cause = "Chưa có thông tin định nghĩa cho cảnh báo này trong Cẩm nang CSDL.";
+            let cause = "Chưa có thông tin định nghĩa cho cảnh báo này trong Cẩm nang.";
             let action = "- Vui lòng liên hệ OMC/NOC để kiểm tra thêm trên hệ thống giám sát.\n- Reset thiết bị nếu cần thiết.";
             let matchedKeyword = "Không xác định";
+            let alarmGroup = "Không xác định";
 
             try {
-                // Tải toàn bộ cẩm nang từ Database
-                const [alarmRules] = await db.query('SELECT tu_khoa, nguyen_nhan, phuong_an_xu_ly FROM alarm_data');
+                // Tải toàn bộ cẩm nang từ Database, có lấy thêm nhom_canh_bao
+                const [alarmRules] = await db.query('SELECT nhom_canh_bao, tu_khoa, nguyen_nhan, phuong_an_xu_ly FROM alarm_data');
                 
                 // Sắp xếp từ khóa theo độ dài giảm dần để ưu tiên match từ khóa dài chính xác nhất
                 alarmRules.sort((a, b) => {
@@ -100,20 +101,18 @@ if (bot) {
                     return lenB - lenA;
                 });
 
-                // Lọc theo file "Từ khóa chính trong tin nhắn"
                 for (let rule of alarmRules) {
                     let kw = rule.tu_khoa ? rule.tu_khoa.trim() : '';
-                    // Sử dụng includes để tìm kiếm độ chính xác cao
                     if (kw && alarmText.toLowerCase().includes(kw.toLowerCase())) {
                         matchedKeyword = kw;
+                        alarmGroup = rule.nhom_canh_bao || "Chưa phân nhóm";
                         cause = rule.nguyen_nhan || "Không có nội dung nguyên nhân.";
                         action = rule.phuong_an_xu_ly || "Không có phương án xử lý.";
-                        break; // Dừng lại ở từ khóa dài nhất khớp
+                        break; 
                     }
                 }
             } catch (e) {
                 console.error("Lỗi khi đọc bảng alarm_data:", e);
-                // Bỏ qua lỗi DB, dùng mặc định
             }
 
             // 5. Móc nối tra cứu CSHT
@@ -147,10 +146,11 @@ if (bot) {
             if (hwPos) cshtInfo += `▪️ <b>Vị trí thiết bị (HW):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
-            // 6. Trả kết quả
+            // 6. Trả kết quả (CÓ HIỂN THỊ NHÓM CẢNH BÁO)
             let responseText = `🚑 <b>KẾT QUẢ PHÂN TÍCH CẢNH BÁO</b>\n---------------------------\n`;
             responseText += cshtInfo;
             responseText += `---------------------------\n`;
+            responseText += `📑 <b>Nhóm cảnh báo:</b> <code>${escapeHTML(alarmGroup)}</code>\n`;
             responseText += `🔍 <b>Từ khóa nhận diện:</b> <code>${escapeHTML(matchedKeyword)}</code>\n\n`;
             responseText += `⚠️ <b>NGUYÊN NHÂN:</b>\n${escapeHTML(cause)}\n\n`;
             responseText += `🛠 <b>PHƯƠNG ÁN KIỂM TRA, XỬ LÝ:</b>\n${escapeHTML(action)}`;
