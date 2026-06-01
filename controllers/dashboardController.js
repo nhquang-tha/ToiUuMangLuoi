@@ -450,7 +450,9 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('chiều cao cột') || h.includes('chieu cao cot')) mappedCol = 'Chieu_Cao_Cot';
                         else if (h.includes('hình thức sở hữu') || h.includes('so huu')) mappedCol = 'Hinh_Thuc_So_Huu';
                     } else if (networkType === 'alarm_data') {
-                        if (h === 'từ khóa chính trong tin nhắn' || h.includes('từ khóa')) mappedCol = 'tu_khoa';
+                        // [CẬP NHẬT MỚI]: Bổ sung quét thêm cột Nhóm Cảnh Báo
+                        if (h === 'nhóm cảnh báo' || h.includes('nhóm')) mappedCol = 'nhom_canh_bao';
+                        else if (h === 'từ khóa chính trong tin nhắn' || h.includes('từ khóa')) mappedCol = 'tu_khoa';
                         else if (h === 'nguyên nhân' || h.includes('nguyên nhân')) mappedCol = 'nguyen_nhan';
                         else if (h === 'phương án kiểm tra, xử lý' || h.includes('phương án')) mappedCol = 'phuong_an_xu_ly';
                     }
@@ -482,7 +484,8 @@ exports.handleImportData = async (req, res) => {
             let hasTuanCol = weekPrefix ? dbCols.some(c => c.original.toLowerCase() === 'tuan') : false;
             let lastValidDate = null; 
             const insertData = [];
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly'];
+            // [CẬP NHẬT MỚI]: Thêm 'nhom_canh_bao' vào stringColumns
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'nhom_canh_bao', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -528,8 +531,21 @@ exports.handleImportData = async (req, res) => {
                 for (let i = 0; i < insertData.length; i += chunkSize) {
                     let chunk = insertData.slice(i, i + chunkSize);
                     const keys = Object.keys(chunk[0]); 
-                    const valuesArr = chunk.map(obj => keys.map(k => obj[k])); 
-                    const sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ?`;
+                    
+                    // [TỐI ƯU]: Tự động làm sạch khoảng trắng dư thừa ở đầu và cuối chữ
+                    const valuesArr = chunk.map(obj => keys.map(k => {
+                        let val = obj[k];
+                        return (typeof val === 'string') ? val.trim() : val;
+                    })); 
+                    
+                    let sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ?`;
+                    
+                    // [FIX LỖI 0 DÒNG]: Xử lý chống sập khi đụng độ dữ liệu trùng lặp (Duplicate Entry)
+                    if (networkType === 'alarm_data' || networkType === 'csht_data') {
+                        let updateCols = keys.map(k => `${k}=VALUES(${k})`).join(', ');
+                        sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ? ON DUPLICATE KEY UPDATE ${updateCols}`;
+                    }
+
                     await db.query(sql, [valuesArr]);
                 }
                 totalImported += insertData.length;
