@@ -7,61 +7,10 @@ const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8
 let bot;
 try {
     bot = new TelegramBot(token, { polling: true });
-    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng, Full RF, CSHT và Phân tích Alarm...");
+    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng, Full RF, CSHT và Phân tích Alarm (Đồng bộ CSDL)...");
 } catch (error) {
     console.error("❌ Lỗi khởi động Telegram Bot!", error);
 }
-
-// ==========================================
-// CẨM NANG XỬ LÝ VÔ TUYẾN MÔ HÌNH ĐIỀU HÀNH (CHUẨN THEO FILE EXCEL)
-// ==========================================
-const ALARM_HANDBOOK = [
-    {
-        keywords: ['NodeB Unavailable', 'Site Out Of Service', 'SITE_OOS', 'eNodeB Unavailable', 'gNodeB Unavailable'],
-        cause: 'Mất liên lạc trạm. Mất toàn bộ sóng của khu vực NodeB/eNodeB/gNodeB phủ sóng. Nguyên nhân do mất điện lưới, đứt truyền dẫn, hoặc lỗi thiết bị phần cứng.',
-        action: '- Liên hệ bộ phận Điều hành (852214) để kiểm tra thông tin mất điện/cáp.\n- Kiểm tra nguồn cấp, truyền dẫn, trạng thái card.\n- Trường hợp lỗi card chuyển phiếu lên hỗ trợ mức 1.\n- Tiến hành xử lý khôi phục cảnh báo và đóng phiếu.'
-    },
-    {
-        keywords: ['Cell Unavailable', 'Local Cell Unusable', 'UMTS Cell Unavailable', 'GSM Cell out of Service', 'CELL_OOS'],
-        cause: 'Mất sóng 1 Cell hoặc cụm Cell. Thường do lỗi phần cứng (RRU/Ăng-ten), lỗi luồng quang RRU-BBU, hoặc can nhiễu.',
-        action: '- Kênh NOC kiểm tra tình trạng cáp quang, SFP, cấu hình.\n- Tổ kỹ thuật hiện trường kiểm tra nguồn cấp cho RRU, vệ sinh đầu quang.\n- Reset trạm hoặc thay thế thiết bị nếu hỏng phần cứng.'
-    },
-    {
-        keywords: ['RF Unit Maintenance Link Failure', 'CPRI Interface Error', 'Optical Module', 'CPRI Optical'],
-        cause: 'Lỗi giao tiếp quang giữa tủ BBU và RRU trên cột. Có thể do đứt cáp quang, lỏng SFP, bẩn đầu quang, đứt nguồn RRU.',
-        action: '- Kiểm tra điện áp cấp cho RRU.\n- Vệ sinh đầu cáp quang, cắm chặt lại SFP tại BBU và RRU.\n- Đo thông quang, thay cáp Jumper quang hoặc module SFP nếu bị hỏng.'
-    },
-    {
-        keywords: ['VSWR Threshold Crossed', 'Return Loss'],
-        cause: 'Lỗi sóng phản xạ (VSWR) cao. Thường do cáp Feeder/Jumper bị lỗi, lỏng đầu nối, đọng nước tại điểm nối, hoặc hỏng Ăng-ten.',
-        action: '- Kiểm tra bằng mắt thường và siết lại các đầu nối cáp Feeder/Jumper.\n- Dùng máy đo Site Master đo VSWR để xác định chính xác vị trí đứt/nước vào.\n- Bọc lại băng keo chống nước, thay cáp nếu cần.'
-    },
-    {
-        keywords: ['Mains Failure Alarm', 'DC Low Voltage Alarm', 'External Power Supply Insufficient', 'Mains Failure'],
-        cause: 'Sự cố nguồn điện: Mất điện lưới AC diện rộng hoặc điện áp DC của tủ nguồn xuống quá thấp (dưới ngưỡng ngắt).',
-        action: '- Kênh NOC thông báo tình trạng điện lưới khu vực.\n- Đội Đài trạm điều động máy phát điện ứng cứu ngay lập tức.\n- Kiểm tra aptomat (MCB), tủ nguồn, và tình trạng ắc quy nhà trạm.'
-    },
-    {
-        keywords: ['Fan Stalled', 'Temperature Unacceptable', 'BBU Fan Stalled'],
-        cause: 'Lỗi hệ thống tản nhiệt: Quạt BBU/RRU bị kẹt, hỏng hoặc nhiệt độ môi trường (nhà trạm/ngoài trời) quá cao.',
-        action: '- Kiểm tra vật cản mắc vào quạt làm mát.\n- Vệ sinh bụi bẩn hoặc thay thế module quạt (Fan module).\n- Kiểm tra hệ thống điều hòa nhà trạm.'
-    },
-    {
-        keywords: ['Board Hardware Fault', 'RF Unit Hardware Fault', 'Board Not In Position', 'Board Powered Off'],
-        cause: 'Lỗi phần cứng thiết bị (Hỏng Card, hỏng RRU) hoặc card bị lỏng, sập nguồn.',
-        action: '- Rút ra cắm lại card (Reseat board).\n- Kiểm tra đèn báo hiệu trên card/RRU.\n- Nếu không sáng đèn hoặc báo lỗi đỏ, đề xuất xuất kho thay thế thiết bị.'
-    },
-    {
-        keywords: ['Ethernet Link Fault', 'Transmission Optical Interface Error', 'Remote Maintenance Link Failure'],
-        cause: 'Lỗi truyền dẫn từ trạm (NodeB) về Controller (Core). Suy hao quang, đứt cáp mạng, lỏng port truyền dẫn.',
-        action: '- Đo kiểm tra công suất thu phát quang của port truyền dẫn.\n- Kiểm tra dây LAN/quang từ thiết bị viễn thông sang thiết bị truyền dẫn (Router/Switch).\n- Phối hợp OMC kiểm tra cấu hình.'
-    },
-    {
-        keywords: ['RX Channel RTWP/RSSI Unbalanced', 'Interference Noise Power', 'RTWP/RSSI Too Low', 'Receive Power Too Low'],
-        cause: 'Lỗi mất cân bằng suy hao thu (RX), công suất thu quá thấp hoặc có nhiễu băng tần (Interference).',
-        action: '- Dập nhiễu PIM: Kiểm tra, vệ sinh và bọc lại keo chống nước cáp Jumper/Feeder.\n- Kiểm tra cáp nối từ RRU lên Ăng-ten có bị lỏng hoặc đấu sai port không.\n- Kỹ sư RNO kiểm tra biểu đồ nhiễu quét tần số.'
-    }
-];
 
 if (bot) {
     // ==========================================
@@ -115,7 +64,7 @@ if (bot) {
     });
 
     // ==========================================
-    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỰ ĐỘNG (FIX REGEX HW)
+    // ALARM: PHÂN TÍCH BẢN TIN CẢNH BÁO TỪ DATABASE (CẨM NANG)
     // ==========================================
     bot.onText(/^(?:\/)?alarm\s+([\s\S]+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -123,33 +72,48 @@ if (bot) {
         bot.sendMessage(chatId, `⏳ <b>Đang phân tích bản tin Alarm...</b>`, { parse_mode: 'HTML' });
 
         try {
-            // 1. Quét Tên Trạm / Cell (VD: 3G_QSN016M_THA, 3G_QSN516M14_THA, 4G-SSN019M-THA)
-            // Cải tiến Regex để bắt đúng cả dấu gạch dưới và gạch ngang nối tiếp nhau
+            // 1. Quét Tên Trạm / Cell
             let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
-            // 2. Quét Hardware Position (VD: Cabinet No.=0, Subrack No.=0, Slot No.=3, Port No.=4, Sub Port No.=0, Board Type=UBBP)
-            // Cải tiến Regex để quét mở rộng linh hoạt thêm Port No, Sub Port No, Board Type
+            // 2. Quét Hardware Position (Cabinet, Subrack, Slot, Port, Sub Port, Board Type)
             let hwMatch = alarmText.match(/(?:Cabinet\s*No\.?\s*=\s*\d+\s*,\s*)?Subrack\s*No\.?\s*=\s*\d+(?:\s*,\s*Slot\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Sub\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Board\s*Type\s*=\s*[^,\]|]+)?/i);
             let hwPos = hwMatch ? hwMatch[0].trim() : null;
 
-            // 3. Quét Specific Problem (VD: Specific Problem=Receive Power Too Low)
+            // 3. Quét Specific Problem
             let spMatch = alarmText.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
             let specificProblem = spMatch ? spMatch[1].trim() : null;
 
-            // 4. Tìm kiếm Nguyên nhân & Giải pháp trong Cẩm nang
-            let cause = "Cảnh báo hệ thống chưa được định nghĩa rõ ràng hoặc lỗi logic phần mềm.";
-            let action = "- Liên hệ OMC/NOC để kiểm tra thêm thông tin chi tiết trên phần mềm giám sát.\n- Reset lại thiết bị nếu cần thiết.";
+            // 4. Tìm kiếm Nguyên nhân & Giải pháp bằng cách Vét CSDL `alarm_data`
+            let cause = "Chưa có thông tin định nghĩa cho cảnh báo này trong Cẩm nang CSDL.";
+            let action = "- Vui lòng liên hệ OMC/NOC để kiểm tra thêm trên hệ thống giám sát.\n- Reset thiết bị nếu cần thiết.";
             let matchedKeyword = "Không xác định";
 
-            for (let rule of ALARM_HANDBOOK) {
-                let isMatch = rule.keywords.some(kw => alarmText.toLowerCase().includes(kw.toLowerCase()));
-                if (isMatch) {
-                    matchedKeyword = rule.keywords.find(kw => alarmText.toLowerCase().includes(kw.toLowerCase()));
-                    cause = rule.cause;
-                    action = rule.action;
-                    break;
+            try {
+                // Tải toàn bộ cẩm nang từ Database
+                const [alarmRules] = await db.query('SELECT tu_khoa, nguyen_nhan, phuong_an_xu_ly FROM alarm_data');
+                
+                // Sắp xếp từ khóa theo độ dài giảm dần để ưu tiên match từ khóa dài chính xác nhất
+                alarmRules.sort((a, b) => {
+                    let lenA = a.tu_khoa ? a.tu_khoa.trim().length : 0;
+                    let lenB = b.tu_khoa ? b.tu_khoa.trim().length : 0;
+                    return lenB - lenA;
+                });
+
+                // Lọc theo file "Từ khóa chính trong tin nhắn"
+                for (let rule of alarmRules) {
+                    let kw = rule.tu_khoa ? rule.tu_khoa.trim() : '';
+                    // Sử dụng includes để tìm kiếm độ chính xác cao
+                    if (kw && alarmText.toLowerCase().includes(kw.toLowerCase())) {
+                        matchedKeyword = kw;
+                        cause = rule.nguyen_nhan || "Không có nội dung nguyên nhân.";
+                        action = rule.phuong_an_xu_ly || "Không có phương án xử lý.";
+                        break; // Dừng lại ở từ khóa dài nhất khớp
+                    }
                 }
+            } catch (e) {
+                console.error("Lỗi khi đọc bảng alarm_data:", e);
+                // Bỏ qua lỗi DB, dùng mặc định
             }
 
             // 5. Móc nối tra cứu CSHT
@@ -157,7 +121,6 @@ if (bot) {
             if (cellName) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> <code>${escapeHTML(cellName)}</code>\n`;
                 
-                // Thuật toán lấy "Mã gốc" để tra cứu CSHT (Ví dụ: QSN516M14 -> Cắt lấy 7 ký tự QSN516M)
                 let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
                 let coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
 
@@ -181,7 +144,6 @@ if (bot) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
             }
 
-            // In ra thông số Vị trí HW và Specific Problem nếu có
             if (hwPos) cshtInfo += `▪️ <b>Vị trí thiết bị (HW):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
@@ -189,7 +151,7 @@ if (bot) {
             let responseText = `🚑 <b>KẾT QUẢ PHÂN TÍCH CẢNH BÁO</b>\n---------------------------\n`;
             responseText += cshtInfo;
             responseText += `---------------------------\n`;
-            responseText += `🔍 <b>Từ khóa lỗi nhận diện:</b> <code>${escapeHTML(matchedKeyword)}</code>\n\n`;
+            responseText += `🔍 <b>Từ khóa nhận diện:</b> <code>${escapeHTML(matchedKeyword)}</code>\n\n`;
             responseText += `⚠️ <b>NGUYÊN NHÂN:</b>\n${escapeHTML(cause)}\n\n`;
             responseText += `🛠 <b>PHƯƠNG ÁN KIỂM TRA, XỬ LÝ:</b>\n${escapeHTML(action)}`;
 
