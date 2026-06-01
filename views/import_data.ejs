@@ -89,6 +89,9 @@
 
                         <span style="color: #ccc;">|</span>
                         <form action="/import-data/reset/csht_data" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ CSHT?');"><button type="submit" class="btn-sm btn-danger" style="background:#34495e;">⚠ Reset CSHT</button></form>
+                        
+                        <span style="color: #ccc;">|</span>
+                        <form action="/import-data/reset/alarm_data" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ Cẩm nang Alarm?');"><button type="submit" class="btn-sm btn-danger" style="background:#c0392b;">⚠ Reset Alarm</button></form>
                     </div>
 
                     <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">3. Dữ Liệu Khác (QoE, QoS, TA):</strong>
@@ -104,13 +107,14 @@
                 <!-- CỘT TRÁI: HỆ THỐNG TAB UPLOAD -->
                 <div class="card" style="flex: 1; min-width: 400px; max-width: 550px; height: fit-content; padding-top: 10px;">
                     
-                    <div class="tab-header">
+                    <div class="tab-header" style="flex-wrap: wrap; gap: 5px;">
                         <button class="tab-btn active" onclick="openTab(event, 'tab-rf')">1. Trạm RF</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-kpi')">2. KPI</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-ta')">3. TA</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-qoe')">4. QoE/QoS</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-poi')">5. POI</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-csht')">6. CSHT</button>
+                        <button class="tab-btn" onclick="openTab(event, 'tab-alarm')">7. Alarm</button>
                     </div>
 
                     <!-- TAB 1: IMPORT RF -->
@@ -239,6 +243,26 @@
                                 </div>
                             </div>
                             <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #34495e; border-color: #34495e;">🚀 Bắt đầu Import CSHT</button>
+                        </form>
+                    </div>
+
+                    <!-- TAB 7: IMPORT ALARM -->
+                    <div id="tab-alarm" class="tab-content">
+                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu Cẩm nang xử lý cảnh báo (Alarm).</p>
+                        <form action="/import-data" method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="networkType" value="alarm_data">
+                            <div class="form-group">
+                                <label>Bảng Database lưu trữ đích:</label>
+                                <div style="padding: 10px; background: #eee; border-radius: 4px; font-weight: bold; color: #555; border: 1px solid #ccc;">
+                                    <i style="margin-right: 5px;">🚑</i> Database: alarm_data
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 15px;">
+                                <div style="border: 2px dashed #c0392b; padding: 20px 10px; text-align: center; border-radius: 6px; background: #fdf2f2;">
+                                    <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #c0392b; border-color: #c0392b;">🚀 Bắt đầu Import Cẩm nang Alarm</button>
                         </form>
                     </div>
 
