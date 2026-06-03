@@ -72,21 +72,18 @@ if (bot) {
         bot.sendMessage(chatId, `⏳ <b>Đang phân tích bản tin Alarm...</b>`, { parse_mode: 'HTML' });
 
         try {
-            // 1. Quét Tên Trạm / Cell
+            // 1. Quét Mã Định Danh (Thường gọi là Cell Name / Site Name trong bản tin)
             let cellName = null;
-            // Ưu tiên 1: Quét tìm chính xác đoạn "Cell Name=", "NodeB Name=", "eNodeB Function Name=", "Site Name="
             let explicitNameMatch = alarmText.match(/(?:Cell|NodeB|eNodeB Function|Site)\s*Name\s*=\s*([A-Z0-9_.-]+)/i);
             
             if (explicitNameMatch && explicitNameMatch[1]) {
                 cellName = explicitNameMatch[1].toUpperCase();
             } else {
-                // Fallback (Dự phòng): Tự do quét chuỗi có định dạng mã trạm 2G/3G/4G/5G
                 let fallbackMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
                 cellName = fallbackMatch ? fallbackMatch[0].toUpperCase() : null;
             }
 
-            // 2. Quét Hardware Position (Thông số nằm giữa 2 dấu |)
-            // Thuật toán: Lấy toàn bộ nội dung nằm giữa 2 dấu | có chứa từ khóa HW
+            // 2. Quét Hardware Position
             let hwMatch = alarmText.match(/\|\s*([^|]*(?:Cabinet|Subrack|Slot|Port)\s*No[^|]*)\s*\|/i);
             let hwPos = hwMatch ? hwMatch[1].trim() : null;
 
@@ -94,17 +91,14 @@ if (bot) {
             let spMatch = alarmText.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
             let specificProblem = spMatch ? spMatch[1].trim() : null;
 
-            // 4. Tìm kiếm Nguyên nhân & Giải pháp bằng cách Vét CSDL `alarm_data`
+            // 4. Tìm kiếm Nguyên nhân & Giải pháp (Cẩm nang)
             let cause = "Chưa có thông định nghĩa cho cảnh báo này trong Cẩm nang.";
             let action = "- Vui lòng liên hệ OMC/NOC để kiểm tra thêm trên hệ thống giám sát.\n- Reset thiết bị nếu cần thiết.";
             let matchedKeyword = "Không xác định";
             let alarmGroup = "Không xác định";
 
             try {
-                // Tải toàn bộ cẩm nang từ Database, có lấy thêm nhom_canh_bao
                 const [alarmRules] = await db.query('SELECT nhom_canh_bao, tu_khoa, nguyen_nhan, phuong_an_xu_ly FROM alarm_data');
-                
-                // Sắp xếp từ khóa theo độ dài giảm dần để ưu tiên match từ khóa dài chính xác nhất
                 alarmRules.sort((a, b) => {
                     let lenA = a.tu_khoa ? a.tu_khoa.trim().length : 0;
                     let lenB = b.tu_khoa ? b.tu_khoa.trim().length : 0;
@@ -126,25 +120,25 @@ if (bot) {
             }
 
             // =======================================================
-            // 5. MÓC NỐI TRA CỨU CSHT (ÁNH XẠ QUA BẢNG RF_DATA)
+            // 5. MÓC NỐI TRA CỨU TÊN CSHT QUA BẢNG RF_DATA
             // =======================================================
             let cshtInfo = ``;
             if (cellName) {
-                cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> <code>${escapeHTML(cellName)}</code>\n`;
+                cshtInfo += `▪️ <b>Mã Trạm/Cell_Code:</b> <code>${escapeHTML(cellName)}</code>\n`;
                 
                 let siteCodeFromRF = null;
                 let finalLat = null;
                 let finalLng = null;
+                let actualCellNameFromRF = null; // Biến lưu Tên Tiếng Việt của trạm (CELL_NAME)
 
-                // BƯỚC 5.1: Ánh xạ Cell Name -> Site_code thông qua bảng RF
+                // BƯỚC 5.1: Ánh xạ Cell Name (từ bản tin) -> Cell_code (trong RF) để lấy ra CELL_NAME
                 try {
                     const rfQueries = [
-                        `SELECT Site_code, Latitude, Longitude FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1`,
-                        `SELECT Site_code, Latitude, Longitude FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 1`,
-                        `SELECT Site_code, Latitude, Longitude FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1`
+                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1`,
+                        `SELECT Site_code, Latitude, Longitude, SITE_NAME as DbCellName FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 1`,
+                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1`
                     ];
                     
-                    // Loại bỏ hậu tố sector để tăng tỷ lệ tìm kiếm trúng
                     let searchCell = cellName.replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
 
                     for (let sql of rfQueries) {
@@ -153,6 +147,7 @@ if (bot) {
                             siteCodeFromRF = rfRows[0].Site_code;
                             finalLat = rfRows[0].Latitude;
                             finalLng = rfRows[0].Longitude;
+                            actualCellNameFromRF = rfRows[0].DbCellName; // Lấy tên thật (VD: UBND Tinh)
                             break;
                         }
                     }
@@ -160,8 +155,7 @@ if (bot) {
                     console.error("Lỗi ánh xạ RF:", e);
                 }
 
-                // BƯỚC 5.2: Truy vấn CSHT dựa trên Site_code lấy từ bảng RF
-                // Nếu bảng RF không có, mới dùng code dự phòng lấy từ tên Cell
+                // BƯỚC 5.2: Truy vấn CSHT dựa trên Site_code
                 let coreCode = siteCodeFromRF;
                 if (!coreCode) {
                     let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
@@ -177,11 +171,13 @@ if (bot) {
 
                 if (cshtRows.length > 0) {
                     let r = cshtRows[0];
-                    // Ưu tiên dùng tọa độ từ CSHT, nếu khuyết thì dùng tọa độ dự phòng từ RF
                     let mapLat = r.Latitude || finalLat;
                     let mapLng = r.Longitude || finalLng;
                     
-                    cshtInfo += `▪️ <b>Tên CSHT:</b> ${escapeHTML(r.Ten_CSHT)}\n`;
+                    // ƯU TIÊN: Lấy CELL_NAME từ bảng RF làm Tên CSHT. Nếu không có mới dùng Ten_CSHT trong bảng csht_data
+                    let displayCshtName = actualCellNameFromRF ? actualCellNameFromRF : r.Ten_CSHT;
+                    
+                    cshtInfo += `▪️ <b>Tên CSHT:</b> ${escapeHTML(displayCshtName)}\n`;
                     cshtInfo += `▪️ <b>Địa chỉ:</b> ${escapeHTML(r.Dia_Chi)}\n`;
                     
                     if (mapLat && mapLng) {
@@ -189,26 +185,28 @@ if (bot) {
                         cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ Chỉ Đường</a>\n`;
                     }
                 } else {
-                    // Nếu CSHT chưa khai báo, nhưng bảng RF có trạm này -> Cung cấp thông tin từ RF
-                    if (siteCodeFromRF) {
-                        cshtInfo += `▪️ <b>Tên CSHT:</b> Chưa khai báo trong CSHT (Mã Trạm gốc: <b>${escapeHTML(siteCodeFromRF)}</b>)\n`;
+                    // Nếu CSHT chưa khai báo, nhưng bảng RF CÓ trạm này -> In ra Tên lấy từ bảng RF
+                    if (actualCellNameFromRF || siteCodeFromRF) {
+                        let displayName = actualCellNameFromRF ? actualCellNameFromRF : `Chưa khai báo CSHT (Mã gốc: ${siteCodeFromRF})`;
+                        cshtInfo += `▪️ <b>Tên CSHT:</b> ${escapeHTML(displayName)}\n`;
+                        
                         if (finalLat && finalLng) {
                             let mapLink = `https://www.google.com/maps/search/?api=1&query=${finalLat},${finalLng}`;
-                            cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ (Tọa độ từ bảng RF)</a>\n`;
+                            cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ (Theo tọa độ bảng RF)</a>\n`;
                         }
                     } else {
                         cshtInfo += `▪️ <b>Tên CSHT:</b> Chưa có dữ liệu CSHT khớp với trạm này.\n`;
                     }
                 }
             } else {
-                cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
+                cshtInfo += `▪️ <b>Mã Trạm/Cell_Code:</b> Không bóc tách được từ bản tin\n`;
             }
 
-            // In ra thông số Vị trí HW (toàn bộ nội dung trong dấu |) và Specific Problem nếu có
+            // In ra thông số HW và Specific Problem
             if (hwPos) cshtInfo += `▪️ <b>Thông tin chi tiết (HW/NodeB):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
-            // 6. Trả kết quả (CÓ HIỂN THỊ NHÓM CẢNH BÁO)
+            // 6. Trả kết quả cuối cùng
             let responseText = `🚑 <b>KẾT QUẢ PHÂN TÍCH CẢNH BÁO</b>\n---------------------------\n`;
             responseText += cshtInfo;
             responseText += `---------------------------\n`;
