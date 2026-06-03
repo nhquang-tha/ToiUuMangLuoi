@@ -86,7 +86,7 @@ if (bot) {
             }
 
             // 2. Quét Hardware Position (Thông số nằm giữa 2 dấu |)
-            // Thuật toán mới: Lấy toàn bộ nội dung nằm giữa 2 dấu | có chứa từ khóa HW
+            // Thuật toán: Lấy toàn bộ nội dung nằm giữa 2 dấu | có chứa từ khóa HW
             let hwMatch = alarmText.match(/\|\s*([^|]*(?:Cabinet|Subrack|Slot|Port)\s*No[^|]*)\s*\|/i);
             let hwPos = hwMatch ? hwMatch[1].trim() : null;
 
@@ -125,13 +125,48 @@ if (bot) {
                 console.error("Lỗi khi đọc bảng alarm_data:", e);
             }
 
-            // 5. Móc nối tra cứu CSHT
+            // =======================================================
+            // 5. MÓC NỐI TRA CỨU CSHT (ÁNH XẠ QUA BẢNG RF_DATA)
+            // =======================================================
             let cshtInfo = ``;
             if (cellName) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> <code>${escapeHTML(cellName)}</code>\n`;
                 
-                let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
-                let coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
+                let siteCodeFromRF = null;
+                let finalLat = null;
+                let finalLng = null;
+
+                // BƯỚC 5.1: Ánh xạ Cell Name -> Site_code thông qua bảng RF
+                try {
+                    const rfQueries = [
+                        `SELECT Site_code, Latitude, Longitude FROM rf_4g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1`,
+                        `SELECT Site_code, Latitude, Longitude FROM rf_5g WHERE Cell_code LIKE ? OR SITE_NAME LIKE ? LIMIT 1`,
+                        `SELECT Site_code, Latitude, Longitude FROM rf_3g WHERE Cell_code LIKE ? OR CELL_NAME LIKE ? LIMIT 1`
+                    ];
+                    
+                    // Loại bỏ hậu tố sector để tăng tỷ lệ tìm kiếm trúng
+                    let searchCell = cellName.replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
+
+                    for (let sql of rfQueries) {
+                        let [rfRows] = await db.query(sql, [`%${searchCell}%`, `%${searchCell}%`]);
+                        if (rfRows.length > 0) {
+                            siteCodeFromRF = rfRows[0].Site_code;
+                            finalLat = rfRows[0].Latitude;
+                            finalLng = rfRows[0].Longitude;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Lỗi ánh xạ RF:", e);
+                }
+
+                // BƯỚC 5.2: Truy vấn CSHT dựa trên Site_code lấy từ bảng RF
+                // Nếu bảng RF không có, mới dùng code dự phòng lấy từ tên Cell
+                let coreCode = siteCodeFromRF;
+                if (!coreCode) {
+                    let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
+                    coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
+                }
 
                 const [cshtRows] = await db.query(
                     `SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data 
@@ -142,12 +177,28 @@ if (bot) {
 
                 if (cshtRows.length > 0) {
                     let r = cshtRows[0];
-                    let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
+                    // Ưu tiên dùng tọa độ từ CSHT, nếu khuyết thì dùng tọa độ dự phòng từ RF
+                    let mapLat = r.Latitude || finalLat;
+                    let mapLng = r.Longitude || finalLng;
+                    
                     cshtInfo += `▪️ <b>Tên CSHT:</b> ${escapeHTML(r.Ten_CSHT)}\n`;
                     cshtInfo += `▪️ <b>Địa chỉ:</b> ${escapeHTML(r.Dia_Chi)}\n`;
-                    cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ Chỉ Đường</a>\n`;
+                    
+                    if (mapLat && mapLng) {
+                        let mapLink = `https://www.google.com/maps/search/?api=1&query=${mapLat},${mapLng}`;
+                        cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ Chỉ Đường</a>\n`;
+                    }
                 } else {
-                    cshtInfo += `▪️ <b>Tên CSHT:</b> Chưa có dữ liệu CSHT khớp với trạm này.\n`;
+                    // Nếu CSHT chưa khai báo, nhưng bảng RF có trạm này -> Cung cấp thông tin từ RF
+                    if (siteCodeFromRF) {
+                        cshtInfo += `▪️ <b>Tên CSHT:</b> Chưa khai báo trong CSHT (Mã Trạm gốc: <b>${escapeHTML(siteCodeFromRF)}</b>)\n`;
+                        if (finalLat && finalLng) {
+                            let mapLink = `https://www.google.com/maps/search/?api=1&query=${finalLat},${finalLng}`;
+                            cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ (Tọa độ từ bảng RF)</a>\n`;
+                        }
+                    } else {
+                        cshtInfo += `▪️ <b>Tên CSHT:</b> Chưa có dữ liệu CSHT khớp với trạm này.\n`;
+                    }
                 }
             } else {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
