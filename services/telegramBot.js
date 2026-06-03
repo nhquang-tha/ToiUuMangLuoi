@@ -49,7 +49,7 @@ if (bot) {
 
 <b>Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):</b>
 🚑 <code>alarm &lt;bản_tin&gt;</code>: Phân tích nguyên nhân & Cách xử lý cảnh báo.
-🏢 <code>csht &lt;mã_CSHT&gt;</code>: Tra cứu thông tin Cơ Sở Hạ Tầng (VD: csht 01358).
+🏢 <code>csht &lt;mã_CSHT&gt;</code> hoặc <code>ne &lt;tên_rút_gọn&gt;</code>: Tra cứu Cơ Sở Hạ Tầng (VD: ne TXN019).
 📡 <code>rf &lt;cell_code&gt;</code>: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
 📊 <code>kpi &lt;cell_code&gt;</code>: Tra thông tin KPI mới nhất của cell.
 ⭐ <code>qoe &lt;cell_code&gt;</code>: Tra thông tin QOE tuần mới nhất của cell.
@@ -226,13 +226,29 @@ if (bot) {
     // ==========================================
     // CÁC LỆNH TRA CỨU CSHT, RF, KPI, QOE, QOS, CHARTS (GIỮ NGUYÊN)
     // ==========================================
-    bot.onText(/^(?:\/)?csht\s+(.+)$/i, async (msg, match) => {
+    bot.onText(/^(?:\/)?(?:csht|ne)\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const keyword = match[1].trim();
+        
+        // [CẬP NHẬT]: Biến đổi dấu gạch ngang thành ký tự % để tìm kiếm mờ (Fuzzy Search)
+        // Ví dụ: XUAN-HOA-TXN sẽ quét khớp cả "XUAN HOA TXN" hay "XUAN-HOA-TXN"
+        const fuzzyKeyword = keyword.replace(/-/g, '%');
+        
         bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+            // [CẬP NHẬT]: Quét toàn diện trên Ma_CSHT, Ten_CSHT và tất cả các mã trạm
+            const [rows] = await db.query(
+                `SELECT * FROM csht_data 
+                 WHERE Ma_CSHT LIKE ? 
+                 OR Ten_CSHT LIKE ? 
+                 OR Ma_Tram_2G LIKE ? 
+                 OR Ma_Tram_3G LIKE ? 
+                 OR Ma_Tram_4G LIKE ? 
+                 OR Ma_Tram_5G LIKE ? 
+                 LIMIT 1`, 
+                [`%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`]
+            );
             
             if (rows.length > 0) {
                 let r = rows[0];
