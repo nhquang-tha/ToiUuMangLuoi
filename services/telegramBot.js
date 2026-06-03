@@ -76,9 +76,20 @@ if (bot) {
             let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
-            // 2. Quét Hardware Position
-            let hwMatch = alarmText.match(/(?:Cabinet\s*No\.?\s*=\s*\d+\s*,\s*)?Subrack\s*No\.?\s*=\s*\d+(?:\s*,\s*Slot\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Sub\s*Port\s*No\.?\s*=\s*\d+)?(?:\s*,\s*Board\s*Type\s*=\s*[^,\]|]+)?/i);
-            let hwPos = hwMatch ? hwMatch[0].trim() : null;
+            // 2. Quét Hardware Position (Thông số nằm giữa 2 dấu |)
+            // Thuật toán: Tìm khối giữa 2 dấu | chứa các từ khóa HW, sau đó cắt bỏ rác
+            let hwMatch = alarmText.match(/\|\s*([^|]*(?:Cabinet|Subrack|Slot|Port)\s*No[^|]*)\s*\|/i);
+            let hwPos = null;
+            if (hwMatch) {
+                let hwParts = hwMatch[1].split(',').map(p => p.trim());
+                // Chỉ giữ lại chính xác các cụm chỉ vị trí phần cứng, lọc bỏ các thông tin rác khác
+                let filteredHw = hwParts.filter(p => /^(Cabinet|Subrack|Slot|Port|Sub Port|Subsystem)\s*No|^Board\s*Type/i.test(p));
+                if (filteredHw.length > 0) {
+                    hwPos = filteredHw.join(', ');
+                } else {
+                    hwPos = hwMatch[1].trim(); // Fallback nếu lọc không ra
+                }
+            }
 
             // 3. Quét Specific Problem
             let spMatch = alarmText.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
@@ -143,6 +154,7 @@ if (bot) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
             }
 
+            // In ra thông số Vị trí HW và Specific Problem nếu có
             if (hwPos) cshtInfo += `▪️ <b>Vị trí thiết bị (HW):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
