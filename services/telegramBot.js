@@ -73,8 +73,17 @@ if (bot) {
 
         try {
             // 1. Quét Tên Trạm / Cell
-            let cellMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
-            let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
+            let cellName = null;
+            // Ưu tiên 1: Quét tìm chính xác đoạn "Cell Name=", "NodeB Name=", "eNodeB Function Name=", "Site Name="
+            let explicitNameMatch = alarmText.match(/(?:Cell|NodeB|eNodeB Function|Site)\s*Name\s*=\s*([A-Z0-9_.-]+)/i);
+            
+            if (explicitNameMatch && explicitNameMatch[1]) {
+                cellName = explicitNameMatch[1].toUpperCase();
+            } else {
+                // Fallback (Dự phòng): Tự do quét chuỗi có định dạng mã trạm 2G/3G/4G/5G
+                let fallbackMatch = alarmText.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
+                cellName = fallbackMatch ? fallbackMatch[0].toUpperCase() : null;
+            }
 
             // 2. Quét Hardware Position (Thông số nằm giữa 2 dấu |)
             // Thuật toán mới: Lấy toàn bộ nội dung nằm giữa 2 dấu | có chứa từ khóa HW
