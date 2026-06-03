@@ -129,15 +129,14 @@ if (bot) {
                 let siteCodeFromRF = null;
                 let finalLat = null;
                 let finalLng = null;
-                let actualCellNameFromRF = null; // Biến lưu Tên Tiếng Việt của trạm (CELL_NAME)
+                let actualCellNameFromRF = null;
 
                 // BƯỚC 5.1: Ánh xạ Cell Name (từ bản tin) -> Cell_code (trong RF) để lấy ra CELL_NAME
-                // SỬ DỤNG LOWER() ĐỂ KHÔNG PHÂN BIỆT CHỮ HOA THƯỜNG
                 try {
                     const rfQueries = [
-                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) LIMIT 1`,
-                        `SELECT Site_code, Latitude, Longitude, SITE_NAME as DbCellName FROM rf_5g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(SITE_NAME) LIKE LOWER(?) LIMIT 1`,
-                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_3g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) LIMIT 1`
+                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`,
+                        `SELECT Site_code, Latitude, Longitude, SITE_NAME as DbCellName FROM rf_5g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(SITE_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`,
+                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_3g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`
                     ];
                     
                     let searchCell = cellName.replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
@@ -148,7 +147,7 @@ if (bot) {
                             siteCodeFromRF = rfRows[0].Site_code;
                             finalLat = rfRows[0].Latitude;
                             finalLng = rfRows[0].Longitude;
-                            actualCellNameFromRF = rfRows[0].DbCellName; // Lấy tên thật (VD: UBND Tinh)
+                            actualCellNameFromRF = rfRows[0].DbCellName; 
                             break;
                         }
                     }
@@ -157,7 +156,6 @@ if (bot) {
                 }
 
                 // BƯỚC 5.2: Truy vấn CSHT dựa trên Site_code
-                // SỬ DỤNG LOWER() ĐỂ KHÔNG PHÂN BIỆT CHỮ HOA THƯỜNG
                 let coreCode = siteCodeFromRF;
                 if (!coreCode) {
                     let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
@@ -167,7 +165,9 @@ if (bot) {
                 const [cshtRows] = await db.query(
                     `SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data 
                      WHERE LOWER(Ma_CSHT) LIKE LOWER(?) 
-                     OR LOWER(Ma_Tram_2G) LIKE LOWER(?) OR LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) LIMIT 1`,
+                     OR LOWER(Ma_Tram_2G) LIKE LOWER(?) OR LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) 
+                     ORDER BY LENGTH(COALESCE(Ten_CSHT, Ma_CSHT)) ASC 
+                     LIMIT 1`,
                     [`%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`]
                 );
 
@@ -176,7 +176,6 @@ if (bot) {
                     let mapLat = r.Latitude || finalLat;
                     let mapLng = r.Longitude || finalLng;
                     
-                    // ƯU TIÊN: Lấy CELL_NAME từ bảng RF làm Tên CSHT. Nếu không có mới dùng Ten_CSHT trong bảng csht_data
                     let displayCshtName = actualCellNameFromRF ? actualCellNameFromRF : r.Ten_CSHT;
                     
                     cshtInfo += `▪️ <b>Tên CSHT:</b> ${escapeHTML(displayCshtName)}\n`;
@@ -187,7 +186,6 @@ if (bot) {
                         cshtInfo += `🗺️ <a href="${mapLink}">📍 Mở Bản Đồ Chỉ Đường</a>\n`;
                     }
                 } else {
-                    // Nếu CSHT chưa khai báo, nhưng bảng RF CÓ trạm này -> In ra Tên lấy từ bảng RF
                     if (actualCellNameFromRF || siteCodeFromRF) {
                         let displayName = actualCellNameFromRF ? actualCellNameFromRF : `Chưa khai báo CSHT (Mã gốc: ${siteCodeFromRF})`;
                         cshtInfo += `▪️ <b>Tên CSHT:</b> ${escapeHTML(displayName)}\n`;
@@ -204,11 +202,9 @@ if (bot) {
                 cshtInfo += `▪️ <b>Mã Trạm/Cell_Code:</b> Không bóc tách được từ bản tin\n`;
             }
 
-            // In ra thông số HW và Specific Problem
             if (hwPos) cshtInfo += `▪️ <b>Thông tin chi tiết (HW/NodeB):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
-            // 6. Trả kết quả cuối cùng
             let responseText = `🚑 <b>KẾT QUẢ PHÂN TÍCH CẢNH BÁO</b>\n---------------------------\n`;
             responseText += cshtInfo;
             responseText += `---------------------------\n`;
@@ -232,13 +228,12 @@ if (bot) {
         const chatId = msg.chat.id;
         const keyword = match[1].trim();
         
-        // Biến đổi dấu gạch ngang thành ký tự % để tìm kiếm mờ (Fuzzy Search)
         const fuzzyKeyword = keyword.replace(/-/g, '%');
         
         bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            // SỬ DỤNG LOWER() ĐỂ KHÔNG PHÂN BIỆT CHỮ HOA THƯỜNG
+            // SỬ DỤNG LENGTH() ĐỂ ƯU TIÊN KẾT QUẢ CHÍNH XÁC (NGẮN NHẤT) TRƯỚC
             const [rows] = await db.query(
                 `SELECT * FROM csht_data 
                  WHERE LOWER(Ma_CSHT) LIKE LOWER(?) 
@@ -247,6 +242,7 @@ if (bot) {
                  OR LOWER(Ma_Tram_3G) LIKE LOWER(?) 
                  OR LOWER(Ma_Tram_4G) LIKE LOWER(?) 
                  OR LOWER(Ma_Tram_5G) LIKE LOWER(?) 
+                 ORDER BY LENGTH(COALESCE(Ten_CSHT, Ma_CSHT)) ASC 
                  LIMIT 1`, 
                 [`%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`]
             );
@@ -295,11 +291,11 @@ if (bot) {
 
         try {
             let rows = [];
-            // SỬ DỤNG LOWER() ĐỂ KHÔNG PHÂN BIỆT CHỮ HOA THƯỜNG
+            // Sử dụng ORDER BY LENGTH để chống lệch mã
             const queries = [
-                { net: '4g', sql: `SELECT '4G' as Net, rf_4g.* FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) LIMIT 1` },
-                { net: '5g', sql: `SELECT '5G' as Net, rf_5g.* FROM rf_5g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(SITE_NAME) LIKE LOWER(?) LIMIT 1` },
-                { net: '3g', sql: `SELECT '3G' as Net, rf_3g.* FROM rf_3g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) LIMIT 1` }
+                { net: '4g', sql: `SELECT '4G' as Net, rf_4g.* FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1` },
+                { net: '5g', sql: `SELECT '5G' as Net, rf_5g.* FROM rf_5g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(SITE_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1` },
+                { net: '3g', sql: `SELECT '3G' as Net, rf_3g.* FROM rf_3g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1` }
             ];
 
             for (let q of queries) {
@@ -345,9 +341,8 @@ if (bot) {
         const targetNet = parsed.net;
 
         try {
-            // SỬ DỤNG LOWER() ĐỂ KHÔNG PHÂN BIỆT CHỮ HOA THƯỜNG
             if (!targetNet || targetNet === '4g') {
-                let [rows] = await db.query(`SELECT '4G' as Net, Thoi_gian, Cell_name as Cell, Total_Data_Traffic_Volume_GB as Traffic, User_DL_Avg_Throughput_Kbps as Thput, RB_Util_Rate_DL as PRB, CQI_4G as CQI, Service_Drop_all as DropRate FROM kpi_4g WHERE LOWER(Cell_name) LIKE LOWER(?) ORDER BY id DESC LIMIT 1`, [`%${keyword}%`]);
+                let [rows] = await db.query(`SELECT '4G' as Net, Thoi_gian, Cell_name as Cell, Total_Data_Traffic_Volume_GB as Traffic, User_DL_Avg_Throughput_Kbps as Thput, RB_Util_Rate_DL as PRB, CQI_4G as CQI, Service_Drop_all as DropRate FROM kpi_4g WHERE LOWER(Cell_name) LIKE LOWER(?) ORDER BY LENGTH(Cell_name) ASC, Cell_name ASC, id DESC LIMIT 1`, [`%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
                     let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
@@ -360,7 +355,7 @@ if (bot) {
                 }
             }
             if (!targetNet || targetNet === '5g') {
-                let [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CELL_ID) LIKE LOWER(?) ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+                let [rows] = await db.query(`SELECT '5G' as Net, Thoi_gian, Ten_CELL as Cell, Total_Data_Traffic_Volume_GB as Traffic, A_User_DL_Avg_Throughput as Thput, CQI_5G as CQI FROM kpi_5g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CELL_ID) LIKE LOWER(?) ORDER BY LENGTH(Ten_CELL) ASC, Ten_CELL ASC, id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
                     let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
@@ -371,7 +366,7 @@ if (bot) {
                 }
             }
             if (!targetNet || targetNet === '3g') {
-                let [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CI) LIKE LOWER(?) ORDER BY id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
+                let [rows] = await db.query(`SELECT '3G' as Net, Thoi_gian, Ten_CELL as Cell, TRAFFIC as Traffic, CSSR, DCR FROM kpi_3g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CI) LIKE LOWER(?) ORDER BY LENGTH(Ten_CELL) ASC, Ten_CELL ASC, id DESC LIMIT 1`, [`%${keyword}%`, `%${keyword}%`]);
                 if (rows.length > 0) {
                     const r = rows[0];
                     let text = `📊 <b>KPI MỚI NHẤT (${r.Net}):</b> <code>${r.Cell}</code>\n📅 Ngày: <b>${r.Thoi_gian}</b>\n---------------------------\n`;
@@ -389,7 +384,7 @@ if (bot) {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         try {
-            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
                 bot.sendMessage(chatId, `⭐ <b>CHỈ SỐ TRẢI NGHIỆM (QoE)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm QoE:</b> ${r.QoE_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoE_Rank}`, { parse_mode: 'HTML' });
@@ -401,7 +396,7 @@ if (bot) {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         try {
-            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
                 bot.sendMessage(chatId, `⚙️ <b>CHỈ SỐ DỊCH VỤ (QoS)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm QoS:</b> ${r.QoS_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoS_Rank}`, { parse_mode: 'HTML' });
@@ -421,14 +416,14 @@ if (bot) {
             let rows = [];
 
             if (!targetNet || targetNet === '4g') {
-                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, User_DL_Avg_Throughput_Kbps as thput, CQI_4G as cqi FROM kpi_4g WHERE LOWER(Cell_name) LIKE LOWER(?) ORDER BY id DESC LIMIT 7`, [`%${keyword}%`]);
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, User_DL_Avg_Throughput_Kbps as thput, CQI_4G as cqi FROM kpi_4g WHERE LOWER(Cell_name) LIKE LOWER(?) ORDER BY LENGTH(Cell_name) ASC, Cell_name ASC, id DESC LIMIT 7`, [`%${keyword}%`]);
             }
             if (rows.length < 2 && (!targetNet || targetNet === '5g')) {
-                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, A_User_DL_Avg_Throughput as thput, CQI_5G as cqi FROM kpi_5g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CELL_ID) LIKE LOWER(?) ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, A_User_DL_Avg_Throughput as thput, CQI_5G as cqi FROM kpi_5g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CELL_ID) LIKE LOWER(?) ORDER BY LENGTH(Ten_CELL) ASC, Ten_CELL ASC, id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
                 title2 = 'Throughput DL (Mbps)';
             }
             if (rows.length < 2 && (!targetNet || targetNet === '3g')) {
-                [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CI) LIKE LOWER(?) ORDER BY id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
+                [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CI) LIKE LOWER(?) ORDER BY LENGTH(Ten_CELL) ASC, Ten_CELL ASC, id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
                 title1 = 'Traffic (Erl/GB)'; title2 = 'CSSR (%)'; title3 = 'Drop Rate (%)';
             }
 
@@ -451,7 +446,7 @@ if (bot) {
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
         try {
-            const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoE.`);
             const data = rows.reverse();
             const chartUrl = generateChartUrl({
@@ -467,7 +462,7 @@ if (bot) {
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
         try {
-            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
             const data = rows.reverse();
             const chartUrl = generateChartUrl({
