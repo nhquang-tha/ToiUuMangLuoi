@@ -77,26 +77,16 @@ if (bot) {
             let cellName = cellMatch ? cellMatch[0].toUpperCase() : null;
 
             // 2. Quét Hardware Position (Thông số nằm giữa 2 dấu |)
-            // Thuật toán: Tìm khối giữa 2 dấu | chứa các từ khóa HW, sau đó cắt bỏ rác
+            // Thuật toán mới: Lấy toàn bộ nội dung nằm giữa 2 dấu | có chứa từ khóa HW
             let hwMatch = alarmText.match(/\|\s*([^|]*(?:Cabinet|Subrack|Slot|Port)\s*No[^|]*)\s*\|/i);
-            let hwPos = null;
-            if (hwMatch) {
-                let hwParts = hwMatch[1].split(',').map(p => p.trim());
-                // Chỉ giữ lại chính xác các cụm chỉ vị trí phần cứng, lọc bỏ các thông tin rác khác
-                let filteredHw = hwParts.filter(p => /^(Cabinet|Subrack|Slot|Port|Sub Port|Subsystem)\s*No|^Board\s*Type/i.test(p));
-                if (filteredHw.length > 0) {
-                    hwPos = filteredHw.join(', ');
-                } else {
-                    hwPos = hwMatch[1].trim(); // Fallback nếu lọc không ra
-                }
-            }
+            let hwPos = hwMatch ? hwMatch[1].trim() : null;
 
             // 3. Quét Specific Problem
             let spMatch = alarmText.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
             let specificProblem = spMatch ? spMatch[1].trim() : null;
 
             // 4. Tìm kiếm Nguyên nhân & Giải pháp bằng cách Vét CSDL `alarm_data`
-            let cause = "Chưa có thông tin định nghĩa cho cảnh báo này trong Cẩm nang.";
+            let cause = "Chưa có thông định nghĩa cho cảnh báo này trong Cẩm nang.";
             let action = "- Vui lòng liên hệ OMC/NOC để kiểm tra thêm trên hệ thống giám sát.\n- Reset thiết bị nếu cần thiết.";
             let matchedKeyword = "Không xác định";
             let alarmGroup = "Không xác định";
@@ -154,8 +144,8 @@ if (bot) {
                 cshtInfo += `▪️ <b>Tên Trạm/Cell:</b> Không bóc tách được từ bản tin\n`;
             }
 
-            // In ra thông số Vị trí HW và Specific Problem nếu có
-            if (hwPos) cshtInfo += `▪️ <b>Vị trí thiết bị (HW):</b> <code>${escapeHTML(hwPos)}</code>\n`;
+            // In ra thông số Vị trí HW (toàn bộ nội dung trong dấu |) và Specific Problem nếu có
+            if (hwPos) cshtInfo += `▪️ <b>Thông tin chi tiết (HW/NodeB):</b> <code>${escapeHTML(hwPos)}</code>\n`;
             if (specificProblem) cshtInfo += `▪️ <b>Lỗi chi tiết:</b> <code>${escapeHTML(specificProblem)}</code>\n`;
 
             // 6. Trả kết quả (CÓ HIỂN THỊ NHÓM CẢNH BÁO)
