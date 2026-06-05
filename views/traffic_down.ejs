@@ -19,6 +19,10 @@
     
     .bad-cell { color: #c0392b; font-weight: bold; }
     .ratio-badge { background: #fbeeeeb0; color: #e74c3c; padding: 4px 10px; border-radius: 12px; border: 1px solid #fad2d2; font-size: 12px; font-weight: bold;}
+    
+    /* Huy hiệu mạng 4G/5G */
+    .net-badge-4g { background: #f4ecf8; color: #8e44ad; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #e1cbed;}
+    .net-badge-5g { background: #e8f8f5; color: #16a085; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #bce8e0;}
 
     .header-zero { border-bottom: 2px solid #e74c3c; padding: 15px; font-weight: bold; color: #c0392b; font-size: 16px; background: #fdf2f2; }
     .header-drop { border-bottom: 2px solid #f39c12; padding: 15px; font-weight: bold; color: #d35400; font-size: 16px; background: #fef5e7; }
@@ -36,14 +40,14 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>Phân Tích Cảnh Báo: Sụt Giảm Lưu Lượng (Traffic Down)</h1>
+            <h1>Phân Tích Cảnh Báo: Sụt Giảm Lưu Lượng (Đa Mạng)</h1>
         </header>
         
         <div class="content-body">
             
             <div class="filter-card">
                 <div style="flex: 1; min-width: 250px;">
-                    <p style="margin: 0 0 5px 0; color: #7f8c8d; font-size: 14px;">Thuật toán tự động nhận diện dữ liệu mới nhất trong Database để phân tích với 10 ngày trước đó.</p>
+                    <p style="margin: 0 0 5px 0; color: #7f8c8d; font-size: 14px;">Thuật toán tự động nhận diện dữ liệu mới nhất (4G & 5G) để phân tích đối soát tuần.</p>
                     <div id="dateInfo" style="font-weight: bold; color: #8e44ad; font-size: 16px;">
                         Ngày phân tích: <span style="color:#2c3e50;">[Chưa lấy dữ liệu]</span>
                     </div>
@@ -63,7 +67,7 @@
                 <strong>💡 Các tiêu chí Lọc Traffic:</strong><br>
                 <span style="color: #e74c3c">1. Cell Không Lưu Lượng:</span> Traffic hôm nay &lt; 0.1 GB <strong>VÀ</strong> Traffic TB (7 ngày trước) &gt; 2 GB.<br>
                 <span style="color: #f39c12">2. Cell Suy Giảm:</span> Traffic hôm nay &lt; 70% Tuần trước (cùng thứ) <strong>VÀ</strong> Tuần trước &gt; 1 GB <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với cùng kỳ tuần trước.<br>
-                <span style="color: #8e44ad">3. POI Suy Giảm:</span> Traffic POI hôm nay &lt; 70% Tuần trước <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với cùng kỳ tuần trước.
+                <span style="color: #8e44ad">3. POI Suy Giảm (Gộp chung 4G+5G):</span> Traffic POI hôm nay &lt; 70% Tuần trước <strong>VÀ</strong> 3 ngày gần nhất đều suy giảm so với cùng kỳ tuần trước.
             </div>
 
             <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #8e44ad; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; margin-bottom: 15px;">
@@ -81,7 +85,8 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Tên Cell 4G</th>
+                            <th>Tên Cell / Site</th>
+                            <th>Mạng</th>
                             <th>Traffic Hôm nay (GB)</th>
                             <th>Traffic TB 7 ngày trước (GB)</th>
                             <th style="text-align: center;">Thao Tác</th>
@@ -100,7 +105,8 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Tên Cell 4G</th>
+                            <th>Tên Cell / Site</th>
+                            <th>Mạng</th>
                             <th>Traffic Hôm nay (GB)</th>
                             <th>Traffic Tuần trước (GB)</th>
                             <th>Tỷ Lệ Giảm (%)</th>
@@ -120,7 +126,7 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Tên POI 4G</th>
+                            <th>Tên POI (Điểm thu hút)</th>
                             <th>Tổng Traffic Hôm nay (GB)</th>
                             <th>Tổng Traffic Tuần trước (GB)</th>
                             <th>Tỷ Lệ Giảm (%)</th>
@@ -172,20 +178,22 @@
             document.getElementById('zeroCount').innerText = data.zeroTrafficCells.length;
             if (data.zeroTrafficCells.length > 0) {
                 data.zeroTrafficCells.forEach((row, index) => {
+                    let badge = row.network === '5g' ? '<span class="net-badge-5g">5G</span>' : '<span class="net-badge-4g">4G</span>';
                     zeroBody.insertAdjacentHTML('beforeend', `
                         <tr>
                             <td>${index + 1}</td>
                             <td style="font-weight: bold; color: #c0392b;">${row.Cell_name}</td>
+                            <td>${badge}</td>
                             <td style="color: #e74c3c; font-weight:bold;">${row.t0}</td>
                             <td style="color: #27ae60;">${row.avg7}</td>
                             <td style="text-align: center;">
-                                <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                                <a href="/kpi-analytics?network=${row.network}&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
                             </td>
                         </tr>
                     `);
                 });
             } else {
-                zeroBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
+                zeroBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Không Lưu Lượng.</td></tr>';
             }
             document.getElementById('zeroTableWrapper').style.display = 'block';
 
@@ -195,21 +203,23 @@
             document.getElementById('dropCellCount').innerText = data.droppedTrafficCells.length;
             if (data.droppedTrafficCells.length > 0) {
                 data.droppedTrafficCells.forEach((row, index) => {
+                    let badge = row.network === '5g' ? '<span class="net-badge-5g">5G</span>' : '<span class="net-badge-4g">4G</span>';
                     dropCellBody.insertAdjacentHTML('beforeend', `
                         <tr>
                             <td>${index + 1}</td>
                             <td style="font-weight: bold; color: #d35400;">${row.Cell_name}</td>
+                            <td>${badge}</td>
                             <td class="bad-cell">${row.t0}</td>
                             <td>${row.t7}</td>
                             <td><span class="ratio-badge">Giảm còn ${row.ratio}%</span></td>
                             <td style="text-align: center;">
-                                <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
+                                <a href="/kpi-analytics?network=${row.network}&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
                             </td>
                         </tr>
                     `);
                 });
             } else {
-                dropCellBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
+                dropCellBody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Không có Cell nào thỏa mãn tiêu chí Suy Giảm.</td></tr>';
             }
             document.getElementById('dropCellTableWrapper').style.display = 'block';
 
