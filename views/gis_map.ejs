@@ -84,7 +84,8 @@
                     📶 Mô Phỏng TA
                 </button>
 
-                <input type="file" id="itsLogInput" accept=".txt,.csv" style="display: none;" onchange="processItsLog(event)">
+                <!-- THÊM THUỘC TÍNH MULTIPLE ĐỂ CHO PHÉP CHỌN NHIỀU FILE CÙNG LÚC -->
+                <input type="file" id="itsLogInput" accept=".txt,.csv" multiple style="display: none;" onchange="processItsLog(event)">
                 <button onclick="document.getElementById('itsLogInput').click()" style="background: #e67e22; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📥 Import Log ITS
                 </button>
@@ -117,7 +118,7 @@
 
 <script>
     let globalPolygons = []; 
-    let globalCshtData = []; // BIẾN LƯU DỮ LIỆU CSHT
+    let globalCshtData = []; 
     let defaultBounds = [];  
     let globalLogLines = []; 
     let azimuthOrigins = {}; 
@@ -129,8 +130,8 @@
     let map = L.map('map').setView([19.806692, 105.776153], 10); 
     
     // LAYER GROUP
-    let layerGroup = L.layerGroup().addTo(map);   // Các trạm RF (Cánh quạt)
-    let cshtLayer = L.layerGroup().addTo(map);    // Lớp riêng cho CSHT
+    let layerGroup = L.layerGroup().addTo(map);   
+    let cshtLayer = L.layerGroup().addTo(map);    
     let itsLogLayer = L.layerGroup().addTo(map);  
     let azimuthLayer = L.layerGroup().addTo(map); 
     let taLayer = L.layerGroup().addTo(map); 
@@ -284,7 +285,7 @@
         return (brng + 360) % 360;
     }
 
-    // Các hàm AzimuthTool như gốc (Được giữ nguyên)
+    // Các hàm AzimuthTool như gốc
     window.createAzimuthOrigin = function(type) {
         document.getElementById('aziSubMenu').classList.remove('show'); 
         let center = type === 'gps' ? (userMarker ? userMarker.getLatLng() : null) : map.getCenter();
@@ -414,7 +415,7 @@
     }
 
     // ====================================================
-    // HIỂN THỊ CSHT (CƠ SỞ HẠ TẦNG) LÊN BẢN ĐỒ
+    // HIỂN THỊ CSHT LÊN BẢN ĐỒ
     // ====================================================
     async function loadCshtData() {
         try {
@@ -425,24 +426,14 @@
             globalCshtData = [];
 
             data.forEach(item => {
-                // Tạo chấm tròn (Marker) cho CSHT
                 const marker = L.circleMarker([item.lat, item.lng], {
-                    radius: 5,
-                    fillColor: '#34495e',
-                    color: '#ffffff',
-                    weight: 2,
-                    fillOpacity: 1
+                    radius: 5, fillColor: '#34495e', color: '#ffffff', weight: 2, fillOpacity: 1
                 });
 
-                // Hiển thị tên luôn gắn cạnh điểm
                 marker.bindTooltip(item.Ten_CSHT, {
-                    permanent: true,
-                    direction: 'right',
-                    className: 'csht-tooltip',
-                    offset: [5, 0]
+                    permanent: true, direction: 'right', className: 'csht-tooltip', offset: [5, 0]
                 });
 
-                // Xây dựng bảng hiển thị khi click
                 let tableHtml = `<div class="rf-popup-container"><table class="rf-popup-table">`;
                 if (Array.isArray(item.allData)) {
                     item.allData.forEach(prop => {
@@ -661,8 +652,8 @@
     // KHỞI TẠO BẢN ĐỒ CƠ BẢN
     // ====================================================
     async function loadAllMapData() {
-        loadMapData(); // Tải RF
-        loadCshtData(); // Tải CSHT
+        loadMapData(); 
+        loadCshtData(); 
     }
 
     async function loadMapData() {
@@ -811,7 +802,7 @@
     }
 
     // ====================================================
-    // ĐỌC VÀ VẼ LOG FILE ITS (Giữ nguyên)
+    // ĐỌC VÀ VẼ LOG FILE ITS (MULTI FILES)
     // ====================================================
     function getColor4G(level) {
         if (level >= -80) return '#27ae60'; if (level >= -90) return '#2980b9'; 
@@ -844,57 +835,81 @@
         legendControl.addTo(map);
     }
 
-    function processItsLog(event) {
-        const file = event.target.files[0]; if (!file) return;
-        itsLogLayer.clearLayers(); globalLogLines = []; 
+    async function processItsLog(event) {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        itsLogLayer.clearLayers(); 
+        globalLogLines = []; 
         document.getElementById('mapLoading').style.display = 'block';
 
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const text = e.target.result; const lines = text.split(/\r?\n/);
-            if (lines.length < 2) { alert("File log trống!"); document.getElementById('mapLoading').style.display = 'none'; return; }
+        let is3G = false, is4G = false; 
+        let allLogBounds = [];
+        let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
+        let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
-            const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
-            const idxLat = headers.indexOf('latitude'); const idxLng = headers.indexOf('longitude');
-            const idxNode = headers.indexOf('node'); const idxCellID = headers.indexOf('cellid');
-            const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); const idxLevel = headers.indexOf('level');
+        // Hàm đọc và xử lý 1 file duy nhất, trả về Promise
+        const readFile = (file) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result; 
+                    const lines = text.split(/\r?\n/);
+                    if (lines.length < 2) { resolve(); return; } // Bỏ qua file rỗng hoặc lỗi
 
-            if (idxLat < 0 || idxLng < 0 || idxLevel < 0) { alert("File log sai cấu trúc."); document.getElementById('mapLoading').style.display = 'none'; return; }
+                    const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
+                    const idxLat = headers.indexOf('latitude'); const idxLng = headers.indexOf('longitude');
+                    const idxNode = headers.indexOf('node'); const idxCellID = headers.indexOf('cellid');
+                    const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); const idxLevel = headers.indexOf('level');
 
-            let is3G = false, is4G = false; let logBounds = [];
-            let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
-            let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
+                    if (idxLat < 0 || idxLng < 0 || idxLevel < 0) { resolve(); return; } // Bỏ qua file sai định dạng
 
-            for (let i = 1; i < lines.length; i++) {
-                const cols = lines[i].split('|'); if (cols.length < headers.length) continue;
-                const lat = parseFloat(cols[idxLat]); const lng = parseFloat(cols[idxLng]);
-                if (isNaN(lat) || isNaN(lng)) continue;
+                    for (let i = 1; i < lines.length; i++) {
+                        const cols = lines[i].split('|'); if (cols.length < headers.length) continue;
+                        const lat = parseFloat(cols[idxLat]); const lng = parseFloat(cols[idxLng]);
+                        if (isNaN(lat) || isNaN(lng)) continue;
 
-                const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; const level = parseFloat(cols[idxLevel]);
-                const node = cols[idxNode] ? cols[idxNode].trim() : ''; const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
-                const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
+                        const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; const level = parseFloat(cols[idxLevel]);
+                        const node = cols[idxNode] ? cols[idxNode].trim() : ''; const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
+                        const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
 
-                let color = '#95a5a6'; let servingCellObj = null;
-                if (tech.includes('3G')) { is3G = true; color = getColor3G(level); servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId); } 
-                else if (tech.includes('4G')) { is4G = true; color = getColor4G(level); servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId); }
+                        let color = '#95a5a6'; let servingCellObj = null;
+                        if (tech.includes('3G')) { is3G = true; color = getColor3G(level); servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId); } 
+                        else if (tech.includes('4G')) { is4G = true; color = getColor4G(level); servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId); }
 
-                const marker = L.circleMarker([lat, lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
-                marker.bindPopup(`<b>Tech:</b> ${tech}<br><b>Level:</b> ${level} dBm<br><b>Serving Cell:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
-                marker.addTo(itsLogLayer);
+                        const marker = L.circleMarker([lat, lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
+                        marker.bindPopup(`<b>Tech:</b> ${tech}<br><b>Level:</b> ${level} dBm<br><b>Serving Cell:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
+                        marker.addTo(itsLogLayer);
 
-                if (servingCellObj) {
-                    let arcCenter = getDestination(servingCellObj.lat, servingCellObj.lng, servingCellObj.azimuth, servingCellObj.baseRadius * scale);
-                    const line = L.polyline([[lat, lng], arcCenter], { color: color, weight: 1.5, opacity: 0.8, dashArray: '4, 4' });
-                    line.addTo(itsLogLayer);
-                    globalLogLines.push({ line: line, startLat: lat, startLng: lng, cellObj: servingCellObj });
-                }
-                logBounds.push([lat, lng]);
-            }
-            if (is4G) addLegend(false, true); else if (is3G) addLegend(true, false);
-            if (logBounds.length > 0) map.fitBounds(logBounds);
-            document.getElementById('mapLoading').style.display = 'none'; event.target.value = ''; 
+                        if (servingCellObj) {
+                            let arcCenter = getDestination(servingCellObj.lat, servingCellObj.lng, servingCellObj.azimuth, servingCellObj.baseRadius * scale);
+                            const line = L.polyline([[lat, lng], arcCenter], { color: color, weight: 1.5, opacity: 0.8, dashArray: '4, 4' });
+                            line.addTo(itsLogLayer);
+                            globalLogLines.push({ line: line, startLat: lat, startLng: lng, cellObj: servingCellObj });
+                        }
+                        allLogBounds.push([lat, lng]);
+                    }
+                    resolve(); // Báo hiệu đã đọc xong file này
+                };
+                reader.readAsText(file);
+            });
         };
-        reader.readAsText(file);
+
+        // Tạo danh sách các tác vụ đọc file (Promise)
+        const readPromises = [];
+        for (let i = 0; i < files.length; i++) {
+            readPromises.push(readFile(files[i]));
+        }
+
+        // Đợi tất cả các file được đọc và vẽ xong
+        await Promise.all(readPromises);
+
+        // Hiển thị Legend và Zoom Camera bao trọn toàn bộ điểm ảnh của tất cả các file
+        if (is4G) addLegend(false, true); else if (is3G) addLegend(true, false);
+        if (allLogBounds.length > 0) map.fitBounds(allLogBounds);
+        
+        document.getElementById('mapLoading').style.display = 'none'; 
+        event.target.value = ''; // Reset input để có thể bấm chọn lại những file vừa chọn nếu muốn
     }
 
     // Tự động load dữ liệu CSHT và RF khi mở trang
