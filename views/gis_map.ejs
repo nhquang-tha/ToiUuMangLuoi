@@ -817,18 +817,28 @@
         legendControl = L.control({position: 'bottomright'});
         legendControl.onAdd = function (map) {
             let div = L.DomUtil.create('div', 'info legend'); let labels = [];
-            let title = is4G ? 'Mức thu RSRP 4G (dBm)' : 'Mức thu RSCP 3G (dBm)';
+            let title = is4G ? 'Mức thu (RSRP)' : 'Mức thu (RSCP)';
             div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">${title}</h4>`;
-            const ranges = [ 
-                {min: '', max: is4G ? '-80' : '-75', color: '#27ae60', desc: 'Rất tốt'}, 
-                {min: is4G ? '-80' : '-75', max: is4G ? '-90' : '-85', color: '#2980b9', desc: 'Tốt'}, 
-                {min: is4G ? '-90' : '-85', max: is4G ? '-100' : '-95', color: '#f1c40f', desc: 'Trung bình'}, 
-                {min: is4G ? '-100' : '-95', max: is4G ? '-110' : '-105', color: '#e67e22', desc: 'Yếu'}, 
-                {min: is4G ? '-110' : '-105', max: '', color: '#c0392b', desc: 'Rất yếu'} 
+            
+            const ranges4G = [ 
+                { text: 'RSRP >= -80', color: '#27ae60' }, 
+                { text: '-90 <= RSRP < -80', color: '#2980b9' }, 
+                { text: '-100 <= RSRP < -90', color: '#f1c40f' }, 
+                { text: '-110 <= RSRP < -100', color: '#e67e22' }, 
+                { text: 'RSRP < -110', color: '#c0392b' } 
             ];
+            const ranges3G = [ 
+                { text: 'RSCP >= -75', color: '#27ae60' }, 
+                { text: '-85 <= RSCP < -75', color: '#2980b9' }, 
+                { text: '-95 <= RSCP < -85', color: '#f1c40f' }, 
+                { text: '-105 <= RSCP < -95', color: '#e67e22' }, 
+                { text: 'RSCP < -105', color: '#c0392b' } 
+            ];
+            
+            const ranges = is4G ? ranges4G : ranges3G;
+
             ranges.forEach(r => {
-                let text = r.min === '' ? `>= ${r.max}` : (r.max === '' ? `< ${r.min}` : `${r.min} đến ${r.max}`);
-                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px;"></i> <span style="width: 70px; font-size: 11px; font-weight: bold;">${text}</span> <span style="color:#7f8c8d; font-size: 11px; font-style:italic;">(${r.desc})</span></div>`);
+                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px;"></i> <span style="font-size: 12px; font-weight: bold; color: #34495e;">${r.text}</span></div>`);
             });
             div.innerHTML += labels.join(''); return div;
         };
