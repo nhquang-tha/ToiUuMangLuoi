@@ -357,6 +357,52 @@ exports.handleImportData = async (req, res) => {
             if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
 
             const excelHeaders = rawData[headerRowIdx];
+            const headerString = excelHeaders.map(String).join(' ').toLowerCase();
+
+            // ========================================================
+            // [TÍNH NĂNG MỚI]: BẪY LỖI NGƯỜI DÙNG CHỌN NHẦM FILE IMPORT
+            // Nếu phát hiện nhầm loại mạng hoặc loại báo cáo, lập tức chặn và báo lỗi
+            // ========================================================
+            let validationError = null;
+            if (networkType === 'kpi_3g') {
+                if (headerString.includes('cqi') || headerString.includes('enodeb') || headerString.includes('gnodeb')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import KPI 3G" nhưng lại tải lên file KPI của mạng 4G/5G. Vui lòng kiểm tra lại file!';
+                }
+            } else if (networkType === 'kpi_4g') {
+                if (headerString.includes('cqi 5g') || headerString.includes('cqi_5g') || headerString.includes('gnodeb')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import KPI 4G" nhưng lại tải lên file KPI của mạng 5G. Vui lòng kiểm tra lại file!';
+                } else if (headerString.includes('cs_so_att') || headerString.includes('psconges')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import KPI 4G" nhưng lại tải lên file KPI của mạng 3G. Vui lòng kiểm tra lại file!';
+                }
+            } else if (networkType === 'kpi_5g') {
+                if (headerString.includes('cqi 4g') || headerString.includes('cqi_4g') || headerString.includes('enodeb') || headerString.includes('celltype')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import KPI 5G" nhưng lại tải lên file KPI của mạng 4G. Vui lòng kiểm tra lại file!';
+                } else if (headerString.includes('cs_so_att') || headerString.includes('psconges')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import KPI 5G" nhưng lại tải lên file KPI của mạng 3G. Vui lòng kiểm tra lại file!';
+                }
+            } else if (networkType === 'mbb_qoe') {
+                if (headerString.includes('qos_score') || headerString.includes('qos rank') || headerString.includes('qos_rank')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import Trải nghiệm (QoE)" nhưng lại tải lên file Dịch vụ (QoS). Vui lòng kiểm tra lại file!';
+                }
+            } else if (networkType === 'mbb_qos') {
+                if (headerString.includes('qoe_score') || headerString.includes('qoe rank') || headerString.includes('qoe_rank')) {
+                    validationError = '❌ LỖI: Bạn chọn mục "Import Dịch vụ (QoS)" nhưng lại tải lên file Trải nghiệm (QoE). Vui lòng kiểm tra lại file!';
+                }
+            }
+
+            // Nếu có lỗi sai file, trả về giao diện ngay lập tức, hủy bỏ toàn bộ quá trình nạp
+            if (validationError) {
+                return res.render('import_data', { 
+                    title: 'Import Data', 
+                    page: 'Import Data', 
+                    userRole: userRole, 
+                    history: history, 
+                    message: null, 
+                    error: validationError 
+                });
+            }
+            // ========================================================
+
             let colMapping = [];
 
             if (networkType === 'mbb_qoe') {
@@ -450,7 +496,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('chiều cao cột') || h.includes('chieu cao cot')) mappedCol = 'Chieu_Cao_Cot';
                         else if (h.includes('hình thức sở hữu') || h.includes('so huu')) mappedCol = 'Hinh_Thuc_So_Huu';
                     } else if (networkType === 'alarm_data') {
-                        // [CẬP NHẬT MỚI]: Bổ sung quét thêm cột Nhóm Cảnh Báo
                         if (h === 'nhóm cảnh báo' || h.includes('nhóm')) mappedCol = 'nhom_canh_bao';
                         else if (h === 'từ khóa chính trong tin nhắn' || h.includes('từ khóa')) mappedCol = 'tu_khoa';
                         else if (h === 'nguyên nhân' || h.includes('nguyên nhân')) mappedCol = 'nguyen_nhan';
@@ -484,7 +529,6 @@ exports.handleImportData = async (req, res) => {
             let hasTuanCol = weekPrefix ? dbCols.some(c => c.original.toLowerCase() === 'tuan') : false;
             let lastValidDate = null; 
             const insertData = [];
-            // [CẬP NHẬT MỚI]: Thêm 'nhom_canh_bao' vào stringColumns
             const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'nhom_canh_bao', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
@@ -518,21 +562,31 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
+            // ========================================================
+            // [TÍNH NĂNG ĐỘC QUYỀN]: TỰ ĐỘNG XÓA DỮ LIỆU CŨ CỦA NGÀY TRƯỚC KHI GHI ĐÈ
+            // ========================================================
             if (insertData.length > 0 && isKpiImported) {
+                // Lấy ra tất cả các "Ngày" có xuất hiện trong file Excel vừa tải lên
                 const uniqueDates = [...new Set(insertData.map(r => r.Thoi_gian).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
-                    try { await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates); } catch (e) {}
+                    try { 
+                        // Lệnh xóa rỗng Database theo những ngày đã tìm thấy
+                        await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates); 
+                        console.log(`🧹 Đã dọn sạch dữ liệu KPI cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
+                    } catch (e) {
+                        console.error("Lỗi khi xóa đè dữ liệu cũ:", e);
+                    }
                 }
             }
 
+            // NẠP DỮ LIỆU VÀO DATABASE
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
                     let chunk = insertData.slice(i, i + chunkSize);
                     const keys = Object.keys(chunk[0]); 
                     
-                    // [TỐI ƯU]: Tự động làm sạch khoảng trắng dư thừa ở đầu và cuối chữ
                     const valuesArr = chunk.map(obj => keys.map(k => {
                         let val = obj[k];
                         return (typeof val === 'string') ? val.trim() : val;
@@ -540,7 +594,6 @@ exports.handleImportData = async (req, res) => {
                     
                     let sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ?`;
                     
-                    // [FIX LỖI 0 DÒNG]: Xử lý chống sập khi đụng độ dữ liệu trùng lặp (Duplicate Entry)
                     if (networkType === 'alarm_data' || networkType === 'csht_data') {
                         let updateCols = keys.map(k => `${k}=VALUES(${k})`).join(', ');
                         sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ? ON DUPLICATE KEY UPDATE ${updateCols}`;
@@ -555,7 +608,6 @@ exports.handleImportData = async (req, res) => {
 
     if (isKpiImported) await aggregateDashboardData();
     
-    // Tự động Đồng bộ bảng QoE/QoS sau khi Import
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
         await syncQoeQosSummary();
     }
@@ -564,7 +616,6 @@ exports.handleImportData = async (req, res) => {
     return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Đã Import/Ghi đè thành công ${totalImported} dòng.`, error: null });
 };
 
-// [MỚI] HÀM LẤY DANH SÁCH DISTRICT
 exports.getDistricts = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT DISTINCT District_code FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != "" ORDER BY District_code');
@@ -575,7 +626,6 @@ exports.getDistricts = async (req, res) => {
     }
 };
 
-// [CẬP NHẬT] HÀM TÍNH TOÁN DASHBOARD TRỰC TIẾP (Thay vì đọc bảng tĩnh)
 exports.getDashboardData = async (req, res) => {
     const district = req.query.district || 'all';
 
@@ -585,13 +635,10 @@ exports.getDashboardData = async (req, res) => {
         let filter4g = '';
         let filter5g = '';
 
-        // NẾU CÓ CHỌN DISTRICT, THÊM ĐIỀU KIỆN LỌC
         if (district !== 'all') {
             filter4g = 'AND District_code = ?';
             params4g.push(district);
             
-            // Thuật toán gán ghép 5G: Lấy các trạm 5G có phần thân tên giống trạm 4G thuộc District được chọn
-            // (Ví dụ: 5G-THA001 sẽ được lọc nếu 4G-THA001 thuộc huyện THA)
             filter5g = 'AND SUBSTRING(Ten_CELL, 4) IN (SELECT SUBSTRING(Cell_name, 4) FROM kpi_4g WHERE District_code = ?)';
             params5g.push(district);
         }
@@ -617,11 +664,9 @@ exports.getDashboardData = async (req, res) => {
             GROUP BY Thoi_gian
         `;
 
-        // Chạy song song 2 luồng truy vấn để tăng tốc
         const [rows4g] = await db.query(query4g, params4g);
         const [rows5g] = await db.query(query5g, params5g);
 
-        // Gộp dữ liệu 4G và 5G lại theo Ngày (Thoi_gian)
         let mergedData = {};
         
         rows4g.forEach(r => {
@@ -639,7 +684,6 @@ exports.getDashboardData = async (req, res) => {
             mergedData[r.thoi_gian].AVG_CQI_5G = r.AVG_CQI_5G;
         });
 
-        // Trả về mảng JSON
         res.json(Object.values(mergedData));
 
     } catch (error) { 
@@ -719,7 +763,6 @@ exports.getCongestion3gData = async (req, res) => {
 
 exports.getTrafficDownData = async (req, res) => {
     try {
-        // 1. Lấy danh sách 10 ngày gần nhất từ CSDL
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL`);
         const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
             const pA = a.split('/'); const pB = b.split('/');
@@ -734,11 +777,9 @@ exports.getTrafficDownData = async (req, res) => {
         const [t0, t1, t2, t3, t4, t5, t6, t7, t8, t9] = targetDates;
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Kéo toàn bộ dữ liệu 10 ngày của 4G và 5G lên RAM để xử lý siêu tốc
         const [data4g] = await db.query(`SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`, targetDates);
         const [data5g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_5g WHERE Thoi_gian IN (${placeholders})`, targetDates);
 
-        // 3. Lấy dữ liệu Mapping POI
         const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g');
         const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g');
         const cellToPoi = {};
@@ -747,16 +788,14 @@ exports.getTrafficDownData = async (req, res) => {
 
         let zeroTrafficCells = [];
         let droppedTrafficCells = [];
-        let poiTrafficMap = {}; // Lưu tổng Traffic (4G+5G) của POI theo từng ngày
+        let poiTrafficMap = {}; 
 
-        // 4. Hàm xử lý logic lõi dùng chung cho cả 4G và 5G
         const analyzeData = (dataArray, network) => {
             const cellMap = {};
             dataArray.forEach(row => {
                 if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = {};
                 cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
                 
-                // Cộng dồn Traffic vào POI tương ứng (Gộp cả 4G + 5G)
                 let poi = cellToPoi[row.Cell_name];
                 if (poi) {
                     if (!poiTrafficMap[poi]) poiTrafficMap[poi] = {};
@@ -773,12 +812,10 @@ exports.getTrafficDownData = async (req, res) => {
 
                 const avg7 = (v1 + v2 + v3 + v4 + v5 + v6 + v7) / 7;
 
-                // Tiêu chí 1: Không Lưu Lượng
                 if (v0 < 0.1 && avg7 > 2) {
                     zeroTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), avg7: avg7.toFixed(2) });
                 }
 
-                // Tiêu chí 2: Cell Suy Giảm (3 ngày liên tiếp < 70% so với tuần trước)
                 if (v7 > 1 && v0 < 0.7 * v7 && v1 < 0.7 * v8 && v2 < 0.7 * v9) {
                     droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
                 }
@@ -788,20 +825,17 @@ exports.getTrafficDownData = async (req, res) => {
         analyzeData(data4g, '4g');
         analyzeData(data5g, '5g');
 
-        // 5. Tính toán POI Suy Giảm (Dựa trên tổng Traffic 4G + 5G)
         let droppedTrafficPOIs = [];
         for (let poi in poiTrafficMap) {
             const p = poiTrafficMap[poi];
             const v0 = p[t0] || 0; const v1 = p[t1] || 0; const v2 = p[t2] || 0;
             const v7 = p[t7] || 0; const v8 = p[t8] || 0; const v9 = p[t9] || 0;
 
-            // POI phải có traffic cũ > 5GB mới xét suy giảm
             if (v7 > 5 && v0 < 0.7 * v7 && v1 < 0.7 * v8 && v2 < 0.7 * v9) {
                 droppedTrafficPOIs.push({ POI: poi, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
             }
         }
 
-        // 6. Trả kết quả về Frontend
         res.json({
             latestDate: t0,
             lastWeekDate: t7,
