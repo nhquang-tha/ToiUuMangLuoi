@@ -90,70 +90,143 @@ async function getKpiHistory() {
 }
 
 // ========================================================
-// [NÂNG CẤP VƯỢT TRỘI] TÍNH TOÁN SẴN DỮ LIỆU BẰNG SQL NATIVE
+// [THUẬT TOÁN MỚI] GOM NHÓM ĐA LUỒNG BẰNG RAM NODE.JS 
+// Khắc phục triệt để lỗi SQL cắt sai chuỗi 5G
 // ========================================================
 async function aggregateDashboardData() {
     try {
-        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
+        console.log("⏳ Bắt đầu tính toán Dashboard bằng Node.js RAM (Cực Nhanh)...");
 
-        // 1. CẬP NHẬT BẢNG GLOBAL (Dashboard - Toàn mạng 4G)
-        await db.query(`
-            INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
-            FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
-                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
-                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
-                AVG_CQI_4G = VALUES(AVG_CQI_4G)
-        `);
+        // 1. Kéo toàn bộ dữ liệu lên RAM
+        const [kpi4g] = await db.query(`SELECT Thoi_gian, District_code, Cell_name, Total_Data_Traffic_Volume_GB, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
+        const [kpi5g] = await db.query(`SELECT Thoi_gian, Ten_CELL, Total_Data_Traffic_Volume_GB, A_User_DL_Avg_Throughput, CQI_5G FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
 
-        // 2. CẬP NHẬT BẢNG GLOBAL (Dashboard - Toàn mạng 5G)
-        await db.query(`
-            INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(A_User_DL_Avg_Throughput), AVG(CQI_5G)
-            FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
-                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
-                AVG_CQI_5G = VALUES(AVG_CQI_5G)
-        `);
+        // 2. Thuật toán "Lọc Lõi" (Cắt chuẩn 7 ký tự bỏ qua mọi tạp âm)
+        const getCore = (name) => {
+            if(!name) return '';
+            return String(name).toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').substring(0, 7);
+        };
 
-        // 3. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 4G)
-        await db.query(`
-            INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
-            SELECT Thoi_gian, District_code, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
-            FROM kpi_4g 
-            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' AND District_code IS NOT NULL AND District_code != '' 
-            GROUP BY Thoi_gian, District_code
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
-                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
-                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
-                AVG_CQI_4G = VALUES(AVG_CQI_4G)
-        `);
+        // 3. Xây dựng bản đồ Ánh Xạ District từ 4G
+        let mapCoreToDistrict = {};
+        kpi4g.forEach(r => {
+            if (r.District_code) {
+                mapCoreToDistrict[getCore(r.Cell_name)] = r.District_code;
+            }
+        });
 
-        // 4. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 5G bằng JOIN Mapping Lọc Kép)
-        await db.query(`
-            INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-            SELECT t5.Thoi_gian, t4map.District_code, SUM(t5.Total_Data_Traffic_Volume_GB), AVG(t5.A_User_DL_Avg_Throughput), AVG(t5.CQI_5G)
-            FROM kpi_5g t5
-            JOIN (
-                SELECT DISTINCT LEFT(REPLACE(REPLACE(Cell_name, '4G-', ''), '4G_', ''), 7) as core_code, District_code 
-                FROM kpi_4g 
-                WHERE District_code IS NOT NULL AND District_code != '' AND LENGTH(Cell_name) >= 7
-            ) t4map ON t5.Ten_CELL LIKE CONCAT('%', t4map.core_code, '%')
-            WHERE t5.Thoi_gian IS NOT NULL AND t5.Thoi_gian != ''
-            GROUP BY t5.Thoi_gian, t4map.District_code
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
-                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
-                AVG_CQI_5G = VALUES(AVG_CQI_5G)
-        `);
+        // 4. Các biến chứa kết quả Gom Nhóm
+        let globalDash = {}; 
+        let distDash = {};   
 
-        console.log("✅ Tính toán và đồng bộ Dashboard (Tất cả & District) thành công!");
+        // === XỬ LÝ SỐ LIỆU 4G ===
+        kpi4g.forEach(r => {
+            let date = r.Thoi_gian;
+            let dist = r.District_code;
+
+            const add4G = (target) => {
+                target.t4 += parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+                if (r.User_DL_Avg_Throughput_Kbps !== null) {
+                    target.th4 += parseFloat(r.User_DL_Avg_Throughput_Kbps) || 0;
+                    target.c4_th++;
+                }
+                if (r.RB_Util_Rate_DL !== null) {
+                    target.prb4 += parseFloat(r.RB_Util_Rate_DL) || 0;
+                    target.c4_prb++;
+                }
+                if (r.CQI_4G !== null) {
+                    target.cqi4 += parseFloat(r.CQI_4G) || 0;
+                    target.c4_cqi++;
+                }
+            };
+
+            if (!globalDash[date]) globalDash[date] = { date, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+            add4G(globalDash[date]);
+
+            if (dist) {
+                let key = `${date}_${dist}`;
+                if (!distDash[key]) distDash[key] = { date, dist, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+                add4G(distDash[key]);
+            }
+        });
+
+        // === XỬ LÝ SỐ LIỆU 5G VÀ ÁNH XẠ DISTRICT ===
+        kpi5g.forEach(r => {
+            let date = r.Thoi_gian;
+            let core = getCore(r.Ten_CELL);
+            let dist = mapCoreToDistrict[core]; // Tự động nhận diện District của 4G
+
+            const add5G = (target) => {
+                target.t5 += parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+                if (r.A_User_DL_Avg_Throughput !== null) {
+                    target.th5 += parseFloat(r.A_User_DL_Avg_Throughput) || 0;
+                    target.c5_th++;
+                }
+                if (r.CQI_5G !== null) {
+                    target.cqi5 += parseFloat(r.CQI_5G) || 0;
+                    target.c5_cqi++;
+                }
+            };
+
+            if (!globalDash[date]) globalDash[date] = { date, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+            add5G(globalDash[date]);
+
+            if (dist) {
+                let key = `${date}_${dist}`;
+                if (!distDash[key]) distDash[key] = { date, dist, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+                add5G(distDash[key]);
+            }
+        });
+
+        // 5. Chuẩn bị mảng để Insert siêu tốc
+        const avg = (sum, count) => count > 0 ? (sum / count) : 0;
+
+        let insertGlobal = [];
+        for (let d in globalDash) {
+            let row = globalDash[d];
+            insertGlobal.push([
+                row.date,
+                row.t4, avg(row.th4, row.c4_th), avg(row.prb4, row.c4_prb), avg(row.cqi4, row.c4_cqi),
+                row.t5, avg(row.th5, row.c5_th), avg(row.cqi5, row.c5_cqi)
+            ]);
+        }
+
+        let insertDist = [];
+        for (let k in distDash) {
+            let row = distDash[k];
+            insertDist.push([
+                row.date, row.dist,
+                row.t4, avg(row.th4, row.c4_th), avg(row.prb4, row.c4_prb), avg(row.cqi4, row.c4_cqi),
+                row.t5, avg(row.th5, row.c5_th), avg(row.cqi5, row.c5_cqi)
+            ]);
+        }
+
+        // 6. Ghi đè vào Database
+        if (insertGlobal.length > 0) {
+            await db.query(`
+                INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
+                VALUES ?
+                ON DUPLICATE KEY UPDATE 
+                    sum_TRAFFIC_4G=VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G=VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                    AVG_RES_BLK_DL_4G=VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G=VALUES(AVG_CQI_4G),
+                    sum_TRAFFIC_5G=VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G=VALUES(AVG_USER_DL_AVG_THPUT_5G), AVG_CQI_5G=VALUES(AVG_CQI_5G)
+            `, [insertGlobal]);
+        }
+
+        if (insertDist.length > 0) {
+            await db.query(`
+                INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
+                VALUES ?
+                ON DUPLICATE KEY UPDATE 
+                    sum_TRAFFIC_4G=VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G=VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                    AVG_RES_BLK_DL_4G=VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G=VALUES(AVG_CQI_4G),
+                    sum_TRAFFIC_5G=VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G=VALUES(AVG_USER_DL_AVG_THPUT_5G), AVG_CQI_5G=VALUES(AVG_CQI_5G)
+            `, [insertDist]);
+        }
+
+        console.log("✅ Đồng bộ & Tính toán dữ liệu District 4G/5G thành công!");
     } catch (e) {
-        console.error("❌ Lỗi aggregateDashboardData:", e.message);
+        console.error("❌ Lỗi aggregateDashboardData:", e);
     }
 }
 
@@ -621,7 +694,6 @@ exports.handleImportData = async (req, res) => {
     } 
 
     if (isKpiImported) {
-        // [CẬP NHẬT GỌI HÀM NÀY] để kích hoạt tính toán đa luồng và đồng bộ vào CSDL
         await aggregateDashboardData();
     }
     
@@ -651,11 +723,9 @@ exports.getDashboardData = async (req, res) => {
 
     try {
         if (district === 'all') {
-            // Lấy từ bảng lưu trữ Toàn mạng
             const [rows] = await db.query('SELECT * FROM Dashboard');
             res.json(rows);
         } else {
-            // Lấy từ bảng lưu trữ tính sẵn của từng Chi nhánh
             const [rows] = await db.query('SELECT * FROM district_dashboard WHERE district = ?', [district]);
             res.json(rows);
         }
@@ -664,7 +734,6 @@ exports.getDashboardData = async (req, res) => {
         res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
     }
 };
-// ========================================================
 
 exports.getWorstCellsData = async (req, res) => {
     const days = parseInt(req.query.days) || 1; 
