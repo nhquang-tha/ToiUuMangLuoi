@@ -133,16 +133,16 @@ async function aggregateDashboardData() {
                 AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
 
-        // 4. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 5G bằng JOIN Mapping)
+        // 4. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 5G bằng JOIN Mapping Lọc Kép)
         await db.query(`
             INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
             SELECT t5.Thoi_gian, t4map.District_code, SUM(t5.Total_Data_Traffic_Volume_GB), AVG(t5.A_User_DL_Avg_Throughput), AVG(t5.CQI_5G)
             FROM kpi_5g t5
             JOIN (
-                SELECT DISTINCT SUBSTRING(Cell_name, 4, 7) as core_code, District_code 
+                SELECT DISTINCT LEFT(REPLACE(REPLACE(Cell_name, '4G-', ''), '4G_', ''), 7) as core_code, District_code 
                 FROM kpi_4g 
-                WHERE District_code IS NOT NULL AND District_code != ''
-            ) t4map ON SUBSTRING(t5.Ten_CELL, 4, 7) = t4map.core_code
+                WHERE District_code IS NOT NULL AND District_code != '' AND LENGTH(Cell_name) >= 7
+            ) t4map ON t5.Ten_CELL LIKE CONCAT('%', t4map.core_code, '%')
             WHERE t5.Thoi_gian IS NOT NULL AND t5.Thoi_gian != ''
             GROUP BY t5.Thoi_gian, t4map.District_code
             ON DUPLICATE KEY UPDATE 
@@ -153,7 +153,7 @@ async function aggregateDashboardData() {
 
         console.log("✅ Tính toán và đồng bộ Dashboard (Tất cả & District) thành công!");
     } catch (e) {
-        console.error("❌ Lỗi aggregateDashboardData (Chưa tạo bảng district_dashboard chăng?):", e.message);
+        console.error("❌ Lỗi aggregateDashboardData:", e.message);
     }
 }
 
