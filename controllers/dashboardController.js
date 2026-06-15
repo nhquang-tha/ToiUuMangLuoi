@@ -89,34 +89,71 @@ async function getKpiHistory() {
     } catch (e) { return { kpi3g: [], kpi4g: [], kpi5g: [], qoeWeeks: [], qosWeeks: [] }; }
 }
 
+// ========================================================
+// [NÂNG CẤP VƯỢT TRỘI] TÍNH TOÁN SẴN DỮ LIỆU BẰNG SQL NATIVE
+// ========================================================
 async function aggregateDashboardData() {
     try {
-        const [kpi4gRows] = await db.query(`
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_4G, AVG(User_DL_Avg_Throughput_Kbps) AS AVG_USER_DL_AVG_THPUT_4G, AVG(RB_Util_Rate_DL) AS AVG_RES_BLK_DL_4G, AVG(CQI_4G) AS AVG_CQI_4G
+        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
+
+        // 1. CẬP NHẬT BẢNG GLOBAL (Dashboard - Toàn mạng 4G)
+        await db.query(`
+            INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
+            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
             FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
+            ON DUPLICATE KEY UPDATE 
+                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
+                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
+                AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
-        const [kpi5gRows] = await db.query(`
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_5G, AVG(A_User_DL_Avg_Throughput) AS AVG_USER_DL_AVG_THPUT_5G, AVG(CQI_5G) AS AVG_CQI_5G
+
+        // 2. CẬP NHẬT BẢNG GLOBAL (Dashboard - Toàn mạng 5G)
+        await db.query(`
+            INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
+            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(A_User_DL_Avg_Throughput), AVG(CQI_5G)
             FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
+            ON DUPLICATE KEY UPDATE 
+                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
+                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
+                AVG_CQI_5G = VALUES(AVG_CQI_5G)
         `);
 
-        let aggregatedData = {};
-        kpi4gRows.forEach(row => { aggregatedData[row.Thoi_gian] = { ...row, sum_TRAFFIC_5G: 0, AVG_USER_DL_AVG_THPUT_5G: 0, AVG_CQI_5G: 0 }; });
-        kpi5gRows.forEach(row => {
-            if (!aggregatedData[row.Thoi_gian]) aggregatedData[row.Thoi_gian] = { Thoi_gian: row.Thoi_gian, sum_TRAFFIC_4G: 0, AVG_USER_DL_AVG_THPUT_4G: 0, AVG_RES_BLK_DL_4G: 0, AVG_CQI_4G: 0 };
-            aggregatedData[row.Thoi_gian] = { ...aggregatedData[row.Thoi_gian], ...row };
-        });
+        // 3. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 4G)
+        await db.query(`
+            INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
+            SELECT Thoi_gian, District_code, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
+            FROM kpi_4g 
+            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' AND District_code IS NOT NULL AND District_code != '' 
+            GROUP BY Thoi_gian, District_code
+            ON DUPLICATE KEY UPDATE 
+                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
+                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
+                AVG_CQI_4G = VALUES(AVG_CQI_4G)
+        `);
 
-        for (const date in aggregatedData) {
-            const data = aggregatedData[date];
-            await db.query(`
-                INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G = VALUES(AVG_CQI_4G), sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), AVG_CQI_5G = VALUES(AVG_CQI_5G)
-            `, [data.Thoi_gian, data.sum_TRAFFIC_4G, data.AVG_USER_DL_AVG_THPUT_4G, data.AVG_RES_BLK_DL_4G, data.AVG_CQI_4G, data.sum_TRAFFIC_5G, data.AVG_USER_DL_AVG_THPUT_5G, data.AVG_CQI_5G]);
-        }
+        // 4. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 5G bằng JOIN Mapping)
+        await db.query(`
+            INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
+            SELECT t5.Thoi_gian, t4map.District_code, SUM(t5.Total_Data_Traffic_Volume_GB), AVG(t5.A_User_DL_Avg_Throughput), AVG(t5.CQI_5G)
+            FROM kpi_5g t5
+            JOIN (
+                SELECT DISTINCT SUBSTRING(Cell_name, 4, 7) as core_code, District_code 
+                FROM kpi_4g 
+                WHERE District_code IS NOT NULL AND District_code != ''
+            ) t4map ON SUBSTRING(t5.Ten_CELL, 4, 7) = t4map.core_code
+            WHERE t5.Thoi_gian IS NOT NULL AND t5.Thoi_gian != ''
+            GROUP BY t5.Thoi_gian, t4map.District_code
+            ON DUPLICATE KEY UPDATE 
+                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
+                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
+                AVG_CQI_5G = VALUES(AVG_CQI_5G)
+        `);
+
+        console.log("✅ Tính toán và đồng bộ Dashboard (Tất cả & District) thành công!");
     } catch (e) {
-        console.error("Lỗi aggregateDashboardData:", e);
+        console.error("❌ Lỗi aggregateDashboardData (Chưa tạo bảng district_dashboard chăng?):", e.message);
     }
 }
 
@@ -353,9 +390,6 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             const headerString = excelHeaders.map(String).join(' ').toLowerCase();
 
-            // ========================================================
-            // BẪY LỖI NGƯỜI DÙNG CHỌN NHẦM FILE IMPORT
-            // ========================================================
             let validationError = null;
             if (networkType === 'kpi_3g') {
                 if (headerString.includes('cqi') || headerString.includes('enodeb') || headerString.includes('gnodeb')) {
@@ -586,7 +620,10 @@ exports.handleImportData = async (req, res) => {
         } catch (error) { console.error(`Lỗi file:`, error); }
     } 
 
-    if (isKpiImported) await aggregateDashboardData();
+    if (isKpiImported) {
+        // [CẬP NHẬT GỌI HÀM NÀY] để kích hoạt tính toán đa luồng và đồng bộ vào CSDL
+        await aggregateDashboardData();
+    }
     
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
         await syncQoeQosSummary();
@@ -596,6 +633,9 @@ exports.handleImportData = async (req, res) => {
     return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Đã Import/Ghi đè thành công ${totalImported} dòng.`, error: null });
 };
 
+// ========================================================
+// [NÂNG CẤP VƯỢT TRỘI] LOAD DASHBOARD SIÊU TỐC O(1)
+// ========================================================
 exports.getDistricts = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT DISTINCT District_code FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != "" ORDER BY District_code');
@@ -610,69 +650,21 @@ exports.getDashboardData = async (req, res) => {
     const district = req.query.district || 'all';
 
     try {
-        let params4g = [];
-        let params5g = [];
-        let filter4g = '';
-        let filter5g = '';
-
-        if (district !== 'all') {
-            filter4g = 'AND District_code = ?';
-            params4g.push(district);
-            
-            // [FIX MỚI]: Cắt lấy đúng 7 ký tự Mã Trạm (Ví dụ: 4G-THA001M11 -> THA001M)
-            // Nhờ đó, THA001M của 5G (5G-THA001M51) sẽ match chính xác 100% với THA001M của 4G (4G-THA001M11)
-            filter5g = 'AND SUBSTRING(Ten_CELL, 4, 7) IN (SELECT SUBSTRING(Cell_name, 4, 7) FROM kpi_4g WHERE District_code = ?)';
-            params5g.push(district);
+        if (district === 'all') {
+            // Lấy từ bảng lưu trữ Toàn mạng
+            const [rows] = await db.query('SELECT * FROM Dashboard');
+            res.json(rows);
+        } else {
+            // Lấy từ bảng lưu trữ tính sẵn của từng Chi nhánh
+            const [rows] = await db.query('SELECT * FROM district_dashboard WHERE district = ?', [district]);
+            res.json(rows);
         }
-
-        const query4g = `
-            SELECT Thoi_gian as thoi_gian,
-                   SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_4G,
-                   AVG(User_DL_Avg_Throughput_Kbps) AS AVG_USER_DL_AVG_THPUT_4G,
-                   AVG(RB_Util_Rate_DL) AS AVG_RES_BLK_DL_4G,
-                   AVG(CQI_4G) AS AVG_CQI_4G
-            FROM kpi_4g
-            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' ${filter4g}
-            GROUP BY Thoi_gian
-        `;
-
-        const query5g = `
-            SELECT Thoi_gian as thoi_gian,
-                   SUM(Total_Data_Traffic_Volume_GB) AS sum_TRAFFIC_5G,
-                   AVG(A_User_DL_Avg_Throughput) AS AVG_USER_DL_AVG_THPUT_5G,
-                   AVG(CQI_5G) AS AVG_CQI_5G
-            FROM kpi_5g
-            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' ${filter5g}
-            GROUP BY Thoi_gian
-        `;
-
-        const [rows4g] = await db.query(query4g, params4g);
-        const [rows5g] = await db.query(query5g, params5g);
-
-        let mergedData = {};
-        
-        rows4g.forEach(r => {
-            mergedData[r.thoi_gian] = { ...r, sum_TRAFFIC_5G: 0, AVG_USER_DL_AVG_THPUT_5G: 0, AVG_CQI_5G: 0 };
-        });
-        
-        rows5g.forEach(r => {
-            if (!mergedData[r.thoi_gian]) {
-                mergedData[r.thoi_gian] = { 
-                    thoi_gian: r.thoi_gian, sum_TRAFFIC_4G: 0, AVG_USER_DL_AVG_THPUT_4G: 0, AVG_RES_BLK_DL_4G: 0, AVG_CQI_4G: 0 
-                };
-            }
-            mergedData[r.thoi_gian].sum_TRAFFIC_5G = r.sum_TRAFFIC_5G;
-            mergedData[r.thoi_gian].AVG_USER_DL_AVG_THPUT_5G = r.AVG_USER_DL_AVG_THPUT_5G;
-            mergedData[r.thoi_gian].AVG_CQI_5G = r.AVG_CQI_5G;
-        });
-
-        res.json(Object.values(mergedData));
-
     } catch (error) { 
-        console.error("Lỗi tính toán getDashboardData:", error);
-        res.status(500).json({ error: "Lỗi CSDL." }); 
+        console.error("Lỗi getDashboardData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
     }
 };
+// ========================================================
 
 exports.getWorstCellsData = async (req, res) => {
     const days = parseInt(req.query.days) || 1; 
