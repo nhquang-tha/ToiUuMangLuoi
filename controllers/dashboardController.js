@@ -76,7 +76,6 @@ async function getKpiHistory() {
         
         const processWeeks = (rows) => {
             let uniqueWeeks = [...new Set(rows.map(r => r.Tuan).filter(Boolean))];
-            // Lật ngược lại để Mới Nhất lên đầu
             return sortWeeks(uniqueWeeks).reverse(); 
         };
 
@@ -141,12 +140,10 @@ async function syncQoeQosSummary() {
             )
         `);
 
-        // Bổ sung lấy District, MIMO từ kpi_4g để làm giàu dữ liệu phụ
         const [cellsKpi] = await db.query(`SELECT Cell_name, MAX(District_code) as District_code, MAX(MIMO) as MIMO FROM kpi_4g WHERE Cell_name IS NOT NULL AND Cell_name != '' GROUP BY Cell_name`);
         const kpiMap = {};
         cellsKpi.forEach(c => kpiMap[c.Cell_name] = c);
 
-        // Lấy danh sách Site_Name và Cell_Name CHÍNH THỨC từ mbb_qoe và mbb_qos
         const [qoe] = await db.query('SELECT Site_Name, Cell_Name, Tuan, QoE_Rank, QoE_Score FROM mbb_qoe');
         const [qos] = await db.query('SELECT Site_Name, Cell_Name, Tuan, QoS_Rank, QoS_Score FROM mbb_qos');
         const [notes] = await db.query('SELECT cell_name, note_text FROM cell_notes');
@@ -160,7 +157,6 @@ async function syncQoeQosSummary() {
             qoeWeeksSet.add(r.Tuan);
         });
         
-        // Sửa lỗi: Lật ngược mảng để index [0] luôn là TUẦN MỚI NHẤT
         let sortedQoeWeeks = sortWeeks(Array.from(qoeWeeksSet)).reverse();
 
         let qosMap = {}; let qosWeeksSet = new Set();
@@ -170,10 +166,8 @@ async function syncQoeQosSummary() {
             qosWeeksSet.add(r.Tuan);
         });
         
-        // Sửa lỗi: Lật ngược mảng để index [0] luôn là TUẦN MỚI NHẤT
         let sortedQosWeeks = sortWeeks(Array.from(qosWeeksSet)).reverse();
 
-        // CHỈ LẤY DANH SÁCH CELL CỦA TUẦN MỚI NHẤT ĐỂ RENDER RA BẢNG
         let latestQoeWeek = sortedQoeWeeks.length > 0 ? sortedQoeWeeks[0] : null;
         let latestQosWeek = sortedQosWeeks.length > 0 ? sortedQosWeeks[0] : null;
 
@@ -360,8 +354,7 @@ exports.handleImportData = async (req, res) => {
             const headerString = excelHeaders.map(String).join(' ').toLowerCase();
 
             // ========================================================
-            // [TÍNH NĂNG MỚI]: BẪY LỖI NGƯỜI DÙNG CHỌN NHẦM FILE IMPORT
-            // Nếu phát hiện nhầm loại mạng hoặc loại báo cáo, lập tức chặn và báo lỗi
+            // BẪY LỖI NGƯỜI DÙNG CHỌN NHẦM FILE IMPORT
             // ========================================================
             let validationError = null;
             if (networkType === 'kpi_3g') {
@@ -390,18 +383,11 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
-            // Nếu có lỗi sai file, trả về giao diện ngay lập tức, hủy bỏ toàn bộ quá trình nạp
             if (validationError) {
                 return res.render('import_data', { 
-                    title: 'Import Data', 
-                    page: 'Import Data', 
-                    userRole: userRole, 
-                    history: history, 
-                    message: null, 
-                    error: validationError 
+                    title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: validationError 
                 });
             }
-            // ========================================================
 
             let colMapping = [];
 
@@ -562,16 +548,11 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
-            // ========================================================
-            // [TÍNH NĂNG ĐỘC QUYỀN]: TỰ ĐỘNG XÓA DỮ LIỆU CŨ CỦA NGÀY TRƯỚC KHI GHI ĐÈ
-            // ========================================================
             if (insertData.length > 0 && isKpiImported) {
-                // Lấy ra tất cả các "Ngày" có xuất hiện trong file Excel vừa tải lên
                 const uniqueDates = [...new Set(insertData.map(r => r.Thoi_gian).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
                     try { 
-                        // Lệnh xóa rỗng Database theo những ngày đã tìm thấy
                         await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates); 
                         console.log(`🧹 Đã dọn sạch dữ liệu KPI cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
                     } catch (e) {
@@ -580,7 +561,6 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
-            // NẠP DỮ LIỆU VÀO DATABASE
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
@@ -639,7 +619,9 @@ exports.getDashboardData = async (req, res) => {
             filter4g = 'AND District_code = ?';
             params4g.push(district);
             
-            filter5g = 'AND SUBSTRING(Ten_CELL, 4) IN (SELECT SUBSTRING(Cell_name, 4) FROM kpi_4g WHERE District_code = ?)';
+            // [FIX MỚI]: Cắt lấy đúng 7 ký tự Mã Trạm (Ví dụ: 4G-THA001M11 -> THA001M)
+            // Nhờ đó, THA001M của 5G (5G-THA001M51) sẽ match chính xác 100% với THA001M của 4G (4G-THA001M11)
+            filter5g = 'AND SUBSTRING(Ten_CELL, 4, 7) IN (SELECT SUBSTRING(Cell_name, 4, 7) FROM kpi_4g WHERE District_code = ?)';
             params5g.push(district);
         }
 
