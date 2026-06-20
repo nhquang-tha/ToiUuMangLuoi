@@ -89,14 +89,10 @@ async function getKpiHistory() {
     } catch (e) { return { kpi3g: [], kpi4g: [], kpi5g: [], qoeWeeks: [], qosWeeks: [] }; }
 }
 
-// ========================================================
-// [QUAY LẠI CÁCH SQL NATIVE] KẾT HỢP LỌC 6 KÝ TỰ CỐT LÕI
-// ========================================================
 async function aggregateDashboardData() {
     try {
         console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard (SQL Native 6 Chars)...");
 
-        // 1. CẬP NHẬT BẢNG GLOBAL (Dashboard - Toàn mạng 4G)
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
             SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
@@ -108,7 +104,6 @@ async function aggregateDashboardData() {
                 AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
 
-        // 2. CẬP NHẬT BẢNG GLOBAL (Dashboard - Toàn mạng 5G)
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
             SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(A_User_DL_Avg_Throughput), AVG(CQI_5G)
@@ -119,7 +114,6 @@ async function aggregateDashboardData() {
                 AVG_CQI_5G = VALUES(AVG_CQI_5G)
         `);
 
-        // 3. CẬP NHẬT BẢNG CHI NHÁNH (district_dashboard - 4G)
         await db.query(`
             INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
             SELECT Thoi_gian, District_code, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
@@ -133,8 +127,6 @@ async function aggregateDashboardData() {
                 AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
 
-        // 4. CẬP NHẬT BẢNG CHI NHÁNH 5G 
-        // [FIX]: Chặn đứng lỗi M và A bằng cách chỉ gọt lấy 6 ký tự gốc (VD: BSN011)
         await db.query(`
             INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
             SELECT t5.Thoi_gian, t4map.District_code, SUM(t5.Total_Data_Traffic_Volume_GB), AVG(t5.A_User_DL_Avg_Throughput), AVG(t5.CQI_5G)
@@ -426,6 +418,9 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
+            // ==========================================================
+            // BỘ ÁNH XẠ CỘT (COLUMN MAPPING) CHO TỪNG LOẠI FILE EXCEL
+            // ==========================================================
             if (networkType === 'mbb_qoe') {
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
@@ -451,7 +446,21 @@ exports.handleImportData = async (req, res) => {
                     let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                     let mappedCol = null;
 
-                    if (networkType === 'kpi_4g') {
+                    // --- BỔ SUNG MAPPING DÀNH RIÊNG CHO MẠNG 3G TẠI ĐÂY ---
+                    if (networkType === 'kpi_3g') {
+                        if (h.includes('tên cell') || h === 'tên cell' || h === 'cell name' || h === 'ten_cell') mappedCol = 'Ten_CELL';
+                        else if (h === 'ci') mappedCol = 'CI';
+                        else if (h.includes('thời gian') || h.includes('thoi gian') || h === 'thời gian') mappedCol = 'Thoi_gian';
+                        else if (h === 'cs_so_att') mappedCol = 'CS_SO_ATT';
+                        else if (h === 'ps_so_att') mappedCol = 'PS_SO_ATT';
+                        else if (h === 'cs_rab congestion rate') mappedCol = 'CSCONGES';
+                        else if (h === 'ps_rab congestion rate') mappedCol = 'PSCONGES';
+                        else if (h === 'cs_total traffic') mappedCol = 'TRAFFIC';
+                        else if (h === 'cs_call setup success rate') mappedCol = 'CSSR';
+                        else if (h === 'cs_drop call rate') mappedCol = 'DCR';
+                    } 
+                    // --- MAPPING 4G ---
+                    else if (networkType === 'kpi_4g') {
                         if (h.includes('site name')) mappedCol = 'Site_name';
                         else if (h.includes('celltype')) mappedCol = 'CellType';
                         else if (h.includes('district code')) mappedCol = 'District_code';
@@ -467,7 +476,9 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
                         else if (h.includes('erab setup success') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
                         else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
-                    } else if (networkType === 'kpi_5g') {
+                    } 
+                    // --- MAPPING 5G ---
+                    else if (networkType === 'kpi_5g') {
                         if (h.includes('nhà cung cấp') || h === 'nha_cung_cap') mappedCol = 'Nha_cung_cap';
                         else if (h.includes('tỉnh') || h === 'tinh') mappedCol = 'Tinh';
                         else if (h.includes('tên gnodeb') || h === 'ten_gnodeb') mappedCol = 'Ten_GNODEB';
@@ -494,7 +505,9 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('sgnb_abn_release_rate') || h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
                         else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
                         else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
-                    } else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
+                    } 
+                    // --- MAPPING POI, CSHT, ALARM ---
+                    else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
                         if (h.includes('cell_code') || h === 'cell code') mappedCol = 'Cell_Code';
                         else if (h.includes('site_code') || h === 'site code') mappedCol = 'Site_Code';
                         else if (h === 'poi') mappedCol = 'POI';
@@ -564,7 +577,7 @@ exports.handleImportData = async (req, res) => {
                     if (val === undefined || val === '') val = null;
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
                     if (val !== null && typeof val === 'string' && !isStrCol) {
-                         if (/^-?\d+,\d+$/.test(val)) val = parseFloat(val.replace(',', '.')); 
+                        if (/^-?\d+,\d+$/.test(val)) val = parseFloat(val.replace(',', '.')); 
                     }
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
                         if (val !== null) {
@@ -634,7 +647,7 @@ exports.handleImportData = async (req, res) => {
 };
 
 // ========================================================
-// [NÂNG CẤP VƯỢT TRỘI] LOAD DASHBOARD SIÊU TỐC O(1)
+// LOAD DASHBOARD SIÊU TỐC O(1)
 // ========================================================
 exports.getDistricts = async (req, res) => {
     try {
@@ -675,12 +688,12 @@ exports.getWorstCellsData = async (req, res) => {
 
         const query = `
             SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
-                   AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
-                   AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, AVG(CQI_4G) as CQI_4G, AVG(Service_Drop_all) as Service_Drop_all,
-                   COUNT(Thoi_gian) as So_Ngay_Vi_Pham
+                AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
+                AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, AVG(CQI_4G) as CQI_4G, AVG(Service_Drop_all) as Service_Drop_all,
+                COUNT(Thoi_gian) as So_Ngay_Vi_Pham
             FROM kpi_4g WHERE Thoi_gian IN (${placeholders}) 
-              AND (CellType IS NULL OR CellType NOT LIKE '%L900%') AND (Cell_name NOT LIKE 'MBF_TH%')
-              AND (User_DL_Avg_Throughput_Kbps < 7000 OR RB_Util_Rate_DL > 20 OR CQI_4G < 93 OR Service_Drop_all > 0.3)
+            AND (CellType IS NULL OR CellType NOT LIKE '%L900%') AND (Cell_name NOT LIKE 'MBF_TH%')
+            AND (User_DL_Avg_Throughput_Kbps < 7000 OR RB_Util_Rate_DL > 20 OR CQI_4G < 93 OR Service_Drop_all > 0.3)
             GROUP BY Cell_name HAVING So_Ngay_Vi_Pham >= ? LIMIT 500
         `;
         const [rows] = await db.query(query, [...targetDates, days]);
@@ -713,8 +726,8 @@ exports.getCongestion3gData = async (req, res) => {
 
         const query = `
             SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
-                   AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
-                   COUNT(Thoi_gian) as So_Ngay_Vi_Pham
+                AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
+                COUNT(Thoi_gian) as So_Ngay_Vi_Pham
             FROM kpi_3g WHERE Thoi_gian IN (${placeholders}) AND ((CSCONGES > 2 AND CS_SO_ATT > 100) OR (PSCONGES > 2 AND PS_SO_ATT > 500))
             GROUP BY Ten_CELL HAVING So_Ngay_Vi_Pham >= ? LIMIT 500
         `;
