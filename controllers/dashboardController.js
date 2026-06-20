@@ -418,9 +418,6 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
-            // ==========================================================
-            // BỘ ÁNH XẠ CỘT (COLUMN MAPPING) CHO TỪNG LOẠI FILE EXCEL
-            // ==========================================================
             if (networkType === 'mbb_qoe') {
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' }, { excelIdx: 1, dbCol: 'Don_Vi' }, { excelIdx: 2, dbCol: 'Phuong_Xa' },
@@ -446,20 +443,19 @@ exports.handleImportData = async (req, res) => {
                     let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                     let mappedCol = null;
 
-                    // --- BỔ SUNG MAPPING DÀNH RIÊNG CHO MẠNG 3G TẠI ĐÂY ---
+                    // [NÂNG CẤP BỘ LỌC 3G TẠI ĐÂY] SỬ DỤNG INCLUDES ĐỂ BĂT ĐƯỢC CHUỖI BỊ LỖI FONT HAY KHOẢNG TRẮNG
                     if (networkType === 'kpi_3g') {
-                        if (h.includes('tên cell') || h === 'tên cell' || h === 'cell name' || h === 'ten_cell') mappedCol = 'Ten_CELL';
-                        else if (h === 'ci') mappedCol = 'CI';
-                        else if (h.includes('thời gian') || h.includes('thoi gian') || h === 'thời gian') mappedCol = 'Thoi_gian';
-                        else if (h === 'cs_so_att') mappedCol = 'CS_SO_ATT';
-                        else if (h === 'ps_so_att') mappedCol = 'PS_SO_ATT';
-                        else if (h === 'cs_rab congestion rate') mappedCol = 'CSCONGES';
-                        else if (h === 'ps_rab congestion rate') mappedCol = 'PSCONGES';
-                        else if (h === 'cs_total traffic') mappedCol = 'TRAFFIC';
-                        else if (h === 'cs_call setup success rate') mappedCol = 'CSSR';
-                        else if (h === 'cs_drop call rate') mappedCol = 'DCR';
+                        if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
+                        else if (h === 'ci' || h === 'cell id') mappedCol = 'CI';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
+                        else if (h.includes('cs_so_att')) mappedCol = 'CS_SO_ATT';
+                        else if (h.includes('ps_so_att')) mappedCol = 'PS_SO_ATT';
+                        else if (h.includes('cs_rab congestion')) mappedCol = 'CSCONGES';
+                        else if (h.includes('ps_rab congestion')) mappedCol = 'PSCONGES';
+                        else if (h.includes('cs_total traffic') || h === 'traffic') mappedCol = 'TRAFFIC';
+                        else if (h.includes('cs_call setup success')) mappedCol = 'CSSR';
+                        else if (h.includes('cs_drop call')) mappedCol = 'DCR';
                     } 
-                    // --- MAPPING 4G ---
                     else if (networkType === 'kpi_4g') {
                         if (h.includes('site name')) mappedCol = 'Site_name';
                         else if (h.includes('celltype')) mappedCol = 'CellType';
@@ -477,7 +473,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('erab setup success') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
                         else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
                     } 
-                    // --- MAPPING 5G ---
                     else if (networkType === 'kpi_5g') {
                         if (h.includes('nhà cung cấp') || h === 'nha_cung_cap') mappedCol = 'Nha_cung_cap';
                         else if (h.includes('tỉnh') || h === 'tinh') mappedCol = 'Tinh';
@@ -506,7 +501,6 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
                         else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
                     } 
-                    // --- MAPPING POI, CSHT, ALARM ---
                     else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
                         if (h.includes('cell_code') || h === 'cell code') mappedCol = 'Cell_Code';
                         else if (h.includes('site_code') || h === 'site code') mappedCol = 'Site_Code';
@@ -574,13 +568,22 @@ exports.handleImportData = async (req, res) => {
                 const rowObj = {}; let hasKpiData = false;
                 colMapping.forEach(map => {
                     let val = row[map.excelIdx];
-                    if (val === undefined || val === '') val = null;
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
-                    if (val !== null && typeof val === 'string' && !isStrCol) {
-                        if (/^-?\d+,\d+$/.test(val)) val = parseFloat(val.replace(',', '.')); 
+                    
+                    // [NÂNG CẤP] BỘ ÉP KIỂU SỐ (CHỐNG LỖI STRING RỖNG TỪ FILE CSV GÂY CRASH DATABASE)
+                    if (!isStrCol) {
+                        if (val === null || val === undefined || val === '' || String(val).trim() === '') {
+                            val = null; // Biến rỗng thành NULL để MySQL chấp nhận
+                        } else if (typeof val === 'string') {
+                            let parsed = parseFloat(val.replace(/,/g, '.'));
+                            val = isNaN(parsed) ? null : parsed; 
+                        } else if (typeof val === 'number') {
+                            val = isNaN(val) ? null : val;
+                        }
                     }
+
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
-                        if (val !== null) {
+                        if (val !== null && val !== '') {
                             val = formatExcelDate(val);
                             if (typeof val === 'string' && val.includes(' ')) val = val.split(' ')[0];
                             lastValidDate = val; 
