@@ -27,7 +27,7 @@
     .map-wrapper { position: relative; flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; }
     #map { flex: 1; height: 100%; width: 100%; z-index: 1; background: #e5e3df; }
     
-    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; font-size: 15px;}
+    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.95); padding: 20px 40px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; font-size: 15px; border: 2px solid #3498db;}
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
     .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -84,7 +84,6 @@
                     📶 Mô Phỏng TA
                 </button>
 
-                <!-- THÊM THUỘC TÍNH MULTIPLE ĐỂ CHO PHÉP CHỌN NHIỀU FILE CÙNG LÚC -->
                 <input type="file" id="itsLogInput" accept=".txt,.csv" multiple style="display: none;" onchange="processItsLog(event)">
                 <button onclick="document.getElementById('itsLogInput').click()" style="background: #e67e22; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📥 Import Log ITS
@@ -108,7 +107,7 @@
         
         <div class="map-wrapper" id="mapWrapper">
             <div id="mapLoading">
-                <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 8px;">⏳</span> Đang xử lý dữ liệu...
+                <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 8px; font-size: 20px;">⚙️</span> <span id="loadingText">Đang xử lý dữ liệu...</span>
             </div>
             <div id="map"></div>
         </div>
@@ -127,7 +126,8 @@
     let isTAMode = false;
     let taDataCache = []; 
 
-    let map = L.map('map').setView([19.806692, 105.776153], 10); 
+    // [TỐI ƯU 1]: BẬT PREFER CANVAS LÊN TRUE ĐỂ VẼ BẰNG GPU THAY VÌ SVG DOM
+    let map = L.map('map', { preferCanvas: true }).setView([19.806692, 105.776153], 10); 
     
     // LAYER GROUP
     let layerGroup = L.layerGroup().addTo(map);   
@@ -381,7 +381,10 @@
         const startAngle = azimuth - beamwidth / 2;
         const endAngle = azimuth + beamwidth / 2;
 
-        for (let i = startAngle; i <= endAngle; i += 5) points.push(getDestination(lat, lng, i, radius));
+        // [TỐI ƯU 3]: GIẢM ĐỘ CHIA ĐỂ VẼ CÁNH QUẠT (TỪ 5 XUỐNG 15) -> Giảm 66% phép tính lượng giác
+        for (let i = startAngle; i <= endAngle; i += 15) {
+            points.push(getDestination(lat, lng, i, radius));
+        }
         points.push(getDestination(lat, lng, endAngle, radius));
         points.push(center);
         return points;
@@ -468,26 +471,18 @@
     // ====================================================
     // MÔ PHỎNG TA (BIỂU ĐỒ NHIỆT ĐA SẮC)
     // ====================================================
+    // [TỐI ƯU 2.1]: Rút gọn hàm cắt tên để chạy siêu tốc trong vòng lặp
     function extractCoreName(name) {
         if (!name) return '';
-        return String(name).toLowerCase()
-                   .replace(/['"]/g, '')   
-                   .replace(/^4g-/i, '')   
-                   .replace(/^3g-/i, '')
-                   .replace(/^5g-/i, '')
-                   .replace(/^ul-/i, '')   
-                   .replace(/^gl-/i, '')
-                   .replace(/-tha$/i, '')  
-                   .replace(/-th$/i, '')
-                   .trim();
+        return String(name).toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
     }
 
     function getHeatmapColor(ratio) {
-        if (ratio >= 0.8) return { fill: '#e74c3c', border: '#c0392b' }; // Đỏ 
-        if (ratio >= 0.6) return { fill: '#e67e22', border: '#d35400' }; // Cam 
-        if (ratio >= 0.4) return { fill: '#f1c40f', border: '#f39c12' }; // Vàng 
-        if (ratio >= 0.2) return { fill: '#2ecc71', border: '#27ae60' }; // Xanh lá 
-        return { fill: '#3498db', border: '#2980b9' }; // Xanh lam 
+        if (ratio >= 0.8) return { fill: '#e74c3c', border: '#c0392b' }; 
+        if (ratio >= 0.6) return { fill: '#e67e22', border: '#d35400' }; 
+        if (ratio >= 0.4) return { fill: '#f1c40f', border: '#f39c12' }; 
+        if (ratio >= 0.2) return { fill: '#2ecc71', border: '#27ae60' }; 
+        return { fill: '#3498db', border: '#2980b9' }; 
     }
 
     function createTASegment(lat, lng, azimuth, innerRadius, outerRadius, beamwidth, ratio, cellCode, taIndex, ueCount) {
@@ -495,11 +490,12 @@
         const startAngle = azimuth - beamwidth / 2;
         const endAngle = azimuth + beamwidth / 2;
 
-        for (let i = startAngle; i <= endAngle; i += 2) points.push(getDestination(lat, lng, i, outerRadius));
+        // Giảm bước chia ở mô phỏng TA
+        for (let i = startAngle; i <= endAngle; i += 15) points.push(getDestination(lat, lng, i, outerRadius));
         points.push(getDestination(lat, lng, endAngle, outerRadius));
 
         if (innerRadius > 0) {
-            for (let i = endAngle; i >= startAngle; i -= 2) points.push(getDestination(lat, lng, i, innerRadius));
+            for (let i = endAngle; i >= startAngle; i -= 15) points.push(getDestination(lat, lng, i, innerRadius));
             points.push(getDestination(lat, lng, startAngle, innerRadius));
         } else {
             points.push([lat, lng]);
@@ -561,7 +557,9 @@
             btn.innerHTML = '🎯 Tắt Mô phỏng TA';
             btn.style.background = '#8e44ad';
             let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
-            await renderTAMap(scale);
+            
+            // Cho browser nghỉ 1 nhịp để render giao diện nút bấm trước khi khóa luồng tính toán
+            setTimeout(() => { renderTAMap(scale); }, 50);
         } else {
             btn.innerHTML = '📶 Mô phỏng TA';
             btn.style.background = '#9b59b6';
@@ -571,13 +569,28 @@
 
     async function renderTAMap(scale = 1) {
         const loading = document.getElementById('mapLoading');
+        document.getElementById('loadingText').innerText = "Đang xử lý thuật toán mô phỏng TA...";
         loading.style.display = 'block';
 
         try {
             if (taDataCache.length === 0) {
+                document.getElementById('loadingText').innerText = "Đang tải dữ liệu TA từ máy chủ...";
                 const res = await fetch('/api/ta-data');
                 taDataCache = await res.json();
             }
+
+            document.getElementById('loadingText').innerText = "Đang vẽ bản đồ nhiệt đa sắc...";
+            
+            // [TỐI ƯU 2.2]: XÂY DỰNG HASHMAP (TỪ ĐIỂN O(1)) THAY VÌ ARRAY.FIND O(N)
+            const taLookupMap = {};
+            taDataCache.forEach(t => {
+                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
+                let core = extractCoreName(rawTaCell);
+                // Ưu tiên lưu mã gốc (VD: THA001) để lấy ra cực nhanh
+                if (core) taLookupMap[core] = t;
+                // Dự phòng lưu mã nguyên bản
+                taLookupMap[rawTaCell.toLowerCase()] = t;
+            });
 
             layerGroup.clearLayers(); 
             taLayer.clearLayers();
@@ -585,30 +598,8 @@
             const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
 
             globalPolygons.forEach(cellItem => {
-                let rfCellName = ''; let rfCellCode = '';
-                if (cellItem.rawData && cellItem.rawData.rfData) {
-                    let nameItem = cellItem.rawData.rfData.find(x => x.key.toLowerCase() === 'cell_name' || x.key.toLowerCase() === 'site_name');
-                    if (nameItem) rfCellName = nameItem.value;
-                    let codeItem = cellItem.rawData.rfData.find(x => x.key.toLowerCase() === 'cell_code');
-                    if (codeItem) rfCellCode = codeItem.value;
-                }
-
-                let coreRfName = extractCoreName(rfCellName);
-                let coreRfCode = extractCoreName(rfCellCode);
-                let coreStr = extractCoreName(cellItem.cellStr);
-
-                const taRecord = taDataCache.find(t => {
-                    let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
-                    let rawRfCellCode = String(rfCellCode).trim();
-                    if (rawTaCell && rawRfCellCode && rawTaCell.toLowerCase() === rawRfCellCode.toLowerCase()) return true;
-
-                    let coreTaCell = extractCoreName(rawTaCell);
-                    if (!coreTaCell) return false;
-                    if (coreTaCell === coreRfName || coreTaCell === coreRfCode || coreTaCell === coreStr) return true;
-                    if (coreRfName.length > 4 && coreTaCell.includes(coreRfName)) return true;
-                    if (coreRfCode.length > 4 && coreTaCell.includes(coreRfCode)) return true;
-                    return false;
-                });
+                // TRA CỨU SIÊU TỐC TỪ BỘ TỪ ĐIỂN HASHMAP
+                let taRecord = taLookupMap[cellItem.fastCoreCode] || taLookupMap[cellItem.cellStr];
 
                 if (taRecord) {
                     let ues = [];
@@ -624,8 +615,7 @@
                                 let ratio = ueCount / maxUE; 
                                 let baseBw = 65; let bw = baseBw * (0.2 + 0.8 * ratio); 
                                 let innerR = taBaseDistances[i] * scale; let outerR = taBaseDistances[i+1] * scale;
-                                let cellDisplayName = cellItem.rawData.cell || rfCellName || "Unknown";
-                                let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellDisplayName, i, ueCount);
+                                let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellItem.displayCellName, i, ueCount);
                                 segment.addTo(taLayer);
                                 cellItem.taSegments = cellItem.taSegments || [];
                                 cellItem.taSegments.push(segment);
@@ -633,7 +623,7 @@
                         }
                     }
                 } else {
-                    let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.rawData.cell, '4g', cellItem.rawData.rfData, 250, scale);
+                    let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.displayCellName, '4g', cellItem.rawData.rfData, 250, scale);
                     let styleObj = {fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3, weight: 1.5};
                     fallback.setStyle(styleObj); fallback.originalStyle = styleObj;
                     fallback.addTo(taLayer); cellItem.taSegments = [fallback];
@@ -659,6 +649,7 @@
     async function loadMapData() {
         const network = document.getElementById('networkSelect').value;
         const loading = document.getElementById('mapLoading');
+        document.getElementById('loadingText').innerText = "Đang tải dữ liệu mạng lưới...";
         
         isTAMode = false;
         document.getElementById('btnTAMode').innerHTML = '📶 Mô phỏng TA';
@@ -688,28 +679,50 @@
                 return alert('Không có dữ liệu tọa độ trạm RF cho mạng này!');
             }
 
-            data.forEach(item => {
-                if(item.lat && item.lng) {
-                    let baseRadius = 250; 
-                    if (network === '3g') baseRadius = 300; 
-                    if (network === '5g') baseRadius = 150; 
+            document.getElementById('loadingText').innerText = "Đang xử lý hình học đa giác...";
 
-                    const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData, baseRadius, scale);
-                    sector.addTo(layerGroup);
-                    defaultBounds.push([item.lat, item.lng]);
-                    
-                    globalPolygons.push({
-                        cellStr: String(item.cell).toLowerCase(), siteStr: String(item.site).toLowerCase(),
-                        polygon: sector, lat: item.lat, lng: item.lng, azimuth: item.azimuth, 
-                        baseRadius: baseRadius, baseColor: sector.options.color,
-                        rawData: item 
-                    });
-                }
-            });
+            // Tách luồng vẽ đồ thị để Browser không bị "Đơ"
+            setTimeout(() => {
+                data.forEach(item => {
+                    if(item.lat && item.lng) {
+                        let baseRadius = 250; 
+                        if (network === '3g') baseRadius = 300; 
+                        if (network === '5g') baseRadius = 150; 
 
-            if (defaultBounds.length > 0) map.fitBounds(defaultBounds);
-            if (legendControl) map.removeControl(legendControl); 
-            loading.style.display = 'none';
+                        // [TỐI ƯU 4]: TÍNH TOÁN SẴN MỌI CHUỖI TÊN ĐỂ LƯU VÀO CACHE (Tránh lặp lại khi bật TA)
+                        let rfCellName = ''; let rfCellCode = '';
+                        if (item.rfData) {
+                            let nameItem = item.rfData.find(x => x.key.toLowerCase() === 'cell_name' || x.key.toLowerCase() === 'site_name');
+                            if (nameItem) rfCellName = nameItem.value;
+                            let codeItem = item.rfData.find(x => x.key.toLowerCase() === 'cell_code');
+                            if (codeItem) rfCellCode = codeItem.value;
+                        }
+                        
+                        let cellStr = String(item.cell).toLowerCase();
+                        let displayCellName = item.cell || rfCellName || "Unknown";
+                        // Mã gốc để làm Key trong HashMap (Ví dụ: 4G-THA001 -> THA001)
+                        let fastCoreCode = extractCoreName(rfCellCode || item.cell);
+
+                        const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData, baseRadius, scale);
+                        sector.addTo(layerGroup);
+                        defaultBounds.push([item.lat, item.lng]);
+                        
+                        globalPolygons.push({
+                            cellStr: cellStr, siteStr: String(item.site).toLowerCase(),
+                            polygon: sector, lat: item.lat, lng: item.lng, azimuth: item.azimuth, 
+                            baseRadius: baseRadius, baseColor: sector.options.color,
+                            rawData: item,
+                            displayCellName: displayCellName,
+                            fastCoreCode: fastCoreCode // Lưu biến nhớ để Hàm TA truy xuất siêu tốc
+                        });
+                    }
+                });
+
+                if (defaultBounds.length > 0) map.fitBounds(defaultBounds);
+                if (legendControl) map.removeControl(legendControl); 
+                loading.style.display = 'none';
+
+            }, 50);
 
         } catch (error) {
             console.error(error);
@@ -725,7 +738,6 @@
         let keyword = document.getElementById('mapSearchInput').value.trim().toLowerCase();
         
         if (!keyword) {
-            // Hiển thị lại toàn bộ RF
             globalPolygons.forEach(item => {
                 if (isTAMode && item.taSegments) {
                     item.taSegments.forEach(seg => {
@@ -737,7 +749,6 @@
                     item.polygon.setStyle({ weight: 1, fillOpacity: 0.65, color: item.baseColor, fillColor: item.baseColor });
                 }
             });
-            // Hiển thị lại toàn bộ CSHT
             globalCshtData.forEach(item => {
                 item.marker.setStyle({ radius: 5, color: '#ffffff', weight: 2, fillColor: '#34495e', fillOpacity: 1 });
             });
@@ -748,7 +759,6 @@
         let matchedBounds = [];
         let matchCount = 0;
 
-        // 1. Quét tìm kiếm RF
         globalPolygons.forEach(item => {
             let isMatch = item.cellStr.includes(keyword) || item.siteStr.includes(keyword);
             
@@ -766,7 +776,10 @@
                 }
                 
                 matchedBounds.push([item.lat, item.lng]);
-                if(matchCount === 0 && !isTAMode) item.polygon.openPopup();
+                if(matchCount === 0 && !isTAMode) {
+                    let point = map.latLngToContainerPoint([item.lat, item.lng]);
+                    item.polygon.openPopup(map.containerPointToLatLng(point));
+                }
                 matchCount++;
             } else {
                 if (isTAMode && item.taSegments) {
@@ -778,7 +791,6 @@
             }
         });
 
-        // 2. Quét tìm kiếm CSHT
         globalCshtData.forEach(item => {
             let isMatch = item.Ten_CSHT.includes(keyword) || item.Ma_CSHT.includes(keyword);
             if (isMatch) {
@@ -792,7 +804,6 @@
             }
         });
 
-        // Focus Camera
         if (matchedBounds.length > 0) {
             if (matchedBounds.length === 1) map.setView(matchedBounds[0], 16);
             else map.fitBounds(matchedBounds, { padding: [50, 50], maxZoom: 16 });
@@ -851,6 +862,7 @@
 
         itsLogLayer.clearLayers(); 
         globalLogLines = []; 
+        document.getElementById('loadingText').innerText = "Đang vẽ dữ liệu đường đo Drive Test...";
         document.getElementById('mapLoading').style.display = 'block';
 
         let is3G = false, is4G = false; 
@@ -858,21 +870,20 @@
         let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
         let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
-        // Hàm đọc và xử lý 1 file duy nhất, trả về Promise
         const readFile = (file) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const text = e.target.result; 
                     const lines = text.split(/\r?\n/);
-                    if (lines.length < 2) { resolve(); return; } // Bỏ qua file rỗng hoặc lỗi
+                    if (lines.length < 2) { resolve(); return; } 
 
                     const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
                     const idxLat = headers.indexOf('latitude'); const idxLng = headers.indexOf('longitude');
                     const idxNode = headers.indexOf('node'); const idxCellID = headers.indexOf('cellid');
                     const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); const idxLevel = headers.indexOf('level');
 
-                    if (idxLat < 0 || idxLng < 0 || idxLevel < 0) { resolve(); return; } // Bỏ qua file sai định dạng
+                    if (idxLat < 0 || idxLng < 0 || idxLevel < 0) { resolve(); return; } 
 
                     for (let i = 1; i < lines.length; i++) {
                         const cols = lines[i].split('|'); if (cols.length < headers.length) continue;
@@ -899,30 +910,24 @@
                         }
                         allLogBounds.push([lat, lng]);
                     }
-                    resolve(); // Báo hiệu đã đọc xong file này
+                    resolve(); 
                 };
                 reader.readAsText(file);
             });
         };
 
-        // Tạo danh sách các tác vụ đọc file (Promise)
         const readPromises = [];
-        for (let i = 0; i < files.length; i++) {
-            readPromises.push(readFile(files[i]));
-        }
-
-        // Đợi tất cả các file được đọc và vẽ xong
+        for (let i = 0; i < files.length; i++) readPromises.push(readFile(files[i]));
+        
         await Promise.all(readPromises);
 
-        // Hiển thị Legend và Zoom Camera bao trọn toàn bộ điểm ảnh của tất cả các file
         if (is4G) addLegend(false, true); else if (is3G) addLegend(true, false);
         if (allLogBounds.length > 0) map.fitBounds(allLogBounds);
         
         document.getElementById('mapLoading').style.display = 'none'; 
-        event.target.value = ''; // Reset input để có thể bấm chọn lại những file vừa chọn nếu muốn
+        event.target.value = ''; 
     }
 
-    // Tự động load dữ liệu CSHT và RF khi mở trang
     window.onload = loadAllMapData;
 </script>
 </body>
