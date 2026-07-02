@@ -166,12 +166,12 @@
 </div>
 
 <script>
-    // Hàm khởi chạy lần đầu
+    // Hàm khởi chạy lần đầu để hiện form mặc định
     window.onload = () => {
         calculateCoverage();
     };
 
-    // Hàm chuyển đổi giao diện khi chọn Chế độ
+    // Hàm chuyển đổi giao diện khi chọn Chế độ (Đã xóa tính năng tự động tính lại)
     function toggleMode() {
         const mode = document.querySelector('input[name="calcMode"]:checked').value;
         if (mode === 'coverage') {
@@ -183,7 +183,6 @@
             document.getElementById('group_target_dist').style.display = 'block';
             document.getElementById('res_tilt_item').style.display = 'flex';
         }
-        calculateCoverage();
     }
 
     function calculateCoverage() {
@@ -209,7 +208,10 @@
         if (mode === 'coverage') {
             // Chế độ 1: Lấy góc Tilt để tính khoảng cách
             tilt = parseFloat(document.getElementById('tilt').value);
-            if (isNaN(tilt)) return;
+            if (isNaN(tilt)) {
+                alert("Vui lòng nhập Góc gục ăng ten hợp lệ.");
+                return;
+            }
         } else {
             // Chế độ 2: Lấy Khoảng cách để tính ngược lại góc Tilt
             const targetDist = parseFloat(document.getElementById('target_dist').value);
@@ -368,11 +370,6 @@
         ctx.fillStyle = '#34495e';
         ctx.fillText(`Ht = ${ht}m`, towerBaseX - 45, towerTopY - 10);
     }
-
-    // Tự động tính lại khi người dùng thay đổi giá trị
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('input', calculateCoverage);
-    });
 </script>
 </body>
 </html>
