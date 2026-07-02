@@ -23,7 +23,8 @@ const pages = [
     { path: '/poi-report', name: 'POI Report' },
     { path: '/worst-cells', name: 'Worst Cells' },
     { path: '/congestion-3g', name: 'Congestion 3G' },
-    { path: '/traffic-down', name: 'Traffic Down' }
+    { path: '/traffic-down', name: 'Traffic Down' },
+    { path: '/downtilt-coverage', name: 'Downtilt Coverage' }
 ];
 
 pages.forEach(page => {
