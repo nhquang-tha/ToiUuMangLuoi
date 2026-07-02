@@ -29,6 +29,12 @@
     .input-wrapper input { flex: 1; border: none; padding: 10px 15px; outline: none; font-size: 15px; color: #2c3e50; font-weight: bold; }
     .input-wrapper span { background: #ecf0f1; padding: 10px 15px; color: #7f8c8d; font-weight: bold; border-left: 1px solid #bdc3c7; font-size: 13px;}
 
+    /* CSS cho thanh chọn chế độ tính toán */
+    .mode-selector { display: flex; background: #ecf0f1; border-radius: 8px; padding: 4px; margin-bottom: 20px; }
+    .mode-selector label { flex: 1; text-align: center; margin: 0; padding: 10px; cursor: pointer; font-size: 13px; color: #7f8c8d; border-radius: 6px; transition: 0.3s; }
+    .mode-selector input[type="radio"] { display: none; }
+    .mode-selector input[type="radio"]:checked + label { background: #3498db; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
     .btn-calc { background: #3498db; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; transition: 0.2s; margin-top: 10px; }
     .btn-calc:hover { background: #2980b9; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
 
@@ -38,6 +44,7 @@
     .result-label { color: #34495e; font-weight: bold; font-size: 14px; }
     .result-value { font-size: 18px; font-weight: 900; color: #e74c3c; }
     .result-value.ok { color: #27ae60; }
+    .result-value.highlight { color: #8e44ad; font-size: 22px; }
 
     canvas { width: 100%; height: 350px; background: #fdfdfd; border: 1px solid #ecf0f1; border-radius: 8px; margin-top: 15px; }
 
@@ -59,6 +66,15 @@
                 <div class="calc-card">
                     <h3 style="margin-top: 0; color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px;">⚙️ Thông Số Đầu Vào</h3>
                     
+                    <!-- CHỌN CHẾ ĐỘ TÍNH TOÁN -->
+                    <div class="mode-selector">
+                        <input type="radio" id="mode_coverage" name="calcMode" value="coverage" checked onchange="toggleMode()">
+                        <label for="mode_coverage">Tính Vùng Phủ (Tính Cự ly)</label>
+                        
+                        <input type="radio" id="mode_tilt" name="calcMode" value="tilt" onchange="toggleMode()">
+                        <label for="mode_tilt">Tính Góc Tilt (Biết Cự ly)</label>
+                    </div>
+
                     <div class="form-group">
                         <label>Chiều cao Ăng ten (Antenna Height - Ht)</label>
                         <div class="input-wrapper">
@@ -77,14 +93,6 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Góc gục ăng ten (Total Downtilt - M.Tilt + E.Tilt)</label>
-                        <div class="input-wrapper">
-                            <input type="number" id="tilt" value="6" step="0.5">
-                            <span>Độ (°)</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
                         <label>Búp sóng đứng (Vertical Beamwidth)</label>
                         <div class="input-wrapper">
                             <input type="number" id="beamwidth" value="10" step="0.5">
@@ -93,10 +101,35 @@
                         <div class="help-text">Khoảng 6° - 12° tùy loại ăng ten (Tra cứu Datasheet).</div>
                     </div>
 
-                    <button class="btn-calc" onclick="calculateCoverage()">⚡ TÍNH TOÁN VÙNG PHỦ</button>
+                    <!-- TRƯỜNG NHẬP LIỆU DÀNH CHO CHẾ ĐỘ 1: TÍNH VÙNG PHỦ -->
+                    <div class="form-group" id="group_tilt">
+                        <label>Góc gục ăng ten đang thiết lập (Total Downtilt)</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="tilt" value="6" step="0.5">
+                            <span>Độ (°)</span>
+                        </div>
+                    </div>
+
+                    <!-- TRƯỜNG NHẬP LIỆU DÀNH CHO CHẾ ĐỘ 2: TÍNH GÓC TILT -->
+                    <div class="form-group" id="group_target_dist" style="display: none;">
+                        <label style="color: #8e44ad;">Cự ly cần phủ sóng tới (Target Distance - D)</label>
+                        <div class="input-wrapper" style="border-color: #9b59b6;">
+                            <input type="number" id="target_dist" value="270" step="10">
+                            <span style="background: #f4ecf8; color: #8e44ad; border-left-color: #9b59b6;">Mét (m)</span>
+                        </div>
+                        <div class="help-text">Khoảng cách từ trạm đến rìa vùng (hoặc tâm điểm) cần phủ sóng.</div>
+                    </div>
+
+                    <button class="btn-calc" onclick="calculateCoverage()">⚡ BẮT ĐẦU TÍNH TOÁN</button>
 
                     <!-- KẾT QUẢ -->
                     <div class="result-box">
+                        <!-- Hiển thị Tilt đề xuất nếu ở chế độ 2 -->
+                        <div class="result-item" id="res_tilt_item" style="display: none; background: #fdf4fdf2; padding: 10px; border-radius: 6px; border: 1px solid #e1cbed;">
+                            <span class="result-label" style="color: #8e44ad;">Góc Tilt Đề Xuất (Yêu cầu)</span>
+                            <span class="result-value highlight" id="res_tilt_val">-- °</span>
+                        </div>
+
                         <div class="result-item">
                             <span class="result-label">Bán kính trong (Inner Radius)</span>
                             <span class="result-value ok" id="res_inner">-- m</span>
@@ -138,13 +171,28 @@
         calculateCoverage();
     };
 
+    // Hàm chuyển đổi giao diện khi chọn Chế độ
+    function toggleMode() {
+        const mode = document.querySelector('input[name="calcMode"]:checked').value;
+        if (mode === 'coverage') {
+            document.getElementById('group_tilt').style.display = 'block';
+            document.getElementById('group_target_dist').style.display = 'none';
+            document.getElementById('res_tilt_item').style.display = 'none';
+        } else {
+            document.getElementById('group_tilt').style.display = 'none';
+            document.getElementById('group_target_dist').style.display = 'block';
+            document.getElementById('res_tilt_item').style.display = 'flex';
+        }
+        calculateCoverage();
+    }
+
     function calculateCoverage() {
+        const mode = document.querySelector('input[name="calcMode"]:checked').value;
         const ht = parseFloat(document.getElementById('h_t').value);
         const hr = parseFloat(document.getElementById('h_r').value);
-        const tilt = parseFloat(document.getElementById('tilt').value);
         const bw = parseFloat(document.getElementById('beamwidth').value);
 
-        if (isNaN(ht) || isNaN(hr) || isNaN(tilt) || isNaN(bw)) {
+        if (isNaN(ht) || isNaN(hr) || isNaN(bw)) {
             alert("Vui lòng nhập đầy đủ các số liệu hợp lệ.");
             return;
         }
@@ -153,6 +201,26 @@
         if (deltaH <= 0) {
             alert("Chiều cao ăng ten phải lớn hơn chiều cao User!");
             return;
+        }
+
+        let tilt;
+
+        // XỬ LÝ LƯỢNG GIÁC THEO CHẾ ĐỘ
+        if (mode === 'coverage') {
+            // Chế độ 1: Lấy góc Tilt để tính khoảng cách
+            tilt = parseFloat(document.getElementById('tilt').value);
+            if (isNaN(tilt)) return;
+        } else {
+            // Chế độ 2: Lấy Khoảng cách để tính ngược lại góc Tilt
+            const targetDist = parseFloat(document.getElementById('target_dist').value);
+            if (isNaN(targetDist) || targetDist <= 0) {
+                alert("Vui lòng nhập Cự ly mục tiêu hợp lệ (> 0 mét).");
+                return;
+            }
+            // Công thức: tan(Tilt) = Delta_H / D  =>  Tilt = atan(Delta_H / D)
+            // atan trả về Radian, nhân với (180 / PI) để đổi ra Độ.
+            tilt = Math.atan(deltaH / targetDist) * (180 / Math.PI);
+            document.getElementById('res_tilt_val').innerText = tilt.toFixed(1) + " °";
         }
 
         // Tính góc tính từ mặt phẳng ngang (Horizon) xuống
