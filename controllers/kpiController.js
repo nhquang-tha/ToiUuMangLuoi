@@ -98,6 +98,7 @@ exports.getQoeQosData = async (req, res) => {
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
+        // Lấy danh sách siêu tốc từ bảng Cache đã đồng bộ
         const [rows] = await db.query(`
             SELECT Site_Name, Cell_Name, District, MIMO, 
                    QoE_Rank, QoE_Score, QoE_Trend, 
@@ -116,12 +117,14 @@ exports.saveCellNote = async (req, res) => {
     const { cell_name, note } = req.body;
     if (!cell_name) return res.status(400).json({success: false});
     try {
+        // 1. Lưu dự phòng vào bảng cell_notes
         await db.query(`
             INSERT INTO cell_notes (cell_name, note_text) 
             VALUES (?, ?) 
             ON DUPLICATE KEY UPDATE note_text = VALUES(note_text)
         `, [cell_name, note || '']);
         
+        // 2. Cập nhật trực tiếp vào bảng tĩnh qoe_qos
         await db.query(`
             UPDATE qoe_qos SET lich_su_tac_dong = ? WHERE Cell_Name = ?
         `, [note || '', cell_name]);
@@ -225,7 +228,7 @@ exports.getOptimizingPage = async (req, res) => {
         const [qosWeeks] = await db.query('SELECT DISTINCT Tuan FROM mbb_qos WHERE Tuan IS NOT NULL');
         
         let uniqueWeeks = [...new Set([...qoeWeeks.map(r => r.Tuan), ...qosWeeks.map(r => r.Tuan)])];
-        // Sắp xếp Giảm dần: Tuần mới nhất (To nhất) lên đầu
+        // Sắp xếp Giảm dần: Tuần mới nhất lên đầu
         uniqueWeeks.sort((a, b) => {
             let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
             let matchB = b.match(/Tuần (\d+) \((\d+)\)/);
@@ -341,10 +344,22 @@ exports.getOptimizingData = async (req, res) => {
                 }
             };
 
-            if (thput < 15000 && latency > 100) { group1.push(cellInfo); } 
-            else if (prb > 65) { group2.push(cellInfo); } 
-            else if (cqi < 90 || erab < 98.5 || drop_rate > 1) { group3.push(cellInfo); } 
-            else { groupUnknown.push(cellInfo); }
+            // BỘ LỌC MỚI CHUẨN CEM MBB (Áp dụng từ 01/05/2026)
+            // Nhóm 1: Ưu tiên tối cao UXI 3 (Video) - Trọng số 70% (Nghẽn PRB hoặc Thput thấp)
+            if (prb > 65 || thput < 15000) { 
+                group1.push(cellInfo); 
+            } 
+            // Nhóm 2: Ưu tiên UXI 1 & Yếu tố dập nhiễu (Khả năng truy cập & CQI)
+            else if (cqi < 90 || erab < 99.5) { 
+                group2.push(cellInfo); 
+            } 
+            // Nhóm 3: UXI 2 (Tính toàn vẹn Data) - Trọng số 10% (Truyền dẫn, Rớt mạng)
+            else if (latency > 50 || drop_rate > 0.3) { 
+                group3.push(cellInfo); 
+            } 
+            else { 
+                groupUnknown.push(cellInfo); 
+            }
             
             const idx = targetCells.indexOf(row.Cell_name);
             if (idx > -1) targetCells.splice(idx, 1);
