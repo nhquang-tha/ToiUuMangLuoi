@@ -75,14 +75,14 @@ if (bot) {
         bot.sendMessage(chatId, `⏳ <b>Đang tra cứu danh mục mã vật tư cho:</b> <code>${escapeHTML(keyword)}</code>...`, { parse_mode: 'HTML' });
 
         try {
-            // Quét trong Database cột ten_viet_tat hoặc loai_card hoặc mã
+            // Dùng DISTINCT để lọc bỏ các dòng trùng lặp (chung Tên viết tắt và Mã)
             const [rows] = await db.query(
-                `SELECT ten_viet_tat, loai_card, ma_thiet_bi, ma_vt, ten_day_du 
+                `SELECT DISTINCT ten_viet_tat, loai_card, ma_vt 
                  FROM vat_tu 
                  WHERE LOWER(ten_viet_tat) LIKE LOWER(?) 
                     OR LOWER(loai_card) LIKE LOWER(?) 
                     OR LOWER(ma_vt) LIKE LOWER(?)
-                 ORDER BY loai_card ASC, ma_thiet_bi ASC 
+                 ORDER BY loai_card ASC, ten_viet_tat ASC 
                  LIMIT 50`, 
                 [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`]
             );
@@ -90,25 +90,25 @@ if (bot) {
             if (rows.length > 0) {
                 let responseText = `📦 <b>KẾT QUẢ TRA CỨU VẬT TƯ</b>\nTừ khóa: <code>${escapeHTML(keyword)}</code>\nSố lượng tìm thấy: <b>${rows.length}</b> thiết bị\n---------------------------\n`;
                 
-                // Nhóm các Part Number lại theo Loại Card để tin nhắn không bị rối
+                // Nhóm các kết quả lại theo Loại Card
                 let groupedData = {};
                 rows.forEach(r => {
-                    let loaiCard = r.loai_card || r.ten_viet_tat || "Khác";
+                    let loaiCard = r.loai_card || "Khác";
                     if (!groupedData[loaiCard]) {
                         groupedData[loaiCard] = [];
                     }
                     groupedData[loaiCard].push({
-                        partNumber: r.ma_thiet_bi || "N/A",
+                        tenVietTat: r.ten_viet_tat || "N/A",
                         maKho: r.ma_vt || "N/A"
                     });
                 });
 
-                // Render danh sách ra dạng Text
+                // Render danh sách ra dạng Text theo chuẩn: Loại Card -> Tên viết tắt -> Mã
                 for (let group in groupedData) {
                     responseText += `🔹 <b>Loại Card:</b> <code>${escapeHTML(group)}</code>\n`;
                     groupedData[group].forEach(item => {
-                        responseText += `   ▪️ Part Number: <b>${escapeHTML(item.partNumber)}</b>\n`;
-                        responseText += `   ▪️ Mã VNPT: <code>${escapeHTML(item.maKho)}</code>\n\n`;
+                        responseText += `   ▪️ Tên viết tắt: <b>${escapeHTML(item.tenVietTat)}</b>\n`;
+                        responseText += `   ▪️ Mã VT: <code>${escapeHTML(item.maKho)}</code>\n\n`;
                     });
                 }
 
