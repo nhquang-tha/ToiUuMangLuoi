@@ -343,7 +343,7 @@ exports.handleImportData = async (req, res) => {
         try { await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]); } catch (e) {}
     }
 
-    if (networkType === 'poi_4g' || networkType === 'poi_5g' || networkType === 'csht_data' || networkType === 'alarm_data') {
+    if (networkType === 'poi_4g' || networkType === 'poi_5g' || networkType === 'csht_data' || networkType === 'alarm_data' || networkType === 'vat_tu') {
         try { await db.query(`TRUNCATE TABLE ${networkType}`); } catch (e) {}
     }
 
@@ -372,7 +372,8 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('site name') || rowStr.includes('cell_code') || 
                         rowStr.includes('tuan') || rowStr.includes('tuần') || 
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
-                        rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân')) {
+                        rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
+                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
                         headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
@@ -443,7 +444,6 @@ exports.handleImportData = async (req, res) => {
                     let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                     let mappedCol = null;
 
-                    // [NÂNG CẤP BỘ LỌC 3G TẠI ĐÂY] SỬ DỤNG INCLUDES ĐỂ BĂT ĐƯỢC CHUỖI BỊ LỖI FONT HAY KHOẢNG TRẮNG
                     if (networkType === 'kpi_3g') {
                         if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
                         else if (h === 'ci' || h === 'cell id') mappedCol = 'CI';
@@ -528,6 +528,14 @@ exports.handleImportData = async (req, res) => {
                         else if (h === 'từ khóa chính trong tin nhắn' || h.includes('từ khóa')) mappedCol = 'tu_khoa';
                         else if (h === 'nguyên nhân' || h.includes('nguyên nhân')) mappedCol = 'nguyen_nhan';
                         else if (h === 'phương án kiểm tra, xử lý' || h.includes('phương án')) mappedCol = 'phuong_an_xu_ly';
+                    } else if (networkType === 'vat_tu') {
+                        if (h === 'mã' || h === 'ma') mappedCol = 'ma_vt';
+                        else if (h === 'tên' || h === 'ten') mappedCol = 'ten_vt';
+                        else if (h === 'tên đầy đủ' || h.includes('ten day du') || h.includes('tên đầy đủ')) mappedCol = 'ten_day_du';
+                        else if (h === 'đơn vị tính' || h.includes('don vi tinh') || h.includes('đơn vị tính')) mappedCol = 'don_vi_tinh';
+                        else if (h.includes('mã thiết bị') || h.includes('part number')) mappedCol = 'ma_thiet_bi';
+                        else if (h === 'loại card' || h.includes('loai card') || h.includes('loại card')) mappedCol = 'loai_card';
+                        else if (h === 'tên viết tắt' || h.includes('viet tat') || h.includes('viết tắt')) mappedCol = 'ten_viet_tat';
                     }
 
                     let actualDbCol = null;
@@ -557,7 +565,9 @@ exports.handleImportData = async (req, res) => {
             let hasTuanCol = weekPrefix ? dbCols.some(c => c.original.toLowerCase() === 'tuan') : false;
             let lastValidDate = null; 
             const insertData = [];
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'nhom_canh_bao', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly'];
+            
+            // CÁC CỘT CHUỖI VĂN BẢN (KHÔNG ÉP THÀNH SỐ LÀM HỎNG MÃ SỐ)
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'nhom_canh_bao', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly', 'ma_vt', 'ten_vt', 'ten_day_du', 'don_vi_tinh', 'ma_thiet_bi', 'loai_card', 'ten_viet_tat'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -570,10 +580,9 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
                     
-                    // [NÂNG CẤP] BỘ ÉP KIỂU SỐ (CHỐNG LỖI STRING RỖNG TỪ FILE CSV GÂY CRASH DATABASE)
                     if (!isStrCol) {
                         if (val === null || val === undefined || val === '' || String(val).trim() === '') {
-                            val = null; // Biến rỗng thành NULL để MySQL chấp nhận
+                            val = null; 
                         } else if (typeof val === 'string') {
                             let parsed = parseFloat(val.replace(/,/g, '.'));
                             val = isNaN(parsed) ? null : parsed; 
@@ -625,7 +634,7 @@ exports.handleImportData = async (req, res) => {
                     
                     let sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ?`;
                     
-                    if (networkType === 'alarm_data' || networkType === 'csht_data') {
+                    if (networkType === 'alarm_data' || networkType === 'csht_data' || networkType === 'vat_tu') {
                         let updateCols = keys.map(k => `${k}=VALUES(${k})`).join(', ');
                         sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ? ON DUPLICATE KEY UPDATE ${updateCols}`;
                     }
@@ -841,7 +850,8 @@ exports.resetImportedData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     if (userRole !== 'admin') return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
     const table = req.params.table;
-    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data'];
+    // BỔ SUNG QUYỀN RESET CHO BẢNG VAT_TU
+    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu'];
     if (!allowedTables.includes(table)) return res.status(400).send("Bảng dữ liệu không hợp lệ.");
 
     try {
