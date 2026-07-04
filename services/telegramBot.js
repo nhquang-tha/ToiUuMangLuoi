@@ -7,7 +7,7 @@ const token = process.env.TELEGRAM_BOT_TOKEN || '8777941094:AAHFhpj4ZksmF7YyMjY8
 let bot;
 try {
     bot = new TelegramBot(token, { polling: true });
-    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng, Full RF, CSHT và Phân tích Alarm (Đồng bộ CSDL)...");
+    console.log("🤖 Telegram Bot đã khởi động với Thuật toán Lọc Đa Mạng, Full RF, CSHT, Alarm và VẬT TƯ...");
 } catch (error) {
     console.error("❌ Lỗi khởi động Telegram Bot!", error);
 }
@@ -47,10 +47,11 @@ if (bot) {
         const resp = `
 👋 <b>HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT</b>
 
-<b>Tra cứu Thông tin (Hỗ trợ 3G, 4G, 5G):</b>
-🚑 <code>alarm &lt;bản_tin&gt;</code>: Phân tích nguyên nhân & Cách xử lý cảnh báo.
-🏢 <code>csht &lt;mã_CSHT&gt;</code> hoặc <code>ne &lt;tên_rút_gọn&gt;</code>: Tra cứu Cơ Sở Hạ Tầng (VD: ne TXN019).
-📡 <code>rf &lt;cell_code&gt;</code>: Tra toàn bộ thông tin RF của cell kèm link chỉ đường.
+<b>Tra cứu Thông tin:</b>
+📦 <code>vt &lt;tên_viết_tắt&gt;</code>: Tra cứu mã vật tư/thiết bị (VD: vt UBBP, vt RRU).
+🚑 <code>alarm &lt;bản_tin&gt;</code>: Phân tích nguyên nhân & cách xử lý cảnh báo.
+🏢 <code>csht &lt;mã_CSHT&gt;</code> hoặc <code>ne &lt;tên_rút_gọn&gt;</code>: Tra cứu CSHT.
+📡 <code>rf &lt;cell_code&gt;</code>: Tra thông tin RF của cell kèm link map.
 📊 <code>kpi &lt;cell_code&gt;</code>: Tra thông tin KPI mới nhất của cell.
 ⭐ <code>qoe &lt;cell_code&gt;</code>: Tra thông tin QOE tuần mới nhất của cell.
 ⚙️ <code>qos &lt;cell_code&gt;</code>: Tra thông tin QOS tuần mới nhất của cell.
@@ -61,6 +62,69 @@ if (bot) {
 📉 <code>charqos &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
         `;
         bot.sendMessage(chatId, resp, { parse_mode: 'HTML' });
+    });
+
+    // ==========================================
+    // TRA CỨU VẬT TƯ (TÍNH NĂNG MỚI)
+    // Cú pháp: vt <tên viết tắt> (vd: vt UBBP)
+    // ==========================================
+    bot.onText(/^(?:\/)?vt\s+(.+)$/i, async (msg, match) => {
+        const chatId = msg.chat.id;
+        let keyword = match[1].trim();
+
+        bot.sendMessage(chatId, `⏳ <b>Đang tra cứu danh mục mã vật tư cho:</b> <code>${escapeHTML(keyword)}</code>...`, { parse_mode: 'HTML' });
+
+        try {
+            // Quét trong Database cột ten_viet_tat hoặc loai_card hoặc mã
+            const [rows] = await db.query(
+                `SELECT ten_viet_tat, loai_card, ma_thiet_bi, ma_vt, ten_day_du 
+                 FROM vat_tu 
+                 WHERE LOWER(ten_viet_tat) LIKE LOWER(?) 
+                    OR LOWER(loai_card) LIKE LOWER(?) 
+                    OR LOWER(ma_vt) LIKE LOWER(?)
+                 ORDER BY loai_card ASC, ma_thiet_bi ASC 
+                 LIMIT 50`, 
+                [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`]
+            );
+
+            if (rows.length > 0) {
+                let responseText = `📦 <b>KẾT QUẢ TRA CỨU VẬT TƯ</b>\nTừ khóa: <code>${escapeHTML(keyword)}</code>\nSố lượng tìm thấy: <b>${rows.length}</b> thiết bị\n---------------------------\n`;
+                
+                // Nhóm các Part Number lại theo Loại Card để tin nhắn không bị rối
+                let groupedData = {};
+                rows.forEach(r => {
+                    let loaiCard = r.loai_card || r.ten_viet_tat || "Khác";
+                    if (!groupedData[loaiCard]) {
+                        groupedData[loaiCard] = [];
+                    }
+                    groupedData[loaiCard].push({
+                        partNumber: r.ma_thiet_bi || "N/A",
+                        maKho: r.ma_vt || "N/A"
+                    });
+                });
+
+                // Render danh sách ra dạng Text
+                for (let group in groupedData) {
+                    responseText += `🔹 <b>Loại Card:</b> <code>${escapeHTML(group)}</code>\n`;
+                    groupedData[group].forEach(item => {
+                        responseText += `   ▪️ Part Number: <b>${escapeHTML(item.partNumber)}</b>\n`;
+                        responseText += `   ▪️ Mã VNPT: <code>${escapeHTML(item.maKho)}</code>\n\n`;
+                    });
+                }
+
+                // Chặn Telegram báo lỗi nếu tin nhắn quá dài (Giới hạn Telegram là 4096 ký tự)
+                if (responseText.length > 4000) {
+                    responseText = responseText.substring(0, 4000) + '...\n\n<i>⚠️ Danh sách quá dài, đã bị cắt bớt. Hãy gõ từ khóa chi tiết hơn!</i>';
+                }
+
+                bot.sendMessage(chatId, responseText, { parse_mode: 'HTML' });
+            } else {
+                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin Mã Vật Tư / Thiết bị nào khớp với từ khóa: <b>${escapeHTML(keyword)}</b>.\nVui lòng kiểm tra lại bảng dữ liệu trên Web.`, { parse_mode: 'HTML' });
+            }
+        } catch (e) {
+            console.error("Lỗi truy xuất Vật Tư:", e);
+            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối với CSDL Vật Tư. Vui lòng thử lại sau.`, { parse_mode: 'HTML' });
+        }
     });
 
     // ==========================================
@@ -119,9 +183,7 @@ if (bot) {
                 console.error("Lỗi khi đọc bảng alarm_data:", e);
             }
 
-            // =======================================================
             // 5. MÓC NỐI TRA CỨU TÊN CSHT QUA BẢNG RF_DATA
-            // =======================================================
             let cshtInfo = ``;
             if (cellName) {
                 cshtInfo += `▪️ <b>Mã Trạm/Cell_Code:</b> <code>${escapeHTML(cellName)}</code>\n`;
@@ -131,7 +193,6 @@ if (bot) {
                 let finalLng = null;
                 let actualCellNameFromRF = null;
 
-                // BƯỚC 5.1: Ánh xạ Cell Name (từ bản tin) -> Cell_code (trong RF) để lấy ra CELL_NAME
                 try {
                     const rfQueries = [
                         `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`,
@@ -155,7 +216,6 @@ if (bot) {
                     console.error("Lỗi ánh xạ RF:", e);
                 }
 
-                // BƯỚC 5.2: Truy vấn CSHT dựa trên Site_code
                 let coreCode = siteCodeFromRF;
                 if (!coreCode) {
                     let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
@@ -227,13 +287,11 @@ if (bot) {
     bot.onText(/^(?:\/)?(?:csht|ne)\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const keyword = match[1].trim();
-        
         const fuzzyKeyword = keyword.replace(/-/g, '%');
         
         bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            // SỬ DỤNG LENGTH() ĐỂ ƯU TIÊN KẾT QUẢ CHÍNH XÁC (NGẮN NHẤT) TRƯỚC
             const [rows] = await db.query(
                 `SELECT * FROM csht_data 
                  WHERE LOWER(Ma_CSHT) LIKE LOWER(?) 
@@ -291,7 +349,6 @@ if (bot) {
 
         try {
             let rows = [];
-            // Sử dụng ORDER BY LENGTH để chống lệch mã
             const queries = [
                 { net: '4g', sql: `SELECT '4G' as Net, rf_4g.* FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1` },
                 { net: '5g', sql: `SELECT '5G' as Net, rf_5g.* FROM rf_5g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(SITE_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1` },
