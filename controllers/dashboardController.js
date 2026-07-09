@@ -47,22 +47,6 @@ const getInt = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
-const formatExcelDate = (excelDate) => {
-    if (typeof excelDate === 'number') {
-        const date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
-        const d = String(date.getDate()).padStart(2, '0');
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const y = date.getFullYear();
-        return `${d}/${m}/${y}`;
-    }
-    return excelDate; 
-};
-
-const normalizeStr = (str) => {
-    if (!str) return '';
-    return String(str).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ''); 
-};
-
 const sortWeeks = (weeksArray) => {
     return weeksArray.sort((a, b) => {
         let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
@@ -107,62 +91,353 @@ async function getKpiHistory() {
 
 async function aggregateDashboardData() {
     try {
-        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard (SQL Native 6 Chars)...");
+        console.log("⏳ Bắt đầu tính toán Dashboard bằng Node.js RAM (Cực Nhanh)...");
 
-        await db.query(`
-            INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
-            FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
-                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
-                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
-                AVG_CQI_4G = VALUES(AVG_CQI_4G)
-        `);
+        const [kpi4g] = await db.query(`SELECT Thoi_gian, District_code, Cell_name, Total_Data_Traffic_Volume_GB, User_DL_Avg_Throughput_Kbps, RB_Util_Rate_DL, CQI_4G FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
+        const [kpi5g] = await db.query(`SELECT Thoi_gian, Ten_CELL, Total_Data_Traffic_Volume_GB, A_User_DL_Avg_Throughput, CQI_5G FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
 
-        await db.query(`
-            INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(A_User_DL_Avg_Throughput), AVG(CQI_5G)
-            FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
-                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
-                AVG_CQI_5G = VALUES(AVG_CQI_5G)
-        `);
+        const getCore = (name) => {
+            if(!name) return '';
+            return String(name).toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').substring(0, 7);
+        };
 
-        await db.query(`
-            INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
-            SELECT Thoi_gian, District_code, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
-            FROM kpi_4g 
-            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' AND District_code IS NOT NULL AND District_code != '' 
-            GROUP BY Thoi_gian, District_code
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
-                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
-                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
-                AVG_CQI_4G = VALUES(AVG_CQI_4G)
-        `);
+        let mapCoreToDistrict = {};
+        kpi4g.forEach(r => {
+            if (r.District_code) {
+                mapCoreToDistrict[getCore(r.Cell_name)] = r.District_code;
+            }
+        });
 
-        await db.query(`
-            INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-            SELECT t5.Thoi_gian, t4map.District_code, SUM(t5.Total_Data_Traffic_Volume_GB), AVG(t5.A_User_DL_Avg_Throughput), AVG(t5.CQI_5G)
-            FROM kpi_5g t5
-            JOIN (
-                SELECT DISTINCT SUBSTRING(REPLACE(REPLACE(Cell_name, '4G-', ''), '4G_', ''), 1, 6) as core_code, District_code 
-                FROM kpi_4g 
-                WHERE District_code IS NOT NULL AND District_code != ''
-            ) t4map ON SUBSTRING(REPLACE(REPLACE(t5.Ten_CELL, '5G-', ''), '5G_', ''), 1, 6) = t4map.core_code
-            WHERE t5.Thoi_gian IS NOT NULL AND t5.Thoi_gian != ''
-            GROUP BY t5.Thoi_gian, t4map.District_code
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
-                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
-                AVG_CQI_5G = VALUES(AVG_CQI_5G)
-        `);
+        let globalDash = {}; 
+        let distDash = {};   
 
-        console.log("✅ Tính toán và đồng bộ Dashboard (Tất cả & District) thành công!");
+        kpi4g.forEach(r => {
+            let date = r.Thoi_gian;
+            let dist = r.District_code;
+
+            const add4G = (target) => {
+                target.t4 += parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+                if (r.User_DL_Avg_Throughput_Kbps !== null) {
+                    target.th4 += parseFloat(r.User_DL_Avg_Throughput_Kbps) || 0;
+                    target.c4_th++;
+                }
+                if (r.RB_Util_Rate_DL !== null) {
+                    target.prb4 += parseFloat(r.RB_Util_Rate_DL) || 0;
+                    target.c4_prb++;
+                }
+                if (r.CQI_4G !== null) {
+                    target.cqi4 += parseFloat(r.CQI_4G) || 0;
+                    target.c4_cqi++;
+                }
+            };
+
+            if (!globalDash[date]) globalDash[date] = { date, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+            add4G(globalDash[date]);
+
+            if (dist) {
+                let key = `${date}_${dist}`;
+                if (!distDash[key]) distDash[key] = { date, dist, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+                add4G(distDash[key]);
+            }
+        });
+
+        kpi5g.forEach(r => {
+            let date = r.Thoi_gian;
+            let core = getCore(r.Ten_CELL);
+            let dist = mapCoreToDistrict[core]; 
+
+            const add5G = (target) => {
+                target.t5 += parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+                if (r.A_User_DL_Avg_Throughput !== null) {
+                    target.th5 += parseFloat(r.A_User_DL_Avg_Throughput) || 0;
+                    target.c5_th++;
+                }
+                if (r.CQI_5G !== null) {
+                    target.cqi5 += parseFloat(r.CQI_5G) || 0;
+                    target.c5_cqi++;
+                }
+            };
+
+            if (!globalDash[date]) globalDash[date] = { date, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+            add5G(globalDash[date]);
+
+            if (dist) {
+                let key = `${date}_${dist}`;
+                if (!distDash[key]) distDash[key] = { date, dist, t4:0, th4:0, prb4:0, cqi4:0, c4_th:0, c4_prb:0, c4_cqi:0, t5:0, th5:0, cqi5:0, c5_th:0, c5_cqi:0 };
+                add5G(distDash[key]);
+            }
+        });
+
+        const avg = (sum, count) => count > 0 ? (sum / count) : 0;
+
+        let insertGlobal = [];
+        for (let d in globalDash) {
+            let row = globalDash[d];
+            insertGlobal.push([
+                row.date,
+                row.t4, avg(row.th4, row.c4_th), avg(row.prb4, row.c4_prb), avg(row.cqi4, row.c4_cqi),
+                row.t5, avg(row.th5, row.c5_th), avg(row.cqi5, row.c5_cqi)
+            ]);
+        }
+
+        let insertDist = [];
+        for (let k in distDash) {
+            let row = distDash[k];
+            insertDist.push([
+                row.date, row.dist,
+                row.t4, avg(row.th4, row.c4_th), avg(row.prb4, row.c4_prb), avg(row.cqi4, row.c4_cqi),
+                row.t5, avg(row.th5, row.c5_th), avg(row.cqi5, row.c5_cqi)
+            ]);
+        }
+
+        if (insertGlobal.length > 0) {
+            await db.query(`
+                INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
+                VALUES ?
+                ON DUPLICATE KEY UPDATE 
+                    sum_TRAFFIC_4G=VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G=VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                    AVG_RES_BLK_DL_4G=VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G=VALUES(AVG_CQI_4G),
+                    sum_TRAFFIC_5G=VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G=VALUES(AVG_USER_DL_AVG_THPUT_5G), AVG_CQI_5G=VALUES(AVG_CQI_5G)
+            `, [insertGlobal]);
+        }
+
+        if (insertDist.length > 0) {
+            await db.query(`
+                INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
+                VALUES ?
+                ON DUPLICATE KEY UPDATE 
+                    sum_TRAFFIC_4G=VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G=VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                    AVG_RES_BLK_DL_4G=VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G=VALUES(AVG_CQI_4G),
+                    sum_TRAFFIC_5G=VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G=VALUES(AVG_USER_DL_AVG_THPUT_5G), AVG_CQI_5G=VALUES(AVG_CQI_5G)
+            `, [insertDist]);
+        }
+        console.log("✅ Đồng bộ Dashboard thành công!");
     } catch (e) {
-        console.error("❌ Lỗi aggregateDashboardData:", e.message);
+        console.error("❌ Lỗi aggregateDashboardData:", e);
+    }
+}
+
+// ========================================================
+// [CÔNG CỤ MỚI] ĐỒNG BỘ CACHE BẢNG CẢNH BÁO
+// Tự động tính toán các kịch bản lỗi và lưu sẵn vào DB
+// ========================================================
+
+async function syncWorstCells() {
+    try {
+        console.log("⏳ Bắt đầu tính toán cache Worst Cells 4G...");
+        await db.query('TRUNCATE TABLE worst_cells');
+        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
+        if (datesRaw.length === 0) return;
+        
+        let uniqueDates = datesRaw.map(r => r.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-')));
+        
+        const daysList = [1, 3, 7, 15, 30];
+        for (let days of daysList) {
+            const targetDates = uniqueDates.slice(0, days);
+            if (targetDates.length === 0) continue;
+            const placeholders = targetDates.map(() => '?').join(',');
+            
+            const query = `
+                SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
+                    AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
+                    AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, AVG(CQI_4G) as CQI_4G, AVG(Service_Drop_all) as Service_Drop_all,
+                    COUNT(Thoi_gian) as So_Ngay_Vi_Pham,
+                    SUM(CASE WHEN Thoi_gian = ? THEN 1 ELSE 0 END) as is_in_t0
+                FROM kpi_4g WHERE Thoi_gian IN (${placeholders}) 
+                AND (CellType IS NULL OR CellType NOT LIKE '%L900%') AND (Cell_name NOT LIKE 'MBF_TH%')
+                AND (User_DL_Avg_Throughput_Kbps < 7000 OR RB_Util_Rate_DL > 20 OR CQI_4G < 93 OR Service_Drop_all > 0.3)
+                GROUP BY Cell_name HAVING So_Ngay_Vi_Pham >= ? AND is_in_t0 > 0
+            `;
+            const [rows] = await db.query(query, [targetDates[0], ...targetDates, days]);
+            
+            let insertData = [];
+            rows.forEach(r => {
+                let vios = [];
+                if (r.User_DL_Avg_Throughput_Kbps < 7000) vios.push('Thput Thấp');
+                if (r.RB_Util_Rate_DL > 20) vios.push('PRB Cao');
+                if (r.CQI_4G < 93) vios.push('CQI Thấp');
+                if (r.Service_Drop_all > 0.3) vios.push('Drop Rate Cao');
+                
+                insertData.push([
+                    r.Latest_Date, days, r.Cell_name, 
+                    parseFloat(r.User_DL_Avg_Throughput_Kbps), 
+                    parseFloat(r.RB_Util_Rate_DL), 
+                    parseFloat(r.CQI_4G), 
+                    parseFloat(r.Service_Drop_all), 
+                    vios.join(', ') || 'Vi phạm KPI'
+                ]);
+            });
+            
+            if (insertData.length > 0) {
+                const chunkSize = 500;
+                for (let i = 0; i < insertData.length; i += chunkSize) {
+                    await db.query(`INSERT INTO worst_cells (latest_date, days_filter, cell_name, thput, prb, cqi, drop_rate, violations) VALUES ?`, [insertData.slice(i, i + chunkSize)]);
+                }
+            }
+        }
+        console.log("✅ Đồng bộ Cache Worst Cells thành công!");
+    } catch (e) {
+        console.error("❌ Lỗi syncWorstCells:", e);
+    }
+}
+
+async function syncCongestion3G() {
+    try {
+        console.log("⏳ Bắt đầu tính toán cache Congestion 3G...");
+        await db.query('TRUNCATE TABLE congestion_3g');
+        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
+        if(datesRaw.length === 0) return;
+        
+        let uniqueDates = datesRaw.map(r => r.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-'))); 
+        
+        const daysList = [1, 3, 5, 7];
+        for (let days of daysList) {
+            const targetDates = uniqueDates.slice(0, days);
+            if (targetDates.length === 0) continue;
+            const placeholders = targetDates.map(() => '?').join(',');
+
+            const query = `
+                SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
+                    AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
+                    COUNT(Thoi_gian) as So_Ngay_Vi_Pham,
+                    SUM(CASE WHEN Thoi_gian = ? THEN 1 ELSE 0 END) as is_in_t0
+                FROM kpi_3g WHERE Thoi_gian IN (${placeholders}) AND ((CSCONGES > 2 AND CS_SO_ATT > 100) OR (PSCONGES > 2 AND PS_SO_ATT > 500))
+                GROUP BY Ten_CELL HAVING So_Ngay_Vi_Pham >= ? AND is_in_t0 > 0
+            `;
+            const [rows] = await db.query(query, [targetDates[0], ...targetDates, days]);
+            
+            let insertData = [];
+            rows.forEach(r => {
+                let vios = [];
+                if (r.CSCONGES > 2 && r.CS_SO_ATT > 100) vios.push('Nghẽn CS');
+                if (r.PSCONGES > 2 && r.PS_SO_ATT > 500) vios.push('Nghẽn PS');
+                
+                insertData.push([
+                    r.Latest_Date, days, r.Cell_name,
+                    parseFloat(r.CSCONGES), Math.round(r.CS_SO_ATT),
+                    parseFloat(r.PSCONGES), Math.round(r.PS_SO_ATT),
+                    vios.join(', ') || 'Nghẽn mạng'
+                ]);
+            });
+
+            if (insertData.length > 0) {
+                const chunkSize = 500;
+                for (let i = 0; i < insertData.length; i += chunkSize) {
+                    await db.query(`INSERT INTO congestion_3g (latest_date, days_filter, cell_name, cs_conges, cs_att, ps_conges, ps_att, violations) VALUES ?`, [insertData.slice(i, i + chunkSize)]);
+                }
+            }
+        }
+        console.log("✅ Đồng bộ Cache Congestion 3G thành công!");
+    } catch (e) {
+        console.error("❌ Lỗi syncCongestion3G:", e);
+    }
+}
+
+async function syncTrafficDown() {
+    try {
+        console.log("⏳ Bắt đầu tính toán cache Traffic Down...");
+        await db.query('TRUNCATE TABLE traffic_down');
+        
+        const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL`);
+        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
+            const pA = a.split('/'); const pB = b.split('/');
+            return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
+        });
+
+        if (dates.length < 10) return; 
+
+        const targetDates = dates.slice(0, 10);
+        const [t0, t1, t2, t3, t4, t5, t6, t7, t8, t9] = targetDates;
+        const placeholders = targetDates.map(() => '?').join(',');
+
+        const [data3g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, TRAFFIC as traffic FROM kpi_3g WHERE Thoi_gian IN (${placeholders})`, targetDates);
+        const [data4g] = await db.query(`SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`, targetDates);
+        const [data5g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_5g WHERE Thoi_gian IN (${placeholders})`, targetDates);
+
+        const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g');
+        const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g');
+        const cellToPoi = {};
+        poi4g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
+        poi5g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
+
+        let zeroTrafficCells = [];
+        let droppedTrafficCells = [];
+        let poiTrafficMap = {}; 
+
+        const analyzeData = (dataArray, network) => {
+            const cellMap = {};
+            const activeCellsToday = new Set();
+            
+            dataArray.forEach(row => {
+                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = {};
+                cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
+                
+                if (row.Thoi_gian === t0) activeCellsToday.add(row.Cell_name);
+
+                if (network === '4g' || network === '5g') {
+                    let poi = cellToPoi[row.Cell_name];
+                    if (poi) {
+                        if (!poiTrafficMap[poi]) poiTrafficMap[poi] = {};
+                        if (!poiTrafficMap[poi][row.Thoi_gian]) poiTrafficMap[poi][row.Thoi_gian] = 0;
+                        poiTrafficMap[poi][row.Thoi_gian] += parseFloat(row.traffic) || 0;
+                    }
+                }
+            });
+
+            for (let cell of activeCellsToday) {
+                const c = cellMap[cell];
+                const v0 = c[t0] || 0; const v1 = c[t1] || 0; const v2 = c[t2] || 0;
+                const v3 = c[t3] || 0; const v4 = c[t4] || 0; const v5 = c[t5] || 0;
+                const v6 = c[t6] || 0; const v7 = c[t7] || 0; const v8 = c[t8] || 0; const v9 = c[t9] || 0;
+
+                const avg7 = (v1 + v2 + v3 + v4 + v5 + v6 + v7) / 7;
+
+                if (v0 === 0 && avg7 > 0) {
+                    zeroTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), avg7: avg7.toFixed(2) });
+                }
+
+                if ((network === '4g' || network === '5g') && v7 > 5 && v0 < 0.7 * v7 && v1 < 0.7 * v8 && v2 < 0.7 * v9) {
+                    droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
+                }
+            }
+        };
+
+        analyzeData(data3g, '3g');
+        analyzeData(data4g, '4g');
+        analyzeData(data5g, '5g');
+
+        let activePOIsToday = new Set();
+        data4g.concat(data5g).forEach(row => {
+            if (row.Thoi_gian === t0 && cellToPoi[row.Cell_name]) {
+                activePOIsToday.add(cellToPoi[row.Cell_name]);
+            }
+        });
+
+        let droppedTrafficPOIs = [];
+        for (let poi of activePOIsToday) {
+            const p = poiTrafficMap[poi];
+            const v0 = p[t0] || 0; const v1 = p[t1] || 0; const v2 = p[t2] || 0;
+            const v7 = p[t7] || 0; const v8 = p[t8] || 0; const v9 = p[t9] || 0;
+
+            if (v7 > 0 && v0 < 0.7 * v7 && v1 < 0.7 * v8 && v2 < 0.7 * v9) {
+                droppedTrafficPOIs.push({ POI: poi, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
+            }
+        }
+        
+        let insertData = [];
+        zeroTrafficCells.forEach(r => insertData.push([t0, t7, 'zero_cell', r.network, r.Cell_name, r.t0, r.avg7, 0]));
+        droppedTrafficCells.forEach(r => insertData.push([t0, t7, 'dropped_cell', r.network, r.Cell_name, r.t0, r.t7, r.ratio]));
+        droppedTrafficPOIs.forEach(r => insertData.push([t0, t7, 'dropped_poi', '4g_5g', r.POI, r.t0, r.t7, r.ratio]));
+
+        if (insertData.length > 0) {
+            const chunkSize = 500;
+            for (let i = 0; i < insertData.length; i += chunkSize) {
+                await db.query(`INSERT INTO traffic_down (latest_date, last_week_date, category, network, name, val_t0, val_compare, ratio) VALUES ?`, [insertData.slice(i, i + chunkSize)]);
+            }
+        }
+        console.log("✅ Đồng bộ Cache Traffic Down thành công!");
+    } catch (e) {
+        console.error("❌ Lỗi syncTrafficDown:", e);
     }
 }
 
@@ -292,6 +567,22 @@ async function syncQoeQosSummary() {
     }
 }
 
+const formatExcelDate = (excelDate) => {
+    if (typeof excelDate === 'number') {
+        const date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = date.getFullYear();
+        return `${d}/${m}/${y}`;
+    }
+    return excelDate; 
+};
+
+const normalizeStr = (str) => {
+    if (!str) return '';
+    return String(str).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ''); 
+};
+
 exports.renderPage = (pageName) => {
     return (req, res) => {
         let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -299,225 +590,10 @@ exports.renderPage = (pageName) => {
     };
 };
 
-exports.getDistricts = async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT DISTINCT District_code FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != "" ORDER BY District_code');
-        res.json(rows.map(r => r.District_code));
-    } catch (error) {
-        console.error("Lỗi lấy danh sách District:", error);
-        res.status(500).json([]);
-    }
-};
-
-exports.getDashboardData = async (req, res) => {
-    const district = req.query.district || 'all';
-
-    try {
-        if (district === 'all') {
-            const [rows] = await db.query('SELECT * FROM Dashboard');
-            res.json(rows);
-        } else {
-            const [rows] = await db.query('SELECT * FROM district_dashboard WHERE district = ?', [district]);
-            res.json(rows);
-        }
-    } catch (error) { 
-        console.error("Lỗi getDashboardData:", error);
-        res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
-    }
-};
-
-exports.getWorstCellsData = async (req, res) => {
-    const days = parseInt(req.query.days) || 1; 
-    try {
-        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
-        if(datesRaw.length === 0) return res.json([]);
-        let uniqueDates = datesRaw.map(r => r.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-'))); 
-        const targetDates = uniqueDates.slice(0, days);
-        if (targetDates.length === 0) return res.json([]);
-        const placeholders = targetDates.map(() => '?').join(',');
-
-        const query = `
-            SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
-                AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
-                AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, AVG(CQI_4G) as CQI_4G, AVG(Service_Drop_all) as Service_Drop_all,
-                COUNT(Thoi_gian) as So_Ngay_Vi_Pham,
-                SUM(CASE WHEN Thoi_gian = ? THEN 1 ELSE 0 END) as is_in_t0
-            FROM kpi_4g WHERE Thoi_gian IN (${placeholders}) 
-            AND (CellType IS NULL OR CellType NOT LIKE '%L900%') AND (Cell_name NOT LIKE 'MBF_TH%')
-            AND (User_DL_Avg_Throughput_Kbps < 7000 OR RB_Util_Rate_DL > 20 OR CQI_4G < 93 OR Service_Drop_all > 0.3)
-            GROUP BY Cell_name HAVING So_Ngay_Vi_Pham >= ? AND is_in_t0 > 0 LIMIT 500
-        `;
-        const [rows] = await db.query(query, [targetDates[0], ...targetDates, days]);
-        const formattedRows = rows.map(r => {
-            let vios = [];
-            if (r.User_DL_Avg_Throughput_Kbps < 7000) vios.push('Thput Thấp');
-            if (r.RB_Util_Rate_DL > 20) vios.push('PRB Cao');
-            if (r.CQI_4G < 93) vios.push('CQI Thấp');
-            if (r.Service_Drop_all > 0.3) vios.push('Drop Rate Cao');
-            r.Violations = vios.join(', ') || 'Vi phạm KPI';
-            r.User_DL_Avg_Throughput_Kbps = r.User_DL_Avg_Throughput_Kbps.toFixed(2);
-            r.RB_Util_Rate_DL = r.RB_Util_Rate_DL.toFixed(2);
-            r.CQI_4G = r.CQI_4G.toFixed(2);
-            r.Service_Drop_all = r.Service_Drop_all.toFixed(2);
-            return r;
-        });
-        res.json(formattedRows);
-    } catch (e) { res.status(500).json({ error: "Lỗi CSDL." }); }
-};
-
-exports.getCongestion3gData = async (req, res) => {
-    const days = parseInt(req.query.days) || 3; 
-    try {
-        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
-        if(datesRaw.length === 0) return res.json([]);
-        let uniqueDates = datesRaw.map(r => r.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-'))); 
-        const targetDates = uniqueDates.slice(0, days);
-        if (targetDates.length === 0) return res.json([]);
-        const placeholders = targetDates.map(() => '?').join(',');
-
-        const query = `
-            SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
-                AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
-                COUNT(Thoi_gian) as So_Ngay_Vi_Pham,
-                SUM(CASE WHEN Thoi_gian = ? THEN 1 ELSE 0 END) as is_in_t0
-            FROM kpi_3g WHERE Thoi_gian IN (${placeholders}) AND ((CSCONGES > 2 AND CS_SO_ATT > 100) OR (PSCONGES > 2 AND PS_SO_ATT > 500))
-            GROUP BY Ten_CELL HAVING So_Ngay_Vi_Pham >= ? AND is_in_t0 > 0 LIMIT 500
-        `;
-        const [rows] = await db.query(query, [targetDates[0], ...targetDates, days]);
-        const formattedRows = rows.map(r => {
-            let vios = [];
-            if (r.CSCONGES > 2 && r.CS_SO_ATT > 100) vios.push('Nghẽn CS');
-            if (r.PSCONGES > 2 && r.PS_SO_ATT > 500) vios.push('Nghẽn PS');
-            r.Violations = vios.join(', ') || 'Nghẽn mạng';
-            r.CSCONGES = r.CSCONGES.toFixed(2); r.CS_SO_ATT = Math.round(r.CS_SO_ATT);
-            r.PSCONGES = r.PSCONGES.toFixed(2); r.PS_SO_ATT = Math.round(r.PS_SO_ATT);
-            return r;
-        });
-        res.json(formattedRows);
-    } catch (e) { res.status(500).json({ error: "Lỗi CSDL." }); }
-};
-
-exports.getTrafficDownData = async (req, res) => {
-    try {
-        const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL`);
-        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
-            const pA = a.split('/'); const pB = b.split('/');
-            return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
-        });
-
-        if (dates.length < 10) {
-            return res.json({ error: "Chưa đủ dữ liệu lịch sử (cần ít nhất 10 ngày) để phân tích đối soát tuần." });
-        }
-
-        const targetDates = dates.slice(0, 10);
-        const [t0, t1, t2, t3, t4, t5, t6, t7, t8, t9] = targetDates;
-        const placeholders = targetDates.map(() => '?').join(',');
-
-        const [data3g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, TRAFFIC as traffic FROM kpi_3g WHERE Thoi_gian IN (${placeholders})`, targetDates);
-        const [data4g] = await db.query(`SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`, targetDates);
-        const [data5g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_5g WHERE Thoi_gian IN (${placeholders})`, targetDates);
-
-        const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g');
-        const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g');
-        const cellToPoi = {};
-        poi4g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
-        poi5g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
-
-        let zeroTrafficCells = [];
-        let droppedTrafficCells = [];
-        let poiTrafficMap = {}; 
-
-        const analyzeData = (dataArray, network) => {
-            const cellMap = {};
-            const activeCellsToday = new Set();
-            
-            dataArray.forEach(row => {
-                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = {};
-                cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
-                
-                if (row.Thoi_gian === t0) activeCellsToday.add(row.Cell_name);
-
-                if (network === '4g' || network === '5g') {
-                    let poi = cellToPoi[row.Cell_name];
-                    if (poi) {
-                        if (!poiTrafficMap[poi]) poiTrafficMap[poi] = {};
-                        if (!poiTrafficMap[poi][row.Thoi_gian]) poiTrafficMap[poi][row.Thoi_gian] = 0;
-                        poiTrafficMap[poi][row.Thoi_gian] += parseFloat(row.traffic) || 0;
-                    }
-                }
-            });
-
-            for (let cell of activeCellsToday) {
-                const c = cellMap[cell];
-                const v0 = c[t0] || 0; const v1 = c[t1] || 0; const v2 = c[t2] || 0;
-                const v3 = c[t3] || 0; const v4 = c[t4] || 0; const v5 = c[t5] || 0;
-                const v6 = c[t6] || 0; const v7 = c[t7] || 0; const v8 = c[t8] || 0; const v9 = c[t9] || 0;
-
-                const avg7 = (v1 + v2 + v3 + v4 + v5 + v6 + v7) / 7;
-
-                if (v0 === 0 && avg7 > 0) {
-                    zeroTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), avg7: avg7.toFixed(2) });
-                }
-
-                if ((network === '4g' || network === '5g') && v7 > 5 && v0 < 0.7 * v7 && v1 < 0.7 * v8 && v2 < 0.7 * v9) {
-                    droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
-                }
-            }
-        };
-
-        analyzeData(data3g, '3g');
-        analyzeData(data4g, '4g');
-        analyzeData(data5g, '5g');
-
-        let activePOIsToday = new Set();
-        data4g.concat(data5g).forEach(row => {
-            if (row.Thoi_gian === t0 && cellToPoi[row.Cell_name]) {
-                activePOIsToday.add(cellToPoi[row.Cell_name]);
-            }
-        });
-
-        let droppedTrafficPOIs = [];
-        for (let poi of activePOIsToday) {
-            const p = poiTrafficMap[poi];
-            const v0 = p[t0] || 0; const v1 = p[t1] || 0; const v2 = p[t2] || 0;
-            const v7 = p[t7] || 0; const v8 = p[t8] || 0; const v9 = p[t9] || 0;
-
-            if (v7 > 0 && v0 < 0.7 * v7 && v1 < 0.7 * v8 && v2 < 0.7 * v9) {
-                droppedTrafficPOIs.push({ POI: poi, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
-            }
-        }
-
-        res.json({
-            latestDate: t0,
-            lastWeekDate: t7,
-            zeroTrafficCells: zeroTrafficCells.sort((a,b) => b.avg7 - a.avg7),
-            droppedTrafficCells: droppedTrafficCells.sort((a,b) => a.ratio - b.ratio),
-            droppedTrafficPOIs: droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio)
-        });
-
-    } catch (error) {
-        console.error("Lỗi phân tích Traffic Down:", error);
-        res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." });
-    }
-};
-
 exports.getImportPage = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     let history = await getKpiHistory();
     res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: null });
-};
-
-exports.resetImportedData = async (req, res) => {
-    let userRole = req.session && req.session.user ? req.session.user.role : 'user';
-    if (userRole !== 'admin') return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
-    const table = req.params.table;
-    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu'];
-    if (!allowedTables.includes(table)) return res.status(400).send("Bảng dữ liệu không hợp lệ.");
-
-    try {
-        await db.query(`TRUNCATE TABLE ${table}`);
-        res.redirect('/import-data');
-    } catch (e) { res.status(500).send("Lỗi máy chủ khi xóa dữ liệu. Vui lòng thử lại."); }
 };
 
 exports.handleImportData = async (req, res) => {
@@ -780,7 +856,6 @@ exports.handleImportData = async (req, res) => {
             let hasTuanCol = weekPrefix ? dbCols.some(c => c.original.toLowerCase() === 'tuan') : false;
             let lastValidDate = null; 
             const insertData = [];
-            
             const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'nhom_canh_bao', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly', 'ma_vt', 'ten_vt', 'ten_day_du', 'don_vi_tinh', 'ma_thiet_bi', 'loai_card', 'ten_viet_tat'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
@@ -792,21 +867,16 @@ exports.handleImportData = async (req, res) => {
                 const rowObj = {}; let hasKpiData = false;
                 colMapping.forEach(map => {
                     let val = row[map.excelIdx];
+                    if (val === undefined || val === '') val = null;
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
                     
-                    if (!isStrCol) {
-                        if (val === null || val === undefined || val === '' || String(val).trim() === '') {
-                            val = null; 
-                        } else if (typeof val === 'string') {
-                            let parsed = parseFloat(val.replace(/,/g, '.'));
-                            val = isNaN(parsed) ? null : parsed; 
-                        } else if (typeof val === 'number') {
-                            val = isNaN(val) ? null : val;
-                        }
+                    if (val !== null && typeof val === 'string' && !isStrCol) {
+                        let parsed = parseFloat(val.replace(/,/g, '.'));
+                        if (!isNaN(parsed)) val = parsed; 
                     }
 
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
-                        if (val !== null && val !== '') {
+                        if (val !== null) {
                             val = formatExcelDate(val);
                             if (typeof val === 'string' && val.includes(' ')) val = val.split(' ')[0];
                             lastValidDate = val; 
@@ -862,6 +932,10 @@ exports.handleImportData = async (req, res) => {
 
     if (isKpiImported) {
         await aggregateDashboardData();
+        // TRIGGER BỘ ĐỒNG BỘ CẢNH BÁO SIÊU TỐC
+        await syncWorstCells();
+        await syncCongestion3G();
+        await syncTrafficDown();
     }
     
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
@@ -870,4 +944,111 @@ exports.handleImportData = async (req, res) => {
 
     history = await getKpiHistory(); 
     return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Đã Import/Ghi đè thành công ${totalImported} dòng.`, error: null });
+};
+
+// ========================================================
+// API SIÊU TỐC: ĐỌC TỪ CACHE BẢNG CẢNH BÁO
+// ========================================================
+exports.getDistricts = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT DISTINCT District_code FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != "" ORDER BY District_code');
+        res.json(rows.map(r => r.District_code));
+    } catch (error) {
+        console.error("Lỗi lấy danh sách District:", error);
+        res.status(500).json([]);
+    }
+};
+
+exports.getDashboardData = async (req, res) => {
+    const district = req.query.district || 'all';
+    try {
+        if (district === 'all') {
+            const [rows] = await db.query('SELECT * FROM Dashboard');
+            res.json(rows);
+        } else {
+            const [rows] = await db.query('SELECT * FROM district_dashboard WHERE district = ?', [district]);
+            res.json(rows);
+        }
+    } catch (error) { 
+        console.error("Lỗi getDashboardData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất CSDL." }); 
+    }
+};
+
+exports.getWorstCellsData = async (req, res) => {
+    const days = parseInt(req.query.days) || 1; 
+    try {
+        const [rows] = await db.query('SELECT * FROM worst_cells WHERE days_filter = ?', [days]);
+        const formattedRows = rows.map(r => ({
+            Cell_name: r.cell_name, Latest_Date: r.latest_date,
+            User_DL_Avg_Throughput_Kbps: Number(r.thput).toFixed(2), 
+            RB_Util_Rate_DL: Number(r.prb).toFixed(2),
+            CQI_4G: Number(r.cqi).toFixed(2), 
+            Service_Drop_all: Number(r.drop_rate).toFixed(2),
+            Violations: r.violations
+        }));
+        res.json(formattedRows);
+    } catch (e) { res.status(500).json({ error: "Lỗi CSDL." }); }
+};
+
+exports.getCongestion3gData = async (req, res) => {
+    const days = parseInt(req.query.days) || 3; 
+    try {
+        const [rows] = await db.query('SELECT * FROM congestion_3g WHERE days_filter = ?', [days]);
+        const formattedRows = rows.map(r => ({
+            Cell_name: r.cell_name, Latest_Date: r.latest_date,
+            CSCONGES: Number(r.cs_conges).toFixed(2), CS_SO_ATT: r.cs_att,
+            PSCONGES: Number(r.ps_conges).toFixed(2), PS_SO_ATT: r.ps_att,
+            Violations: r.violations
+        }));
+        res.json(formattedRows);
+    } catch (e) { res.status(500).json({ error: "Lỗi CSDL." }); }
+};
+
+exports.getTrafficDownData = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM traffic_down');
+        if (rows.length === 0) {
+            return res.json({ error: "Chưa đủ dữ liệu lịch sử (cần ít nhất 10 ngày) hoặc chưa đồng bộ để phân tích đối soát tuần." });
+        }
+        
+        let latestDate = rows[0].latest_date;
+        let lastWeekDate = rows[0].last_week_date;
+        let zeroTrafficCells = [];
+        let droppedTrafficCells = [];
+        let droppedTrafficPOIs = [];
+
+        rows.forEach(r => {
+            if (r.category === 'zero_cell') {
+                zeroTrafficCells.push({ Cell_name: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), avg7: Number(r.val_compare).toFixed(2) });
+            } else if (r.category === 'dropped_cell') {
+                droppedTrafficCells.push({ Cell_name: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), t7: Number(r.val_compare).toFixed(2), ratio: r.ratio });
+            } else if (r.category === 'dropped_poi') {
+                droppedTrafficPOIs.push({ POI: r.name, t0: Number(r.val_t0).toFixed(2), t7: Number(r.val_compare).toFixed(2), ratio: r.ratio });
+            }
+        });
+
+        res.json({
+            latestDate,
+            lastWeekDate,
+            zeroTrafficCells: zeroTrafficCells.sort((a,b) => b.avg7 - a.avg7),
+            droppedTrafficCells: droppedTrafficCells.sort((a,b) => a.ratio - b.ratio),
+            droppedTrafficPOIs: droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio)
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." });
+    }
+};
+
+exports.resetImportedData = async (req, res) => {
+    let userRole = req.session && req.session.user ? req.session.user.role : 'user';
+    if (userRole !== 'admin') return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
+    const table = req.params.table;
+    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu', 'worst_cells', 'congestion_3g', 'traffic_down'];
+    if (!allowedTables.includes(table)) return res.status(400).send("Bảng dữ liệu không hợp lệ.");
+
+    try {
+        await db.query(`TRUNCATE TABLE ${table}`);
+        res.redirect('/import-data');
+    } catch (e) { res.status(500).send("Lỗi máy chủ khi xóa dữ liệu. Vui lòng thử lại."); }
 };
