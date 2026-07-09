@@ -236,6 +236,7 @@ const db = require('../models/db');
                 if (targetDates.length === 0) continue;
                 const placeholders = targetDates.map(() => '?').join(',');
 
+                // LƯU Ý: Lệnh is_in_t0 > 0 dưới đây chính là chốt chặn ép trạm phải có mặt trong file mới nhất
                 const query = `
                     SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
                         AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
@@ -313,21 +314,34 @@ const db = require('../models/db');
             const analyzeData = (dataArray, network) => {
                 const cellMap = {};
                 dataArray.forEach(row => {
-                    if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = {};
+                    // Thêm biến cờ hiệu has_t0 để đánh dấu trạm có tồn tại trong ngày mới nhất
+                    if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = { has_t0: false };
                     cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
+                    
+                    if (row.Thoi_gian === t0) {
+                        cellMap[row.Cell_name].has_t0 = true;
+                    }
                     
                     if (network === '4g' || network === '5g') {
                         let poi = cellToPoi[row.Cell_name];
                         if (poi) {
-                            if (!poiTrafficMap[poi]) poiTrafficMap[poi] = {};
+                            if (!poiTrafficMap[poi]) poiTrafficMap[poi] = { has_t0: false };
                             if (!poiTrafficMap[poi][row.Thoi_gian]) poiTrafficMap[poi][row.Thoi_gian] = 0;
                             poiTrafficMap[poi][row.Thoi_gian] += parseFloat(row.traffic) || 0;
+                            
+                            if (row.Thoi_gian === t0) {
+                                poiTrafficMap[poi].has_t0 = true;
+                            }
                         }
                     }
                 });
 
                 for (let cell in cellMap) {
                     const c = cellMap[cell];
+                    
+                    // CHẶN BÓNG MA: Nếu trạm không có mặt trong file ngày t0, bỏ qua luôn!
+                    if (!c.has_t0) continue;
+
                     const v0 = c[t0] || 0; 
                     
                     // Tính trung bình các ngày cũ có sẵn (từ t1 trở đi)
@@ -375,6 +389,10 @@ const db = require('../models/db');
 
                 for (let poi in poiTrafficMap) {
                     const p = poiTrafficMap[poi];
+                    
+                    // CHẶN BÓNG MA POI: Nếu tất cả các trạm của POI đều biến mất trong file t0, bỏ qua!
+                    if (!p.has_t0) continue;
+
                     const v0 = p[t0] || 0; const v1 = p[t1] || 0; const v2 = p[t2] || 0;
                     const v7 = p[t7] || 0; const v8 = p[t8] || 0; const v9 = p[t9] || 0;
 
