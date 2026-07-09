@@ -930,20 +930,40 @@ exports.handleImportData = async (req, res) => {
         } catch (error) { console.error(`Lỗi file:`, error); }
     } 
 
-    if (isKpiImported) {
-        await aggregateDashboardData();
-        // TRIGGER BỘ ĐỒNG BỘ CẢNH BÁO SIÊU TỐC
-        await syncWorstCells();
-        await syncCongestion3G();
-        await syncTrafficDown();
-    }
-    
-    if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
-        await syncQoeQosSummary();
-    }
+    // =================================================================
+    // GIẢI PHÁP CHỐNG LỖI 502 TIMEOUT: TIẾN TRÌNH CHẠY NGẦM (BACKGROUND)
+    // =================================================================
+    const runBackgroundSync = async () => {
+        try {
+            console.log("⚙️ Kích hoạt tiến trình đồng bộ ngầm...");
+            if (isKpiImported) {
+                await aggregateDashboardData();
+                await syncWorstCells();
+                await syncCongestion3G();
+                await syncTrafficDown();
+            }
+            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
+                await syncQoeQosSummary();
+            }
+            console.log("✅ HOÀN TẤT TOÀN BỘ TIẾN TRÌNH ĐỒNG BỘ CẢNH BÁO VÀ CACHE.");
+        } catch (err) {
+            console.error("❌ Lỗi trong tiến trình đồng bộ ngầm:", err);
+        }
+    };
+
+    // Gọi hàm nhưng CỐ TÌNH KHÔNG DÙNG lệnh "await" 
+    // Việc này giúp nhả luồng HTTP ngay lập tức, trả kết quả về cho trình duyệt.
+    runBackgroundSync();
 
     history = await getKpiHistory(); 
-    return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: `Đã Import/Ghi đè thành công ${totalImported} dòng.`, error: null });
+    return res.render('import_data', { 
+        title: 'Import Data', 
+        page: 'Import Data', 
+        userRole: userRole, 
+        history: history, 
+        message: `Đã Import/Ghi đè thành công ${totalImported} dòng. Hệ thống đang tiến hành tính toán và lập báo cáo ngầm (quá trình mất khoảng 1-2 phút). Bạn có thể xem kết quả trên Dashboard sau đó!`, 
+        error: null 
+    });
 };
 
 // ========================================================
