@@ -8,6 +8,8 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Tải thư viện xuất Excel -->
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 
 <style>
     body { font-family: 'Roboto', sans-serif; background-color: #f4f7f6; margin: 0; }
@@ -18,10 +20,14 @@
     .dashboard-header h1 { margin: 0; color: #2c3e50; font-size: 24px; font-weight: 700; }
     .dashboard-header p { margin: 5px 0 0 0; color: #7f8c8d; font-size: 14px; }
     
-    /* Giao diện bộ lọc District */
-    .district-filter-box { background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid #ecf0f1; display: flex; align-items: center; gap: 10px;}
-    .district-filter-box label { font-weight: bold; color: #2c3e50; margin: 0;}
-    .district-filter-box select { padding: 8px 15px; border-radius: 6px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #3498db; cursor: pointer; min-width: 200px; font-size: 14px; background: #fdfdfd;}
+    /* Giao diện bộ lọc District & Chế độ xem */
+    .filter-group-container { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+    .filter-box { background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid #ecf0f1; display: flex; align-items: center; gap: 10px;}
+    .filter-box label { font-weight: bold; color: #2c3e50; margin: 0;}
+    .filter-box select { padding: 8px 15px; border-radius: 6px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #3498db; cursor: pointer; min-width: 150px; font-size: 14px; background: #fdfdfd;}
+    
+    .btn-export { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);}
+    .btn-export:hover { background: #219653; transform: translateY(-2px); }
 
     .network-section { margin-bottom: 40px; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border-top: 4px solid #3498db; }
     .network-section.n5g { border-top-color: #9b59b6; }
@@ -67,15 +73,28 @@
         <div class="dashboard-header">
             <div>
                 <h1>Tổng Quan Hệ Thống (Network Dashboard)</h1>
-                <p>Dữ liệu tính toán trực tiếp từ KPI mới nhất theo khu vực.</p>
+                <p>Dữ liệu tính toán trực tiếp từ KPI theo khu vực và thời gian.</p>
             </div>
             
-            <div class="district-filter-box">
-                <label>📍 Chọn Khu vực:</label>
-                <select id="districtFilter" onchange="loadDashboard()">
-                    <option value="all">🌍 Toàn Mạng (Tất cả District)</option>
-                    <!-- Tự động load danh sách bằng JS -->
-                </select>
+            <div class="filter-group-container">
+                <div class="filter-box">
+                    <label>📍 Khu vực:</label>
+                    <select id="districtFilter" onchange="processAndRenderData()">
+                        <option value="all">🌍 Toàn Mạng</option>
+                    </select>
+                </div>
+
+                <div class="filter-box">
+                    <label>📅 Chế độ xem:</label>
+                    <select id="timeViewFilter" onchange="processAndRenderData()">
+                        <option value="day">Theo Ngày</option>
+                        <option value="month">Theo Tháng</option>
+                    </select>
+                </div>
+
+                <button class="btn-export" onclick="exportDashboardToExcel()">
+                    📥 Xuất Excel
+                </button>
             </div>
         </div>
 
@@ -86,7 +105,7 @@
         <div id="dashboardContent" style="display: none;">
             
             <div class="network-section">
-                <h3 class="network-title">📡 Hiệu Năng Mạng 4G LTE <span>Tính toán Real-time</span></h3>
+                <h3 class="network-title">📡 Hiệu Năng Mạng 4G LTE <span id="spanViewType4G">Tính toán Real-time</span></h3>
                 <div class="charts-grid">
                     <div class="chart-box" onclick="openModal('chart4g_Traffic')">
                         <span class="zoom-hint">🔍 Click để phóng to</span>
@@ -112,7 +131,7 @@
             </div>
 
             <div class="network-section n5g">
-                <h3 class="network-title">🚀 Hiệu Năng Mạng 5G NR <span>Tính toán Real-time</span></h3>
+                <h3 class="network-title">🚀 Hiệu Năng Mạng 5G NR <span id="spanViewType5G">Tính toán Real-time</span></h3>
                 <div class="charts-grid">
                     <div class="chart-box" onclick="openModal('chart5g_Traffic')">
                         <span class="zoom-hint">🔍 Click để phóng to</span>
@@ -157,6 +176,11 @@
 
     window.chartDataStore = {};
     let modalChartInstance = null;
+    
+    // Biến lưu trữ dữ liệu thô (để tái tính toán nhanh khi chuyển đổi Tháng/Ngày)
+    let rawDashboardData = []; 
+    // Biến lưu trữ dữ liệu đang hiển thị (để xuất Excel)
+    let currentRenderedData = [];
 
     // TẢI DANH SÁCH DISTRICT NGAY KHI MỞ TRANG
     async function loadDistricts() {
@@ -177,6 +201,9 @@
         let parts = dateStr.split('/');
         if (parts.length === 3) {
             return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+        } else if (parts.length === 2) {
+            // Định dạng MM/YYYY
+            return new Date(`${parts[1]}-${parts[0]}-01`).getTime();
         }
         return 0;
     }
@@ -193,7 +220,6 @@
         
         const ctx = document.getElementById(canvasId).getContext('2d');
         
-        // Hủy Chart cũ nếu có để tránh lỗi đè hình khi đổi District
         if (Chart.getChart(canvasId)) Chart.getChart(canvasId).destroy();
 
         let gradient = ctx.createLinearGradient(0, 0, 0, 300);
@@ -236,58 +262,175 @@
         });
     }
 
+    // THUẬT TOÁN GỘP DỮ LIỆU THEO THÁNG
+    function aggregateByMonth(dataArray) {
+        let monthlyMap = {};
+        
+        dataArray.forEach(row => {
+            if (!row.thoi_gian) return;
+            let parts = row.thoi_gian.split('/');
+            if (parts.length !== 3) return;
+            let monthKey = `${parts[1]}/${parts[2]}`; // Tạo key MM/YYYY
+
+            if (!monthlyMap[monthKey]) {
+                monthlyMap[monthKey] = {
+                    thoi_gian: monthKey,
+                    sum_TRAFFIC_4G: 0, sum_TRAFFIC_5G: 0,
+                    AVG_USER_DL_AVG_THPUT_4G: 0, AVG_RES_BLK_DL_4G: 0, AVG_CQI_4G: 0,
+                    AVG_USER_DL_AVG_THPUT_5G: 0, AVG_CQI_5G: 0,
+                    count_4g: 0, count_5g: 0
+                };
+            }
+
+            let m = monthlyMap[monthKey];
+            
+            // Xử lý chỉ số 4G
+            let t4g = parseFloat(row.sum_TRAFFIC_4G) || 0;
+            if (t4g > 0 || parseFloat(row.AVG_CQI_4G) > 0) {
+                m.sum_TRAFFIC_4G += t4g;
+                m.AVG_USER_DL_AVG_THPUT_4G += (parseFloat(row.AVG_USER_DL_AVG_THPUT_4G) || 0);
+                m.AVG_RES_BLK_DL_4G += (parseFloat(row.AVG_RES_BLK_DL_4G) || 0);
+                m.AVG_CQI_4G += (parseFloat(row.AVG_CQI_4G) || 0);
+                m.count_4g++;
+            }
+
+            // Xử lý chỉ số 5G
+            let t5g = parseFloat(row.sum_TRAFFIC_5G) || 0;
+            if (t5g > 0 || parseFloat(row.AVG_CQI_5G) > 0) {
+                m.sum_TRAFFIC_5G += t5g;
+                m.AVG_USER_DL_AVG_THPUT_5G += (parseFloat(row.AVG_USER_DL_AVG_THPUT_5G) || 0);
+                m.AVG_CQI_5G += (parseFloat(row.AVG_CQI_5G) || 0);
+                m.count_5g++;
+            }
+        });
+
+        // Tính trung bình cộng cho các chỉ số Quality
+        let result = Object.values(monthlyMap).map(m => {
+            if (m.count_4g > 0) {
+                m.AVG_USER_DL_AVG_THPUT_4G = m.AVG_USER_DL_AVG_THPUT_4G / m.count_4g;
+                m.AVG_RES_BLK_DL_4G = m.AVG_RES_BLK_DL_4G / m.count_4g;
+                m.AVG_CQI_4G = m.AVG_CQI_4G / m.count_4g;
+            }
+            if (m.count_5g > 0) {
+                m.AVG_USER_DL_AVG_THPUT_5G = m.AVG_USER_DL_AVG_THPUT_5G / m.count_5g;
+                m.AVG_CQI_5G = m.AVG_CQI_5G / m.count_5g;
+            }
+            return m;
+        });
+
+        // Sắp xếp theo thứ tự thời gian
+        return result.sort((a, b) => parseDateForSort(a.thoi_gian) - parseDateForSort(b.thoi_gian));
+    }
+
+    // Hàm gọi API lấy dữ liệu thô ban đầu (Chỉ chạy khi đổi District)
     async function loadDashboard() {
-        // Lấy giá trị đang chọn trên Dropdown
         const selectedDistrict = document.getElementById('districtFilter').value;
-        const districtName = selectedDistrict === 'all' ? 'Toàn Mạng' : selectedDistrict;
 
         document.getElementById('loadingIndicator').style.display = 'flex';
         document.getElementById('dashboardContent').style.display = 'none';
         document.getElementById('emptyIndicator').style.display = 'none';
 
         try {
-            // Truyền district vào URL
             const res = await fetch(`/api/dashboard-data?district=${encodeURIComponent(selectedDistrict)}`);
             if (!res.ok) throw new Error('API Error');
-            let data = await res.json();
-
-            document.getElementById('loadingIndicator').style.display = 'none';
-
-            if (!data || data.length === 0) {
-                document.getElementById('emptyIndicator').style.display = 'block';
-                return;
-            }
-
-            document.getElementById('dashboardContent').style.display = 'block';
-
-            data.sort((a, b) => parseDateForSort(a.thoi_gian) - parseDateForSort(b.thoi_gian));
-            const labels = data.map(d => d.thoi_gian);
+            rawDashboardData = await res.json();
             
-            // XỬ LÝ LỖI MẤT DATA: Ép các dữ liệu rỗng (null/""/NaN) thành giá trị 0
-            const traf4g = data.map(d => parseFloat(d.sum_TRAFFIC_4G) || 0);
-            const thput4g = data.map(d => parseFloat(d.AVG_USER_DL_AVG_THPUT_4G) || 0);
-            const prb4g = data.map(d => parseFloat(d.AVG_RES_BLK_DL_4G) || 0);
-            const cqi4g = data.map(d => parseFloat(d.AVG_CQI_4G) || 0);
+            // Xóa dữ liệu lỗi/null
+            rawDashboardData = rawDashboardData.filter(d => d.thoi_gian != null);
+            rawDashboardData.sort((a, b) => parseDateForSort(a.thoi_gian) - parseDateForSort(b.thoi_gian));
 
-            const traf5g = data.map(d => parseFloat(d.sum_TRAFFIC_5G) || 0);
-            const thput5g = data.map(d => parseFloat(d.AVG_USER_DL_AVG_THPUT_5G) || 0);
-            const cqi5g = data.map(d => parseFloat(d.AVG_CQI_5G) || 0);
-
-            // Gắn tên Title động theo District
-            drawLineChart('chart4g_Traffic', labels, traf4g, '#3498db', 'Traffic (GB)', `Tổng Traffic 4G (${districtName})`);
-            drawLineChart('chart4g_Thput', labels, thput4g, '#9b59b6', 'Throughput (Kbps)', `Trung bình DL Thput 4G (${districtName})`);
-            drawLineChart('chart4g_PRB', labels, prb4g, '#e67e22', 'PRB DL (%)', `Trung bình PRB DL 4G (${districtName})`);
-            drawLineChart('chart4g_CQI', labels, cqi4g, '#2ecc71', 'CQI (%)', `Trung bình CQI 4G (${districtName})`);
-
-            drawLineChart('chart5g_Traffic', labels, traf5g, '#2980b9', 'Traffic (GB)', `Tổng Traffic 5G (${districtName})`);
-            drawLineChart('chart5g_Thput', labels, thput5g, '#8e44ad', 'Throughput (Mbps)', `Trung bình DL Thput 5G (${districtName})`);
-            drawLineChart('chart5g_CQI', labels, cqi5g, '#27ae60', 'CQI (%)', `Trung bình CQI 5G (${districtName})`);
+            // Gọi hàm render để quyết định xem hiển thị Ngày hay Tháng
+            processAndRenderData();
 
         } catch (error) {
-            console.error("Lỗi vẽ đồ thị trang chủ:", error);
+            console.error("Lỗi tải dữ liệu Dashboard:", error);
             document.getElementById('loadingIndicator').innerHTML = "❌ Lỗi không thể tải dữ liệu từ máy chủ.";
             document.getElementById('loadingIndicator').style.color = "#e74c3c";
         }
+    }
+
+    // Hàm xử lý và vẽ lại đồ thị (Chạy cực nhanh khi đổi Ngày <-> Tháng)
+    function processAndRenderData() {
+        document.getElementById('loadingIndicator').style.display = 'none';
+
+        if (!rawDashboardData || rawDashboardData.length === 0) {
+            document.getElementById('emptyIndicator').style.display = 'block';
+            document.getElementById('dashboardContent').style.display = 'none';
+            return;
+        }
+
+        const timeView = document.getElementById('timeViewFilter').value;
+        const selectedDistrict = document.getElementById('districtFilter').value;
+        const districtName = selectedDistrict === 'all' ? 'Toàn Mạng' : selectedDistrict;
+
+        // Xử lý dữ liệu
+        if (timeView === 'month') {
+            currentRenderedData = aggregateByMonth(rawDashboardData);
+            document.getElementById('spanViewType4G').innerText = 'Hiển thị: Trung bình theo Tháng';
+            document.getElementById('spanViewType5G').innerText = 'Hiển thị: Trung bình theo Tháng';
+        } else {
+            currentRenderedData = [...rawDashboardData];
+            document.getElementById('spanViewType4G').innerText = 'Hiển thị: Dữ liệu theo Ngày';
+            document.getElementById('spanViewType5G').innerText = 'Hiển thị: Dữ liệu theo Ngày';
+        }
+
+        document.getElementById('dashboardContent').style.display = 'block';
+
+        const labels = currentRenderedData.map(d => d.thoi_gian);
+        
+        const traf4g = currentRenderedData.map(d => parseFloat(d.sum_TRAFFIC_4G) || 0);
+        const thput4g = currentRenderedData.map(d => parseFloat(d.AVG_USER_DL_AVG_THPUT_4G) || 0);
+        const prb4g = currentRenderedData.map(d => parseFloat(d.AVG_RES_BLK_DL_4G) || 0);
+        const cqi4g = currentRenderedData.map(d => parseFloat(d.AVG_CQI_4G) || 0);
+
+        const traf5g = currentRenderedData.map(d => parseFloat(d.sum_TRAFFIC_5G) || 0);
+        const thput5g = currentRenderedData.map(d => parseFloat(d.AVG_USER_DL_AVG_THPUT_5G) || 0);
+        const cqi5g = currentRenderedData.map(d => parseFloat(d.AVG_CQI_5G) || 0);
+
+        drawLineChart('chart4g_Traffic', labels, traf4g, '#3498db', 'Traffic (GB)', `Tổng Traffic 4G (${districtName})`);
+        drawLineChart('chart4g_Thput', labels, thput4g, '#9b59b6', 'Throughput (Kbps)', `Trung bình DL Thput 4G (${districtName})`);
+        drawLineChart('chart4g_PRB', labels, prb4g, '#e67e22', 'PRB DL (%)', `Trung bình PRB DL 4G (${districtName})`);
+        drawLineChart('chart4g_CQI', labels, cqi4g, '#2ecc71', 'CQI (%)', `Trung bình CQI 4G (${districtName})`);
+
+        drawLineChart('chart5g_Traffic', labels, traf5g, '#2980b9', 'Traffic (GB)', `Tổng Traffic 5G (${districtName})`);
+        drawLineChart('chart5g_Thput', labels, thput5g, '#8e44ad', 'Throughput (Mbps)', `Trung bình DL Thput 5G (${districtName})`);
+        drawLineChart('chart5g_CQI', labels, cqi5g, '#27ae60', 'CQI (%)', `Trung bình CQI 5G (${districtName})`);
+    }
+
+    // ==========================================
+    // TÍNH NĂNG XUẤT EXCEL
+    // ==========================================
+    function exportDashboardToExcel() {
+        if (!currentRenderedData || currentRenderedData.length === 0) {
+            console.error("Không có dữ liệu để xuất");
+            return;
+        }
+
+        const selectedDistrict = document.getElementById('districtFilter').value;
+        const timeView = document.getElementById('timeViewFilter').value;
+        
+        let districtName = selectedDistrict === 'all' ? 'Toan_Mang' : selectedDistrict;
+        let viewName = timeView === 'month' ? 'Theo_Thang' : 'Theo_Ngay';
+
+        // Chuẩn hóa tên cột để xuất Excel dễ nhìn
+        let excelData = currentRenderedData.map((row, index) => ({
+            "STT": index + 1,
+            "Thời Gian": row.thoi_gian,
+            "Tổng Traffic 4G (GB)": parseFloat(row.sum_TRAFFIC_4G || 0).toFixed(2),
+            "Trung bình Throughput 4G (Kbps)": parseFloat(row.AVG_USER_DL_AVG_THPUT_4G || 0).toFixed(2),
+            "Trung bình PRB DL 4G (%)": parseFloat(row.AVG_RES_BLK_DL_4G || 0).toFixed(2),
+            "Trung bình CQI 4G (%)": parseFloat(row.AVG_CQI_4G || 0).toFixed(2),
+            "Tổng Traffic 5G (GB)": parseFloat(row.sum_TRAFFIC_5G || 0).toFixed(2),
+            "Trung bình Throughput 5G (Mbps)": parseFloat(row.AVG_USER_DL_AVG_THPUT_5G || 0).toFixed(2),
+            "Trung bình CQI 5G (%)": parseFloat(row.AVG_CQI_5G || 0).toFixed(2)
+        }));
+
+        let ws = XLSX.utils.json_to_sheet(excelData);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Dashboard_Data");
+
+        let fileName = `Dashboard_${districtName}_${viewName}.xlsx`;
+        XLSX.writeFile(wb, fileName);
     }
 
     function openModal(canvasId) {
@@ -342,10 +485,13 @@
     function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
     window.onclick = function(e) { if (e.target === document.getElementById('chartModal')) closeModal(); }
     
+    // Gắn event listener cho Dropdown Khu vực thay vì gọi loadDashboard trực tiếp (để tải Data từ API)
+    document.getElementById('districtFilter').addEventListener('change', loadDashboard);
+
     // Tự động load Dropdown và vẽ đồ thị khi trang vừa bật
-    window.onload = () => {
-        loadDistricts();
-        loadDashboard();
+    window.onload = async () => {
+        await loadDistricts();
+        await loadDashboard();
     };
 </script>
 </body>
