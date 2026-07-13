@@ -9,8 +9,16 @@
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
-    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #9b59b6;}
+    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #9b59b6;}
     
+    /* BẢNG ĐIỀU KHIỂN EXCEL - Tích hợp gọn gàng */
+    .export-panel { background: #fdf4fdf2; padding: 15px 20px; border-radius: 10px; border: 1px solid #e1cbed; margin-bottom: 25px; box-shadow: 0 2px 10px rgba(155, 89, 182, 0.05);}
+    .export-panel h4 { margin: 0 0 12px 0; color: #8e44ad; font-size: 15px; display: flex; align-items: center; gap: 8px;}
+    .export-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center;}
+    .export-controls select { padding: 10px 15px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 13px; background: white; font-weight: bold; color: #2c3e50; cursor: pointer;}
+    .btn-export { background: #27ae60; color: white; border: none; padding: 10px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; display: flex; align-items: center; gap: 8px;}
+    .btn-export:hover { background: #219653; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3);}
+
     .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 1024px) { .charts-grid { grid-template-columns: 1fr; } }
     
@@ -54,6 +62,7 @@
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 
 <div class="layout">
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
@@ -74,6 +83,28 @@
                 <button onclick="fetchAndDrawCharts()" class="btn-primary" style="background: #8e44ad; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 15px; transition: 0.2s;">
                     📊 Trích Xuất Báo Cáo
                 </button>
+            </div>
+
+            <!-- Bảng điều khiển Xuất Excel (Được ốp thêm vào) -->
+            <div class="export-panel">
+                <h4>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 
+                    Tùy chọn Xuất File Excel
+                </h4>
+                <div class="export-controls">
+                    <select id="exportScope">
+                        <option value="current">Chỉ xuất POI đang xem</option>
+                        <option value="all">Xuất Tất cả danh sách POI</option>
+                    </select>
+                    <select id="exportTime">
+                        <option value="day">Dữ liệu Chi Tiết Theo Ngày</option>
+                        <option value="week">Gộp Dữ Liệu Theo Tuần (Trung bình)</option>
+                        <option value="month">Gộp Dữ Liệu Theo Tháng (Trung bình)</option>
+                    </select>
+                    <button class="btn-export" onclick="executeExcelExport()">
+                        📥 Tải File Excel
+                    </button>
+                </div>
             </div>
 
             <div id="initMsg">
@@ -154,15 +185,143 @@
         }
     };
 
+    function getWeekNumber(dStr) {
+        if (!dStr) return "N/A";
+        const parts = dStr.split('/');
+        if (parts.length !== 3) return dStr;
+        const d = new Date(parts[2], parts[1] - 1, parts[0]);
+        const startDate = new Date(d.getFullYear(), 0, 1);
+        const days = Math.floor((d - startDate) / (24 * 60 * 60 * 1000));
+        const weekNumber = Math.ceil((d.getDay() + 1 + days) / 7);
+        return `Tuần ${weekNumber} (${d.getFullYear()})`;
+    }
+
+    function getMonthString(dStr) {
+        if (!dStr) return "N/A";
+        const parts = dStr.split('/');
+        if (parts.length !== 3) return dStr;
+        return `Tháng ${parts[1]}/${parts[2]}`;
+    }
+
+    async function executeExcelExport() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel đang được tải, vui lòng đợi...');
+            return;
+        }
+
+        const poiName = document.getElementById('poiSelect').value;
+        const scope = document.getElementById('exportScope').value;
+        const timeType = document.getElementById('exportTime').value;
+
+        if (scope === 'current' && !poiName) {
+            alert("Vui lòng Chọn một POI từ danh sách trước khi xuất!");
+            return;
+        }
+
+        document.getElementById('loadingMsg').style.display = 'block';
+        document.getElementById('loadingMsg').innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang tổng hợp và trích xuất dữ liệu Excel...';
+
+        try {
+            // Lấy toàn bộ dữ liệu POI từ Backend
+            const res = await fetch('/api/export-all-poi');
+            if (!res.ok) throw new Error('Lỗi tải dữ liệu');
+            let data = await res.json();
+
+            // Lọc theo Scope (Tất cả hay Chỉ POI hiện tại)
+            if (scope === 'current') {
+                data = data.filter(r => r.POI === poiName);
+            }
+
+            let exportData = [];
+
+            if (timeType === 'day') {
+                // Nếu xuất theo ngày, format trực tiếp
+                exportData = data.sort((a,b) => parseSortDate(a.Thoi_gian) - parseSortDate(b.Thoi_gian)).map(a => ({
+                    "Tên POI": a.POI,
+                    "Thời Gian": a.Thoi_gian,
+                    "Tổng Traffic 4G (GB)": Number((a.Traf_4G || 0).toFixed(2)),
+                    "Throughput DL 4G (Kbps)": Number((a.Thput_4G || 0).toFixed(2)),
+                    "CQI 4G (%)": Number((a.CQI_4G || 0).toFixed(2)),
+                    "Tổng Traffic 5G (GB)": Number((a.Traf_5G || 0).toFixed(2)),
+                    "Throughput DL 5G (Mbps)": Number((a.Thput_5G || 0).toFixed(2)),
+                    "CQI 5G (%)": Number((a.CQI_5G || 0).toFixed(2))
+                }));
+            } else {
+                // Nếu gộp theo Tuần hoặc Tháng
+                let aggregated = {};
+                data.forEach(row => {
+                    let timeKey = row.Thoi_gian;
+                    if (timeType === 'week') timeKey = getWeekNumber(row.Thoi_gian);
+                    else if (timeType === 'month') timeKey = getMonthString(row.Thoi_gian);
+
+                    let key = row.POI + "_" + timeKey;
+                    if (!aggregated[key]) {
+                        aggregated[key] = { 
+                            POI: row.POI, Thoi_gian: timeKey, count4g: 0, count5g: 0,
+                            Traf_4G: 0, Thput_4G: 0, CQI_4G: 0, Traf_5G: 0, Thput_5G: 0, CQI_5G: 0
+                        };
+                    }
+                    let a = aggregated[key];
+                    
+                    // Tính tổng và đếm số ngày có mạng 4G
+                    if (row.Traf_4G > 0 || row.CQI_4G > 0) {
+                        a.count4g++;
+                        a.Traf_4G += parseFloat(row.Traf_4G) || 0;
+                        a.Thput_4G += parseFloat(row.Thput_4G) || 0;
+                        a.CQI_4G += parseFloat(row.CQI_4G) || 0;
+                    }
+                    // Tính tổng và đếm số ngày có mạng 5G
+                    if (row.Traf_5G > 0 || row.CQI_5G > 0) {
+                        a.count5g++;
+                        a.Traf_5G += parseFloat(row.Traf_5G) || 0;
+                        a.Thput_5G += parseFloat(row.Thput_5G) || 0;
+                        a.CQI_5G += parseFloat(row.CQI_5G) || 0;
+                    }
+                });
+
+                // Chuyển đổi Map thành Mảng và tính Trung Bình
+                exportData = Object.values(aggregated).map(a => ({
+                    "Tên POI": a.POI,
+                    "Thời Gian": a.Thoi_gian,
+                    "Tổng Traffic 4G (GB)": Number((a.Traf_4G).toFixed(2)),
+                    "TB Throughput 4G (Kbps)": a.count4g > 0 ? Number((a.Thput_4G / a.count4g).toFixed(2)) : 0,
+                    "TB CQI 4G (%)": a.count4g > 0 ? Number((a.CQI_4G / a.count4g).toFixed(2)) : 0,
+                    "Tổng Traffic 5G (GB)": Number((a.Traf_5G).toFixed(2)),
+                    "TB Throughput 5G (Mbps)": a.count5g > 0 ? Number((a.Thput_5G / a.count5g).toFixed(2)) : 0,
+                    "TB CQI 5G (%)": a.count5g > 0 ? Number((a.CQI_5G / a.count5g).toFixed(2)) : 0
+                }));
+            }
+
+            if (exportData.length === 0) throw new Error("Không có dữ liệu hợp lệ để xuất!");
+
+            // Viết file Excel
+            let ws = XLSX.utils.json_to_sheet(exportData);
+            let wb = XLSX.utils.book_new();
+            let sheetName = scope === 'all' ? 'All_POIs' : poiName.replace(/[\\\/\:\*\?\"\<\>\|]/g, '_').substring(0, 31);
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            
+            let timeLabel = timeType === 'day' ? 'Ngay' : (timeType === 'week' ? 'Tuan' : 'Thang');
+            let fileName = scope === 'all' ? `Bao_Cao_Tat_Ca_POI_Theo_${timeLabel}.xlsx` : `Bao_Cao_POI_${sheetName}_Theo_${timeLabel}.xlsx`;
+            
+            XLSX.writeFile(wb, fileName);
+            document.getElementById('loadingMsg').style.display = 'none';
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loadingMsg').style.display = 'none';
+            alert("Lỗi xuất Excel: " + error.message);
+        }
+    }
+
+    // Hàm phụ trợ sort ngày tháng
+    function parseSortDate(d) {
+        if (!d) return 0;
+        const p = d.split('/');
+        return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : 0;
+    }
+
     function sortDataByDate(data) {
-        return data.sort((a, b) => {
-            const parseDate = (d) => {
-                if (!d) return 0;
-                const p = d.split('/');
-                return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : 0;
-            };
-            return parseDate(a.Thoi_gian) - parseDate(b.Thoi_gian);
-        });
+        return data.sort((a, b) => parseSortDate(a.Thoi_gian) - parseSortDate(b.Thoi_gian));
     }
 
     async function fetchAndDrawCharts() {
@@ -174,6 +333,7 @@
         }
 
         document.getElementById('initMsg').style.display = 'none';
+        document.getElementById('loadingMsg').innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang gộp dữ liệu các Cell thuộc POI...';
         document.getElementById('loadingMsg').style.display = 'block';
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('chartsArea').style.display = 'none';
