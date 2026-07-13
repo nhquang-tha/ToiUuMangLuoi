@@ -9,16 +9,17 @@
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
-    .top-panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 4px solid #9b59b6; display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between;}
+    .top-panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 4px solid #9b59b6; display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; align-items: flex-start;}
     
     .filter-group { flex: 1; min-width: 300px; }
     .filter-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #2c3e50; font-size: 14px;}
     .filter-group select { width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; font-size: 14px; font-weight: bold; color: #8e44ad; cursor: pointer; }
 
+    /* VÙNG ĐIỀU KHIỂN XUẤT EXCEL MỚI THÊM */
     .export-panel { flex: 1; min-width: 350px; background: #fdf4fdf2; padding: 15px; border-radius: 8px; border: 1px solid #e1cbed;}
-    .export-panel h4 { margin: 0 0 10px 0; color: #8e44ad; font-size: 15px; }
+    .export-panel h4 { margin: 0 0 10px 0; color: #8e44ad; font-size: 14px; display: flex; align-items: center; gap: 8px;}
     .export-controls { display: flex; gap: 10px; margin-bottom: 10px; }
-    .export-controls select { flex: 1; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; font-size: 13px; }
+    .export-controls select { flex: 1; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; font-size: 13px; background: white;}
     .btn-export { background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; font-size: 14px; transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px;}
     .btn-export:hover { background: #219653; transform: translateY(-2px); }
 
@@ -34,6 +35,7 @@
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Tải thư viện xuất Excel -->
 <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 
 <div class="layout">
@@ -41,44 +43,41 @@
     <main class="main-content">
         <header class="topbar">
             <h1>📍 Báo Cáo Điểm Quan Tâm (POI Report)</h1>
-            <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 13px;">Theo dõi và trích xuất dữ liệu tổng hợp các khu vực trọng điểm.</p>
+            <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 13px;">Theo dõi lưu lượng và chất lượng sóng tại các khu vực trọng điểm.</p>
         </header>
         
         <div class="content-body">
             
             <div class="top-panel">
-                <!-- Chọn POI để xem biểu đồ -->
+                <!-- Chọn POI (Giữ nguyên như cũ) -->
                 <div class="filter-group">
-                    <label>📍 Chọn Điểm POI (Hiển thị biểu đồ):</label>
+                    <label>📍 Chọn Điểm POI (Hiển thị biểu đồ theo ngày):</label>
                     <select id="poiSelect" onchange="fetchAndDrawCharts()">
                         <option value="">Đang tải danh sách POI...</option>
                     </select>
-                    <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">Dữ liệu hiển thị trên biểu đồ bên dưới là dữ liệu <b>Theo Ngày</b> của POI được chọn.</p>
                 </div>
 
-                <!-- Bảng điều khiển Xuất Excel -->
+                <!-- Bảng điều khiển Xuất Excel (Thêm mới) -->
                 <div class="export-panel">
-                    <h4>📥 Tùy chọn Xuất File Excel</h4>
+                    <h4><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Tùy chọn Xuất File Excel</h4>
                     <div class="export-controls">
                         <select id="exportScope">
-                            <option value="current">Chỉ POI Đang Xem</option>
-                            <option value="all">Toàn bộ danh sách POI</option>
+                            <option value="current">Chỉ POI đang xem</option>
+                            <option value="all">Tất cả danh sách POI</option>
                         </select>
                         <select id="exportTime">
                             <option value="day">Dữ liệu Theo Ngày</option>
-                            <option value="week">Gộp Theo Tuần (Week)</option>
-                            <option value="month">Gộp Theo Tháng (Month)</option>
+                            <option value="week">Gộp Theo Tuần (TB)</option>
+                            <option value="month">Gộp Theo Tháng (TB)</option>
                         </select>
                     </div>
                     <button class="btn-export" onclick="executeExcelExport()">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        Trích Xuất File Excel
+                        Trích Xuất Báo Cáo Excel
                     </button>
-                    <p style="font-size: 11px; color: #8e44ad; margin: 8px 0 0 0; font-style: italic;">* Mẹo: Mở file Excel, bôi đen bảng và ấn F11 để vẽ biểu đồ tự động!</p>
                 </div>
             </div>
 
-            <!-- Vùng chứa Biểu đồ -->
+            <!-- Vùng chứa Biểu đồ (Giữ nguyên cấu trúc) -->
             <div id="chartArea" style="display: none;">
                 <div class="charts-grid">
                     <div class="chart-box">
@@ -114,9 +113,8 @@
 <script>
     Chart.defaults.font.family = "'Roboto', sans-serif";
     let chartInstances = {};
-    let currentPoiRawData = []; // Lưu trữ Data của POI hiện tại để xuất Excel nhánh
 
-    // 1. Tải danh sách POI khi mới vào trang
+    // 1. Tải danh sách POI khi load trang
     window.onload = async () => {
         try {
             const res = await fetch('/api/poi-list');
@@ -127,7 +125,7 @@
                 select.insertAdjacentHTML('beforeend', `<option value="${poi}">${poi}</option>`);
             });
 
-            // Tự động nhận diện POI từ URL (Nếu ấn từ trang Traffic Down qua)
+            // Tự động chọn nếu có tham số từ URL
             const urlParams = new URLSearchParams(window.location.search);
             const poiParam = urlParams.get('poi');
             if (poiParam) {
@@ -141,7 +139,6 @@
         }
     };
 
-    // 2. Tiện ích gộp nhóm mảng Object theo Ngày, Tuần, Tháng
     function getWeekNumber(dateStr) {
         let parts = dateStr.split('/');
         if (parts.length !== 3) return dateStr;
@@ -156,16 +153,6 @@
         let parts = dateStr.split('/');
         if (parts.length !== 3) return dateStr;
         return `Tháng ${parts[1]}/${parts[2]}`;
-    }
-
-    function sortDates(arr) {
-        return arr.sort((a, b) => {
-            let pA = a.Thoi_gian.split('/'); let pB = b.Thoi_gian.split('/');
-            if(pA.length === 3 && pB.length === 3) {
-                return new Date(`${pA[2]}-${pA[1]}-${pA[0]}`) - new Date(`${pB[2]}-${pB[1]}-${pB[0]}`);
-            }
-            return a.Thoi_gian.localeCompare(b.Thoi_gian);
-        });
     }
 
     // Hàm Group By (Gom nhóm và tính Trung bình / Tổng)
@@ -230,7 +217,14 @@
         return result;
     }
 
-    // 3. Lấy dữ liệu và Vẽ biểu đồ (Chỉ POI hiện tại, luôn theo Ngày)
+    // Hàm format Date nội bộ dùng để sort mảng chart
+    function parseDateObj(dateStr) {
+        if(!dateStr) return 0;
+        let parts = dateStr.split('/');
+        if(parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+        return 0;
+    }
+
     async function fetchAndDrawCharts() {
         const poi = document.getElementById('poiSelect').value;
         if (!poi) {
@@ -244,34 +238,50 @@
         document.getElementById('emptyState').style.display = 'none';
 
         try {
-            // Lấy data 4G
+            // Fetch 4G & 5G data from KPI API
             const res4 = await fetch(`/api/kpi-data?network=4g&type=poi&value=${encodeURIComponent(poi)}`);
             const data4 = await res4.json();
             
-            // Lấy data 5G
             const res5 = await fetch(`/api/kpi-data?network=5g&type=poi&value=${encodeURIComponent(poi)}`);
             const data5 = await res5.json();
 
-            // Khớp nối cấu trúc cho biểu đồ
+            // Nhóm dữ liệu theo ngày
             let mergedMap = {};
+            
             data4.forEach(r => {
-                if(!mergedMap[r.Thoi_gian]) mergedMap[r.Thoi_gian] = { POI: poi, Thoi_gian: r.Thoi_gian, Traf_4G:0, Thput_4G:0, CQI_4G:0, Traf_5G:0, Thput_5G:0, CQI_5G:0 };
+                if(!mergedMap[r.Thoi_gian]) mergedMap[r.Thoi_gian] = { 
+                    Thoi_gian: r.Thoi_gian, Traf_4G:0, Thput_4G:0, CQI_4G:0, count4:0, 
+                    Traf_5G:0, Thput_5G:0, CQI_5G:0, count5:0 
+                };
                 mergedMap[r.Thoi_gian].Traf_4G += parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+                mergedMap[r.Thoi_gian].Thput_4G += parseFloat(r.User_DL_Avg_Throughput_Kbps) || 0;
+                mergedMap[r.Thoi_gian].CQI_4G += parseFloat(r.CQI_4G) || 0;
+                mergedMap[r.Thoi_gian].count4++;
             });
 
-            // Re-fetch chuẩn bị cho Export Branch 1
-            const exportRes = await fetch('/api/export-all-poi');
-            const allPoiData = await exportRes.json();
-            
-            // Lọc riêng Data của POI này để lưu Cache
-            currentPoiRawData = allPoiData.filter(r => r.POI === poi);
-            let sortedData = sortDates(currentPoiRawData);
+            data5.forEach(r => {
+                if(!mergedMap[r.Thoi_gian]) mergedMap[r.Thoi_gian] = { 
+                    Thoi_gian: r.Thoi_gian, Traf_4G:0, Thput_4G:0, CQI_4G:0, count4:0, 
+                    Traf_5G:0, Thput_5G:0, CQI_5G:0, count5:0 
+                };
+                mergedMap[r.Thoi_gian].Traf_5G += parseFloat(r.Total_Data_Traffic_Volume_GB) || 0;
+                mergedMap[r.Thoi_gian].Thput_5G += parseFloat(r.A_User_DL_Avg_Throughput) || 0;
+                mergedMap[r.Thoi_gian].CQI_5G += parseFloat(r.CQI_5G) || 0;
+                mergedMap[r.Thoi_gian].count5++;
+            });
+
+            let sortedData = Object.values(mergedMap).map(g => {
+                if(g.count4 > 0) { g.Thput_4G /= g.count4; g.CQI_4G /= g.count4; }
+                if(g.count5 > 0) { g.Thput_5G /= g.count5; g.CQI_5G /= g.count5; }
+                return g;
+            }).sort((a,b) => parseDateObj(a.Thoi_gian) - parseDateObj(b.Thoi_gian));
 
             document.getElementById('loadingOverlay').style.display = 'none';
             document.getElementById('chartArea').style.display = 'block';
 
             const labels = sortedData.map(d => d.Thoi_gian);
 
+            // Vẽ y hệt code cũ của bạn
             drawChart('chartTraffic', labels, [
                 { label: 'Traffic 4G (GB)', data: sortedData.map(d => d.Traf_4G), color: '#3498db', type: 'bar' },
                 { label: 'Traffic 5G (GB)', data: sortedData.map(d => d.Traf_5G), color: '#2980b9', type: 'bar' }
@@ -288,6 +298,7 @@
             ]);
 
         } catch (e) {
+            console.error(e);
             document.getElementById('loadingOverlay').style.display = 'none';
             alert("Lỗi tải dữ liệu biểu đồ POI.");
         }
@@ -321,7 +332,6 @@
         });
     }
 
-    // 4. THUẬT TOÁN XUẤT EXCEL SIÊU TỐC
     async function executeExcelExport() {
         if (typeof XLSX === 'undefined') {
             alert('Thư viện Excel chưa tải xong, vui lòng đợi...'); return;
@@ -329,26 +339,27 @@
 
         const scope = document.getElementById('exportScope').value;
         const timeType = document.getElementById('exportTime').value;
+        const currentPoi = document.getElementById('poiSelect').value;
         
-        let targetData = [];
-        
+        if (scope === 'current' && !currentPoi) {
+            alert("Vui lòng chọn 1 POI từ danh sách trước khi xuất!");
+            return;
+        }
+
         document.getElementById('loadingText').innerText = "Đang tổng hợp dữ liệu Excel...";
         document.getElementById('loadingOverlay').style.display = 'flex';
 
         try {
+            // Tải dữ liệu toàn bộ POI từ máy chủ
+            const res = await fetch('/api/export-all-poi');
+            let targetData = await res.json();
+
+            // Lọc nếu chọn "Chỉ POI hiện tại"
             if (scope === 'current') {
-                if (currentPoiRawData.length === 0) {
-                    document.getElementById('loadingOverlay').style.display = 'none';
-                    return alert("Vui lòng chọn 1 POI trước khi xuất file!");
-                }
-                targetData = currentPoiRawData;
-            } else {
-                // Tải toàn bộ Data của mọi POI
-                const res = await fetch('/api/export-all-poi');
-                targetData = await res.json();
+                targetData = targetData.filter(r => r.POI === currentPoi);
             }
 
-            // Gộp dữ liệu theo Tuần / Tháng nếu người dùng yêu cầu
+            // Gộp dữ liệu theo Tuần / Tháng (nếu chọn)
             let finalData = aggregateData(targetData, timeType);
 
             // Chuẩn hóa tên cột để xuất Excel đẹp
@@ -367,7 +378,7 @@
             let wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "POI_Data");
 
-            let scopeName = scope === 'current' ? document.getElementById('poiSelect').value : "ALL_POI";
+            let scopeName = scope === 'current' ? currentPoi : "ALL_POI";
             let safeName = scopeName.replace(/[\\\/\:\*\?\"\<\>\|]/g, '_').replace(/\s+/g, '_');
             let fileName = `Bao_Cao_${safeName}_Theo_${timeType.toUpperCase()}.xlsx`;
             
