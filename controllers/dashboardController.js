@@ -1078,6 +1078,49 @@ exports.getAllPoiExportData = async (req, res) => {
     } catch (error) { res.status(500).json({ error: "Lỗi cơ sở dữ liệu." }); }
 };
 
+// [MỚI BỔ SUNG] API Lấy dữ liệu vẽ biểu đồ cho từng POI cụ thể (Fix lỗi biểu đồ)
+exports.getPoiData = async (req, res) => {
+    const poiName = req.query.poi;
+    if (!poiName) return res.json({ data: [], has4g: false, has5g: false });
+
+    try {
+        const query4G = `
+            SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g 
+            FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code 
+            WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
+        `;
+        const [data4g] = await db.query(query4G, [poiName]);
+
+        const query5G = `
+            SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g 
+            FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code 
+            WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
+        `;
+        const [data5g] = await db.query(query5G, [poiName]);
+
+        let mergedData = {};
+        data4g.forEach(r => {
+            mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: r.traffic_4g, thput_4g: r.thput_4g, traffic_5g: 0, thput_5g: 0 };
+        });
+        data5g.forEach(r => {
+            if (!mergedData[r.Thoi_gian]) {
+                mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
+            }
+            mergedData[r.Thoi_gian].traffic_5g = r.traffic_5g;
+            mergedData[r.Thoi_gian].thput_5g = r.thput_5g;
+        });
+
+        res.json({
+            data: Object.values(mergedData),
+            has4g: data4g.length > 0,
+            has5g: data5g.length > 0
+        });
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu vẽ biểu đồ POI:", error);
+        res.status(500).json({ error: "Lỗi cơ sở dữ liệu." });
+    }
+};
+
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
