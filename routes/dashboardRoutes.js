@@ -1,22 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+
+// Import Middleware phân quyền
+const { isAuthenticated, isAdmin } = require('../middlewares/authMiddleware');
+
+// Import các Controllers xử lý logic
 const dashboardController = require('../controllers/dashboardController');
+const rfController = require('../controllers/rfController'); 
+const kpiController = require('../controllers/kpiController');
+const userController = require('../controllers/userController');
+const mapController = require('../controllers/mapController'); 
+const scriptController = require('../controllers/scriptController'); 
 
-// Khai báo an toàn cho kpiController (Tránh lỗi nếu file chưa có)
-let kpiController = null;
-try { kpiController = require('../controllers/kpiController'); } catch(e) {}
-
-const authMiddleware = require('../middlewares/authMiddleware');
-
-// Cấu hình Multer để lưu file trên RAM (buffer)
-const upload = multer({ 
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 } // Giới hạn 50MB cho các file Excel nặng
-});
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
-// 1. CÁC TRANG CƠ BẢN (VIEWS)
+// 1. CÁC TRANG CƠ BẢN
 // ==========================================
 const pages = [
     { path: '/', name: 'Dashboard' },
@@ -24,61 +24,85 @@ const pages = [
     { path: '/worst-cells', name: 'Worst Cells' },
     { path: '/congestion-3g', name: 'Congestion 3G' },
     { path: '/traffic-down', name: 'Traffic Down' },
-    { path: '/downtilt-coverage', name: 'Downtilt Coverage' },
-    { path: '/scrip', name: 'Scrip' },
-    { path: '/optimizing-qoe-qos', name: 'Optimizing QoE/QoS' }
+    { path: '/downtilt-coverage', name: 'Downtilt Coverage' }
 ];
 
-// Tạo các đường dẫn tự động tới Views
 pages.forEach(page => {
-    router.get(page.path, authMiddleware.isAuthenticated, dashboardController.renderPage(page.name));
+    router.get(page.path, isAuthenticated, dashboardController.renderPage(page.name));
 });
 
-// ==========================================
-// 2. CHỨC NĂNG QUẢN TRỊ & IMPORT DỮ LIỆU
-// ==========================================
-router.get('/import-data', authMiddleware.isAuthenticated, authMiddleware.isAdmin, dashboardController.getImportPage);
-router.post('/import-data', authMiddleware.isAuthenticated, authMiddleware.isAdmin, upload.array('dataFiles', 10), dashboardController.handleImportData);
-
-// API Xóa sạch dữ liệu KPI (Admin)
-router.post('/kpi-data/reset/:network', authMiddleware.isAuthenticated, authMiddleware.isAdmin, async (req, res) => {
-    const db = require('../models/db');
-    const net = req.params.network;
-    if(['3g', '4g', '5g'].includes(net)) {
-        try { await db.query(`TRUNCATE TABLE kpi_${net}`); } catch(e) { console.error(e); }
-    }
-    res.redirect('/import-data');
-});
-
-// API Xóa sạch dữ liệu cấu hình, POI, QoE, QoS (Admin)
-router.post('/import-data/reset/:table', authMiddleware.isAuthenticated, authMiddleware.isAdmin, dashboardController.resetImportedData);
+router.get('/scrip', isAuthenticated, scriptController.getScriptPage);
+router.post('/scrip', isAuthenticated, upload.none(), scriptController.generateScript);
 
 // ==========================================
-// 3. CÁC API CUNG CẤP DỮ LIỆU CHO AJAX (FRONTEND)
+// 2. BẢN ĐỒ GIS VÀ MÔ PHỎNG TA
 // ==========================================
-router.get('/api/districts', authMiddleware.isAuthenticated, dashboardController.getDistricts);
-router.get('/api/dashboard-data', authMiddleware.isAuthenticated, dashboardController.getDashboardData);
+router.get('/gis-map', isAuthenticated, mapController.getMapPage);
+router.get('/api/gis-data', isAuthenticated, mapController.getMapData);
+router.get('/api/ta-data', isAuthenticated, mapController.getTAData); 
+// [MỚI] API LẤY DỮ LIỆU CSHT
+router.get('/api/csht-data', isAuthenticated, mapController.getCshtData);
 
-// API Dữ liệu Cảnh Báo (Đọc từ Cache)
-router.get('/api/worst-cells-data', authMiddleware.isAuthenticated, dashboardController.getWorstCellsData);
-router.get('/api/congestion-3g-data', authMiddleware.isAuthenticated, dashboardController.getCongestion3gData);
-router.get('/api/traffic-down-data', authMiddleware.isAuthenticated, dashboardController.getTrafficDownData);
+// ==========================================
+// 3. PHÂN TÍCH KPI VÀ QOE/QOS
+// ==========================================
+router.get('/kpi-analytics', isAuthenticated, kpiController.getKpiAnalyticsPage);
+router.get('/api/kpi-data', isAuthenticated, kpiController.getKpiData);
+router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, kpiController.resetData);
 
-// API Báo Cáo Điểm Quan Tâm (POI)
-router.get('/api/poi-list', authMiddleware.isAuthenticated, dashboardController.getPoiList);
-router.get('/api/export-all-poi', authMiddleware.isAuthenticated, dashboardController.getAllPoiExportData);
+router.get('/qoe-qos-analytics', isAuthenticated, kpiController.getQoeQosAnalyticsPage);
+router.get('/api/qoe-qos-data', isAuthenticated, kpiController.getQoeQosData);
 
-// API Vẽ biểu đồ động (Đa luồng)
-router.get('/api/kpi-data', authMiddleware.isAuthenticated, dashboardController.getKpiData);
+router.get('/api/qoe-qos-list-all', isAuthenticated, kpiController.getQoeQosListAll);
+router.post('/api/save-cell-note', isAuthenticated, kpiController.saveCellNote);
 
-// API Dữ liệu Trải Nghiệm & Dịch Vụ (QoE/QoS)
-router.get('/api/qoe-qos-data', authMiddleware.isAuthenticated, dashboardController.getQoeQosData);
-router.get('/api/qoe-qos-list-all', authMiddleware.isAuthenticated, dashboardController.getQoeQosListAll);
-router.post('/api/save-cell-note', authMiddleware.isAuthenticated, dashboardController.saveCellNote);
+router.get('/optimizing-qoe-qos', isAuthenticated, kpiController.getOptimizingPage);
+router.get('/api/optimizing-data', isAuthenticated, kpiController.getOptimizingData);
 
-// API Thuật toán Tối Ưu (Tích hợp từ kpiController)
-if (kpiController && kpiController.getOptimizingData) {
-    router.get('/api/optimizing-data', authMiddleware.isAuthenticated, kpiController.getOptimizingData);
+// ==========================================
+// 4. IMPORT DỮ LIỆU
+// ==========================================
+router.get('/import-data', isAuthenticated, isAdmin, dashboardController.getImportPage);
+router.post('/import-data', isAuthenticated, isAdmin, upload.array('dataFiles', 50), dashboardController.handleImportData);
+router.post('/import-data/reset/:table', isAuthenticated, isAdmin, dashboardController.resetImportedData);
+
+// ==========================================
+// 5. QUẢN LÝ CƠ SỞ DỮ LIỆU TRẠM (RF DATABASE)
+// ==========================================
+router.get('/rf-database', isAuthenticated, rfController.getList);
+router.get('/rf-database/export', isAuthenticated, rfController.exportData); 
+router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
+router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, rfController.saveData);
+router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
+router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
+
+// ==========================================
+// 6. CÁC CỔNG GIAO TIẾP API CHO DASHBOARD
+// ==========================================
+router.get('/api/dashboard-data', isAuthenticated, dashboardController.getDashboardData);
+router.get('/api/districts', isAuthenticated, dashboardController.getDistricts); 
+
+router.get('/api/worst-cells-data', isAuthenticated, dashboardController.getWorstCellsData);
+router.get('/api/congestion-3g-data', isAuthenticated, dashboardController.getCongestion3gData);
+router.get('/api/traffic-down-data', isAuthenticated, dashboardController.getTrafficDownData);
+
+if (kpiController.getPoiList) {
+    router.get('/api/poi-list', isAuthenticated, kpiController.getPoiList);
+    router.get('/api/poi-data', isAuthenticated, kpiController.getPoiData);
 }
+
+// ==========================================
+// 7. QUẢN LÝ HỆ THỐNG & USER
+// ==========================================
+router.get('/system/profile', isAuthenticated, userController.getProfilePage);
+router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
+router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
+router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
+router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
+
+router.get('/logout', (req, res) => { 
+    req.session.destroy(); 
+    res.redirect('/login'); 
+});
 
 module.exports = router;
