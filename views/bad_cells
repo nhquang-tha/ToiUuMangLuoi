@@ -1,0 +1,234 @@
+<%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+    
+    .process-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 4px solid #c0392b; }
+    
+    .steps-container { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+    .step-box { flex: 1; min-width: 200px; padding: 15px; border-radius: 8px; border: 1px solid #ecf0f1; background: #fdfdfd; position: relative; overflow: hidden;}
+    .step-box::before { content:''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #3498db; }
+    .step-box h4 { margin: 0 0 5px 0; color: #2c3e50; font-size: 14px;}
+    .step-box p { margin: 0; font-size: 12px; color: #7f8c8d; line-height: 1.4; }
+    
+    .tab-header { display: flex; border-bottom: 2px solid #ecf0f1; margin-bottom: 20px; flex-wrap: wrap;}
+    .tab-btn { background: transparent; border: none; padding: 12px 25px; cursor: pointer; font-size: 14px; font-weight: bold; color: #7f8c8d; transition: 0.3s; position: relative; }
+    .tab-btn:hover { color: #2c3e50; }
+    .tab-btn.active { color: #c0392b; border-bottom: 3px solid #c0392b; }
+    .badge-count { position: absolute; top: 5px; right: 5px; background: #e74c3c; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; }
+
+    .tab-content { display: none; animation: fadeIn 0.4s; }
+    .tab-content.active { display: block; }
+
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.02); border-radius: 8px; overflow: hidden; }
+    .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: center; }
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; font-size: 11px; text-transform: uppercase; }
+    .data-table tbody tr:hover { background-color: #fdf2f2; }
+
+    .cell-name { font-weight: 800; color: #2980b9; font-size: 13px; text-align: left !important;}
+    .metric-val { font-weight: bold; }
+    .val-bad { color: #e74c3c; }
+
+    .status-select { padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; font-size: 11px; font-weight: bold; outline: none; cursor: pointer;}
+    .status-Pending { background: #fdf2f2; color: #c0392b; border-color: #fad2d2; }
+    .status-Processing { background: #fef5e7; color: #d35400; border-color: #fad7a1; }
+    .status-Done { background: #e8f8f5; color: #27ae60; border-color: #bce8e0; }
+    
+    .note-input { width: 100%; padding: 6px 10px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 11px; outline: none; box-sizing: border-box; }
+    .note-input:focus { border-color: #3498db; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+<div class="layout">
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1>☢️ Cứu Hộ Điểm Đen Vô Tuyến (Bad Cells)</h1>
+            <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 13px;">Hệ thống tự động loại trừ hiện tượng đột biến 1-2 ngày, chỉ bóc tách các trạm suy hao mãn tính (Vi phạm ≥ 5/7 ngày).</p>
+        </header>
+        
+        <div class="content-body">
+            
+            <div class="process-card">
+                <h3 style="margin-top: 0; color: #c0392b; margin-bottom: 15px;">🔄 Quy Trình Chuẩn 4 Bước (CEM Standard)</h3>
+                
+                <div class="steps-container">
+                    <div class="step-box" style="border-left-color:#3498db;">
+                        <h4>1. Lọc Công Nghệ</h4>
+                        <p>Ép các ngưỡng khắt khe nhất để định vị điểm yếu: Thput < 15Mbps (4G) / 50Mbps (5G), PRB > 70%, CQI < 90%.</p>
+                    </div>
+                    <div class="step-box" style="border-left-color:#9b59b6;">
+                        <h4>2. Lọc Tần Suất</h4>
+                        <p>Loại bỏ nhiễu dữ liệu. Chỉ chốt đơn các Cell bị "ốm" mãn tính 5/7 ngày. Tự động loại trừ trạm Blacklist (IBS, VSAT).</p>
+                    </div>
+                    <div class="step-box" style="border-left-color:#f39c12;">
+                        <h4>3. Ma Trận Ưu Tiên</h4>
+                        <p>Phân luồng 3 nhóm: P1 (Cấp cứu QoE - Rớt mạng/Mất Data), P2 (Nghẽn PRB cục bộ), P3 (Nhiễu CQI).</p>
+                    </div>
+                    <div class="step-box" style="border-left-color:#27ae60;">
+                        <h4>4. Đóng Vòng (Closed-Loop)</h4>
+                        <p>Kỹ sư cập nhật Status. Hệ thống tự động theo dõi, nếu 1 ngày sau KPI vượt ngưỡng, Cell sẽ biến mất khỏi danh sách.</p>
+                    </div>
+                </div>
+
+                <div id="loadingMsg" style="text-align: center; padding: 30px; color: #e74c3c; font-size: 15px; font-weight: bold;">
+                    <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang tải ma trận Bad Cells...
+                </div>
+
+                <div id="dashboardArea" style="display: none;">
+                    <div style="font-weight:bold; color:#2c3e50; margin-bottom: 15px;">📅 Kỳ Đánh Giá Nghiệm Thu (Mới Nhất): <span id="latestDate" style="color:#e74c3c;"></span></div>
+                    
+                    <div class="tab-header">
+                        <button class="tab-btn active" onclick="openTab(event, 'tabP1')">🚨 P1: Cấp Cứu QoE/Tốc Độ <span class="badge-count" id="countP1">0</span></button>
+                        <button class="tab-btn" onclick="openTab(event, 'tabP2')">⚠️ P2: Giải Tỏa Nghẽn (PRB) <span class="badge-count" id="countP2" style="background:#e67e22;">0</span></button>
+                        <button class="tab-btn" onclick="openTab(event, 'tabP3')">🔧 P3: Xử Lý Nhiễu (CQI) <span class="badge-count" id="countP3" style="background:#34495e;">0</span></button>
+                    </div>
+
+                    <div id="tabP1" class="tab-content active">
+                        <div style="padding: 10px 15px; background: #fdf2f2; color: #c0392b; border-left: 3px solid #e74c3c; margin-bottom: 15px; font-size: 12px; font-weight: bold;">Đội Truyền Dẫn / Vô Tuyến: Trạm Traffic cao nhưng tốc độ tải dưới 10 Mbps. Khách hàng phàn nàn trực tiếp.</div>
+                        <table class="data-table">
+                            <thead><tr><th style="text-align:left;">Tên Cell (Mạng)</th><th>Traffic<br>(TB 7 ngày)</th><th>Thput DL<br>(Kbps/Mbps)</th><th>Latency / Drop</th><th>Ngày Lỗi</th><th>Trạng Thái (Đóng Vòng)</th><th>Ghi Chú Xử Lý</th></tr></thead>
+                            <tbody id="bodyP1"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="tabP2" class="tab-content">
+                        <div style="padding: 10px 15px; background: #fef5e7; color: #d35400; border-left: 3px solid #e67e22; margin-bottom: 15px; font-size: 12px; font-weight: bold;">Đội Tối Ưu (RNO): Trạm nghẽn PRB > 70%. Yêu cầu San tải (Load Balancing) hoặc cụp Downtilt để hất user.</div>
+                        <table class="data-table">
+                            <thead><tr><th style="text-align:left;">Tên Cell (Mạng)</th><th>Traffic<br>(TB 7 ngày)</th><th>PRB DL (%)</th><th>Thput DL<br>(Kbps/Mbps)</th><th>Ngày Lỗi</th><th>Trạng Thái (Đóng Vòng)</th><th>Ghi Chú Xử Lý</th></tr></thead>
+                            <tbody id="bodyP2"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="tabP3" class="tab-content">
+                        <div style="padding: 10px 15px; background: #f4f6f8; color: #34495e; border-left: 3px solid #34495e; margin-bottom: 15px; font-size: 12px; font-weight: bold;">Đội UCTT Hiện Trường: Chất lượng kênh sóng CQI chạm đáy. Cần quét nhiễu ngoài, đo PIM, kiểm tra góc Azimuth.</div>
+                        <table class="data-table">
+                            <thead><tr><th style="text-align:left;">Tên Cell (Mạng)</th><th>CQI (%)</th><th>Drop Rate (%)</th><th>Thput DL<br>(Kbps/Mbps)</th><th>Ngày Lỗi</th><th>Trạng Thái (Đóng Vòng)</th><th>Ghi Chú Xử Lý</th></tr></thead>
+                            <tbody id="bodyP3"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    function openTab(evt, tabName) {
+        let i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tab-content");
+        for (i = 0; i < tabcontent.length; i++) { tabcontent[i].classList.remove("active"); }
+        tablinks = document.getElementsByClassName("tab-btn");
+        for (i = 0; i < tablinks.length; i++) { tablinks[i].classList.remove("active"); }
+        document.getElementById(tabName).classList.add("active");
+        evt.currentTarget.classList.add("active");
+    }
+
+    async function loadBadCells() {
+        try {
+            const res = await fetch('/api/bad-cells-data');
+            const result = await res.json();
+            document.getElementById('loadingMsg').style.display = 'none';
+
+            if (!result.data || result.data.length === 0) {
+                document.getElementById('dashboardArea').innerHTML = '<div style="text-align:center; padding: 40px; color: #27ae60; font-size: 16px; font-weight:bold;">🎉 Tuyệt vời! Toàn bộ mạng lưới không có Điểm Đen vô tuyến nào trong ngày mới nhất!</div>';
+                document.getElementById('dashboardArea').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('latestDate').innerText = result.latestDate;
+            document.getElementById('dashboardArea').style.display = 'block';
+
+            let hP1 = '', hP2 = '', hP3 = '';
+            let cP1 = 0, cP2 = 0, cP3 = 0;
+
+            const makeSelect = (id, currentStatus) => {
+                let sP = currentStatus === 'Pending' ? 'selected' : '';
+                let sPr = currentStatus === 'Processing' ? 'selected' : '';
+                let sD = currentStatus === 'Done' ? 'selected' : '';
+                let cls = `status-${currentStatus}`;
+                return `<select class="status-select ${cls}" onchange="updateStatus(${id}, this)">
+                    <option value="Pending" ${sP}>🔴 Pending</option>
+                    <option value="Processing" ${sPr}>🟡 Processing</option>
+                    <option value="Done" ${sD}>🟢 Done (Theo dõi)</option>
+                </select>`;
+            };
+
+            const makeNote = (id, note) => {
+                return `<input type="text" class="note-input" value="${note || ''}" placeholder="Gõ xong ấn Enter..." onchange="updateNote(${id}, this.value)">`;
+            };
+
+            result.data.forEach(r => {
+                let netBadge = r.network === '5g' ? `<span style="background:#e8f8f5; color:#16a085; padding:2px 5px; border-radius:3px; font-size:10px; margin-left:5px;">5G</span>` : `<span style="background:#f4ecf8; color:#8e44ad; padding:2px 5px; border-radius:3px; font-size:10px; margin-left:5px;">4G</span>`;
+                let cellHtml = `<td class="cell-name">${r.cell_name} ${netBadge}</td>`;
+                
+                if (r.priority === 'P1') {
+                    cP1++;
+                    hP1 += `<tr>${cellHtml}
+                        <td>${r.avg_traffic.toFixed(1)}</td>
+                        <td class="metric-val val-bad">${r.avg_thput.toFixed(1)}</td>
+                        <td>${r.network === '4g' ? r.avg_latency.toFixed(1) + ' ms' : r.avg_drop.toFixed(2) + ' %'}</td>
+                        <td><b style="color:#c0392b">${r.violation_days}/7</b> ngày</td>
+                        <td>${makeSelect(r.id, r.status)}</td><td>${makeNote(r.id, r.action_note)}</td></tr>`;
+                } else if (r.priority === 'P2') {
+                    cP2++;
+                    hP2 += `<tr>${cellHtml}
+                        <td>${r.avg_traffic.toFixed(1)}</td>
+                        <td class="metric-val val-bad">${r.avg_prb.toFixed(1)}</td>
+                        <td>${r.avg_thput.toFixed(1)}</td>
+                        <td><b style="color:#c0392b">${r.violation_days}/7</b> ngày</td>
+                        <td>${makeSelect(r.id, r.status)}</td><td>${makeNote(r.id, r.action_note)}</td></tr>`;
+                } else {
+                    cP3++;
+                    hP3 += `<tr>${cellHtml}
+                        <td class="metric-val val-bad">${r.avg_cqi.toFixed(1)}</td>
+                        <td>${r.avg_drop.toFixed(2)}</td>
+                        <td>${r.avg_thput.toFixed(1)}</td>
+                        <td><b style="color:#c0392b">${r.violation_days}/7</b> ngày</td>
+                        <td>${makeSelect(r.id, r.status)}</td><td>${makeNote(r.id, r.action_note)}</td></tr>`;
+                }
+            });
+
+            document.getElementById('countP1').innerText = cP1; document.getElementById('bodyP1').innerHTML = hP1;
+            document.getElementById('countP2').innerText = cP2; document.getElementById('bodyP2').innerHTML = hP2;
+            document.getElementById('countP3').innerText = cP3; document.getElementById('bodyP3').innerHTML = hP3;
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById('loadingMsg').innerHTML = '❌ Lỗi tải dữ liệu từ máy chủ.';
+        }
+    }
+
+    async function updateStatus(id, selectEl) {
+        let newStatus = selectEl.value;
+        selectEl.className = `status-select status-${newStatus}`;
+        await pushUpdate(id, newStatus, selectEl.closest('tr').querySelector('.note-input').value);
+    }
+
+    async function updateNote(id, newNote) {
+        let status = document.querySelector(`select[onchange="updateStatus(${id}, this)"]`).value;
+        await pushUpdate(id, status, newNote);
+    }
+
+    async function pushUpdate(id, status, note) {
+        try {
+            await fetch('/api/bad-cells-update', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, status: status, action_note: note })
+            });
+        } catch (e) { alert("Lỗi mạng khi lưu trạng thái!"); }
+    }
+
+    window.onload = loadBadCells;
+</script>
+</body>
+</html>
