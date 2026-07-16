@@ -115,42 +115,49 @@
     </div>
 
     <!-- Danh sách Menu -->
-    <div class="sidebar-menu">
-        <ul>
-            <li>
-                <a href="/" class="<%= currentPath === 'Dashboard' ? 'active' : '' %>">🏠 Tổng Quan Dashboard</a>
-            </li>
-            
-            <li class="menu-category">PHÂN TÍCH & BẢN ĐỒ</li>
-            <li><a href="/kpi-analytics" class="<%= currentPath === 'KPI Analytics' ? 'active' : '' %>">📊 Tra cứu KPI</a></li>
-            <li><a href="/qoe-qos-analytics" class="<%= currentPath === 'QoE/QoS Analytics' ? 'active' : '' %>" style="<%= currentPath === 'QoE/QoS Analytics' ? '' : 'color: #f1c40f;' %>">⭐ Tra cứu QoE / QoS</a></li>
-            <li><a href="/poi-report" class="<%= currentPath === 'POI Report' ? 'active' : '' %>">📍 Tra cứu POI</a></li>
-            <li><a href="/gis-map" class="<%= currentPath === 'GIS Map' ? 'active' : '' %>">🌍 Bản đồ Vùng Phủ (GIS)</a></li>
-            
-            <li class="menu-category">CẢNH BÁO CHẤT LƯỢNG</li>
-            <li><a href="/worst-cells" class="<%= currentPath === 'Worst Cells' ? 'active' : '' %>">🚨 Worst Cells 4G</a></li>
-            <li><a href="/congestion-3g" class="<%= currentPath === 'Congestion 3G' ? 'active' : '' %>">⚠️ Nghẽn Mạng 3G</a></li>
-            <li><a href="/traffic-down" class="<%= currentPath === 'Traffic Down' ? 'active' : '' %>">📉 Sụt giảm Lưu lượng</a></li>
+    <div class="sidebar">
+    <h2>📡 VNPT DASHBOARD</h2>
+    <ul>
+        <!-- Menu Tổng Quan -->
+        <li><a href="/" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Dashboard' ? 'active' : '' %>">📊 Tổng quan hệ thống</a></li>
+        
+        <!-- Menu Cảnh Báo -->
+        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">CẢNH BÁO (ALERTS)</li>
+        <li><a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>">🔴 Worst Cells 4G</a></li>
+        <li><a href="/congestion-3g" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Congestion 3G' ? 'active' : '' %>">🟠 Nghẽn mạng 3G</a></li>
+        <li><a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>">📉 Sụt giảm lưu lượng</a></li>
+        
+        <!-- Menu Tối Ưu Hóa -->
+        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">TỐI ƯU HÓA (OPTIMIZING)</li>
+        <li><a href="/optimizing-qoe-qos" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>" style="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? '' : 'color: #2ecc71;' %>">🛠️ Tối ưu QoE/QoS (5 Bước)</a></li>
+        <!-- Thêm Menu Bad Cells vào nhóm Tối ưu hóa -->
+        <li><a href="/bad-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? 'active' : '' %>" style="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? '' : 'color: #e74c3c;' %>">☢️ Xử lý Điểm Đen (Bad Cell)</a></li>
+        <li><a href="/downtilt-coverage" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Downtilt Coverage' ? 'active' : '' %>">📐 Căn chỉnh Downtilt</a></li>
 
-            <li class="menu-category">TỐI ƯU HÓA (OPTIMIZING)</li>
-            <li><a href="/optimizing-qoe-qos" class="<%= currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>" style="<%= currentPath === 'Optimizing QoE/QoS' ? '' : 'color: #2ecc71;' %>">🛠️ Tối ưu QoE/QoS (5 Bước)</a></li>
+        <!-- Menu Phân Tích Chuyên Sâu -->
+        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">PHÂN TÍCH (ANALYTICS)</li>
+        <li><a href="/kpi-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'KPI Analytics' ? 'active' : '' %>">📈 Tra cứu KPI đa mạng</a></li>
+        <li><a href="/qoe-qos-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'QoE QoS Analytics' ? 'active' : '' %>">⭐ Phân tích QoE/QoS</a></li>
+        <li><a href="/poi-report" class="<%= typeof currentPath !== 'undefined' && currentPath === 'POI Report' ? 'active' : '' %>">🏢 Báo cáo POI (Điểm nóng)</a></li>
 
-            <li class="menu-category">QUẢN TRỊ DỮ LIỆU</li>
-            <li><a href="/rf-database" class="<%= currentPath === 'RF Database' ? 'active' : '' %>">📡 CSDL Trạm (RF)</a></li>
-            <li><a href="/downtilt-coverage" class="<%= currentPath === 'Downtilt Coverage' ? 'active' : '' %>">📐 Downtilt & Coverage</a></li>
-            <li><a href="/scrip" class="<%= currentPath === 'Scrip' ? 'active' : '' %>">📜 Thư viện Scrip</a></li>
-            
-            <% if (isAdminMenu) { %>
-                <li class="menu-category" style="color: #e74c3c;">ADMIN ZONE</li>
-                <li><a href="/import-data" class="<%= currentPath === 'Import Data' ? 'active' : '' %>">📥 Nạp Dữ Liệu (Import)</a></li>
-                <li><a href="/system/users" class="<%= currentPath === 'User Manager' ? 'active' : '' %>">👥 Quản Lý Người Dùng</a></li>
-            <% } %>
+        <!-- Menu Công Cụ & Dữ Liệu -->
+        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">CÔNG CỤ & DỮ LIỆU</li>
+        <li><a href="/gis-map" class="<%= typeof currentPath !== 'undefined' && currentPath === 'GIS Map' ? 'active' : '' %>">🌍 Bản đồ GIS & Mô phỏng TA</a></li>
+        <li><a href="/rf-database" class="<%= typeof currentPath !== 'undefined' && currentPath === 'RF Database' ? 'active' : '' %>">📡 Quản lý cơ sở dữ liệu Trạm</a></li>
+        <li><a href="/scrip" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Scrip' ? 'active' : '' %>">📜 Thư viện Scrip (O&M)</a></li>
+        
+        <!-- Menu Quản Trị -->
+        <% if (currentUser && currentUser.role === 'admin') { %>
+            <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">QUẢN TRỊ HỆ THỐNG</li>
+            <li><a href="/import-data" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Import Data' ? 'active' : '' %>">📥 Nạp dữ liệu (Import)</a></li>
+            <li><a href="/system/users" class="<%= typeof currentPath !== 'undefined' && currentPath === 'User Manager' ? 'active' : '' %>">👥 Quản lý tài khoản</a></li>
+        <% } %>
 
-            <li class="menu-category">CÁ NHÂN</li>
-            <li><a href="/system/profile" class="<%= currentPath === 'Profile' ? 'active' : '' %>">👤 Thông tin & Mật khẩu</a></li>
-            <li><a href="/logout" class="highlight-warning" style="color: #e74c3c;">🚪 Đăng Xuất</a></li>
-        </ul>
-    </div>
+        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">TÀI KHOẢN</li>
+        <li><a href="/system/profile" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Profile' ? 'active' : '' %>">🔑 Đổi mật khẩu</a></li>
+        <li><a href="/logout" style="color: #e74c3c;">🚪 Đăng xuất</a></li>
+    </ul>
+</div>
 </nav>
 
 <script>
