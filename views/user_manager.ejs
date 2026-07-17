@@ -1,10 +1,28 @@
 <%- include('partials/head') %>
 <%
-    // Chuẩn bị biến an toàn để hiển thị Sidebar
     let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
     let rawRole = activeUser && activeUser.role ? activeUser.role : '';
     let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
     let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+    
+    // Danh mục các quyền
+    const menus = [
+        { id: 'dashboard', name: 'Tổng quan Dashboard' },
+        { id: 'gis_map', name: 'Bản đồ Quy hoạch (GIS)' },
+        { id: 'worst_cells', name: 'Worst Cells 4G' },
+        { id: 'congestion_3g', name: 'Nghẽn Mạng 3G' },
+        { id: 'traffic_down', name: 'Sụt giảm lưu lượng' },
+        { id: 'kpi_analytics', name: 'Tra cứu KPI Đa mạng' },
+        { id: 'qoe_qos', name: 'Phân tích QoE/QoS' },
+        { id: 'poi_report', name: 'Báo cáo chuẩn POI' },
+        { id: 'optimizing_qoe_qos', name: 'Tối ưu QoE/QoS (5 Bước)' },
+        { id: 'bad_cells', name: 'Xử lý Điểm đen (Bad Cell)' },
+        { id: 'downtilt_coverage', name: 'Căn chỉnh Downtilt' },
+        { id: 'rf_database', name: 'Cơ sở dữ liệu RF' },
+        { id: 'scrip', name: 'Tool sinh Script (O&M)' },
+        { id: 'import_data', name: 'Nạp dữ liệu (Import)' },
+        { id: 'user_manager', name: 'Quản lý Tài khoản' }
+    ];
 %>
 <style>
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
@@ -15,15 +33,19 @@
     .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
     .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; }
     .data-table tbody tr:hover { background-color: #f4f6f8; }
+
+    /* Modal Styles */
+    .modal-overlay { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
+    .modal-overlay.show { display: flex; opacity: 1; }
+    .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 700px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: scale(0.9); transition: transform 0.2s; }
+    .modal-overlay.show .modal-content { transform: scale(1); }
 </style>
 
 <div class="layout">
-    <!-- Load Sidebar và truyền dữ liệu người dùng vào -->
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
-    
     <main class="main-content">
         <header class="topbar">
-            <h1>Quản Lý Người Dùng (User Manager)</h1>
+            <h1>Quản Lý & Phân Quyền (RBAC)</h1>
         </header>
         
         <div class="content-body">
@@ -31,23 +53,37 @@
             <!-- Form Thêm Tài Khoản Mới -->
             <div class="card" style="margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #27ae60;">
                 <h3 style="margin-top: 0; color: #2c3e50; margin-bottom: 15px;">➕ Thêm Tài Khoản Mới</h3>
-                <form action="/system/users/add" method="POST" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
-                    <div style="flex: 1; min-width: 200px;">
-                        <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Tên đăng nhập:</label>
-                        <input type="text" name="username" required placeholder="Nhập username..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                <form action="/system/users/add" method="POST">
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Tên đăng nhập:</label>
+                            <input type="text" name="username" required placeholder="Nhập username..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Mật khẩu:</label>
+                            <input type="password" name="password" required placeholder="Nhập mật khẩu..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Phân Quyền Lõi:</label>
+                            <select name="role" id="roleSelectAdd" required style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; cursor: pointer;">
+                                <option value="user">USER (Người dùng thường)</option>
+                                <option value="admin">ADMIN (Quản trị viên)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; height: 39px;">Tạo Tài Khoản</button>
                     </div>
-                    <div style="flex: 1; min-width: 200px;">
-                        <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Mật khẩu:</label>
-                        <input type="password" name="password" required placeholder="Nhập mật khẩu..." style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none;">
+
+                    <div style="width: 100%; margin-top: 20px; border-top: 1px dashed #bdc3c7; padding-top: 15px;">
+                        <label style="display:block; margin-bottom:10px; font-weight:bold; font-size:13px; color:#2980b9;">☑️ Tích chọn Menu cho phép hiển thị:</label>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">
+                            <% menus.forEach(m => { %>
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #34495e; cursor: pointer;">
+                                    <input type="checkbox" name="permissions[]" value="<%= m.id %>" class="cb-perm-add" checked>
+                                    <%= m.name %>
+                                </label>
+                            <% }) %>
+                        </div>
                     </div>
-                    <div style="flex: 1; min-width: 150px;">
-                        <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:13px; color:#34495e;">Phân Quyền:</label>
-                        <select name="role" required style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; cursor: pointer;">
-                            <option value="user">USER (Chỉ xem báo cáo)</option>
-                            <option value="admin">ADMIN (Quản trị viên)</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; height: 39px;">Tạo Tài Khoản</button>
                 </form>
             </div>
 
@@ -58,7 +94,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Tên Đăng Nhập</th>
-                            <th>Quyền Hạn</th>
+                            <th>Quyền Cốt Lõi</th>
                             <th>Ngày Tạo</th>
                             <th style="text-align: center;">Thao Tác</th>
                         </tr>
@@ -74,25 +110,23 @@
                                             <%= (u.role || 'USER').toUpperCase() %>
                                         </span>
                                     </td>
-                                    <td>
-                                        <%= u.created_at ? new Date(u.created_at).toLocaleString('vi-VN') : 'Không xác định' %>
-                                    </td>
+                                    <td><%= u.created_at ? new Date(u.created_at).toLocaleString('vi-VN') : 'Không xác định' %></td>
                                     <td style="text-align: center;">
-                                        <!-- Không cho phép User xóa chính bản thân mình -->
                                         <% if (activeUser && u.id === activeUser.id) { %>
                                             <span style="font-size: 12px; color: #7f8c8d; font-style: italic; display: inline-block; padding: 5px;">Đang đăng nhập</span>
                                         <% } else { %>
-                                            <form action="/system/users/delete/<%= u.id %>" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Chắc chắn muốn xóa tài khoản <%= u.username %> vĩnh viễn?');">
-                                                <button type="submit" class="btn-danger" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 3px; font-size: 12px; font-weight: bold; cursor: pointer;">Xóa</button>
-                                            </form>
+                                            <div style="display: flex; gap: 8px; justify-content: center;">
+                                                <button type="button" onclick="openEditModal(<%= u.id %>, '<%= u.username %>', '<%= u.permissions ? u.permissions.replace(/'/g, "\\'") : "[]" %>')" style="background: #f39c12; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">🔑 Sửa Quyền</button>
+                                                <form action="/system/users/delete/<%= u.id %>" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Chắc chắn muốn xóa tài khoản <%= u.username %> vĩnh viễn?');">
+                                                    <button type="submit" class="btn-danger" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">Xóa</button>
+                                                </form>
+                                            </div>
                                         <% } %>
                                     </td>
                                 </tr>
                             <% }) %>
                         <% } else { %>
-                            <tr>
-                                <td colspan="5" style="text-align: center; padding: 30px; color: #7f8c8d;">Không có dữ liệu người dùng</td>
-                            </tr>
+                            <tr><td colspan="5" style="text-align: center; padding: 30px; color: #7f8c8d;">Không có dữ liệu</td></tr>
                         <% } %>
                     </tbody>
                 </table>
@@ -101,5 +135,68 @@
         </div>
     </main>
 </div>
+
+<!-- Modal Edit Permissions -->
+<div id="editPermModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 style="margin-top:0; color:#2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 15px;">Sửa Phân Quyền (Menu): <span id="editUserName" style="color:#2980b9;"></span></h3>
+        <form id="editPermForm" method="POST" action="">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 25px;">
+                <% menus.forEach(m => { %>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #34495e; cursor: pointer;">
+                        <input type="checkbox" name="permissions[]" value="<%= m.id %>" class="cb-perm-edit" id="cb_edit_<%= m.id %>">
+                        <%= m.name %>
+                    </label>
+                <% }) %>
+            </div>
+            <div style="text-align: right; gap: 10px; display: flex; justify-content: flex-end;">
+                <button type="button" onclick="closeEditModal()" style="padding: 10px 20px; border: none; background: #95a5a6; color: white; border-radius: 6px; cursor: pointer; font-weight:bold;">Hủy Bỏ</button>
+                <button type="submit" style="padding: 10px 20px; border: none; background: #27ae60; color: white; border-radius: 6px; cursor: pointer; font-weight:bold;">💾 Lưu Thay Đổi</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Logic Auto-check/uncheck khi chọn Role lúc tạo mới
+    document.getElementById('roleSelectAdd').addEventListener('change', function(e) {
+        const cbs = document.querySelectorAll('.cb-perm-add');
+        if (e.target.value === 'admin') {
+            cbs.forEach(cb => cb.checked = true);
+        } else {
+            cbs.forEach(cb => {
+                if(['rf_database', 'scrip', 'import_data', 'user_manager'].includes(cb.value)) cb.checked = false;
+            });
+        }
+    });
+
+    // Logic Đóng Mở Modal
+    function openEditModal(userId, username, permsStr) {
+        document.getElementById('editUserName').innerText = username;
+        document.getElementById('editPermForm').action = '/system/users/update-permissions/' + userId;
+        
+        // Bỏ tick tất cả trước
+        document.querySelectorAll('.cb-perm-edit').forEach(cb => cb.checked = false);
+        
+        // Check các ô tương ứng với quyền của user
+        try {
+            const perms = JSON.parse(permsStr || "[]");
+            perms.forEach(p => {
+                let cb = document.getElementById('cb_edit_' + p);
+                if (cb) cb.checked = true;
+            });
+        } catch(e) {}
+        
+        const modal = document.getElementById('editPermModal');
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('show'), 10);
+    }
+    
+    function closeEditModal() {
+        const modal = document.getElementById('editPermModal');
+        modal.classList.remove('show');
+        setTimeout(() => modal.style.display = 'none', 200);
+    }
+</script>
 </body>
 </html>
