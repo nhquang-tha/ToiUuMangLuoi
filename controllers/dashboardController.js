@@ -1248,9 +1248,29 @@ exports.getQoeQosData = async (req, res) => {
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+        let [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+        
+        // TỰ ĐỘNG ĐỒNG BỘ: Nếu bảng cache trống, gọi hàm tạo cache ngay lập tức
+        if (rows.length === 0) {
+            console.log("⚡ Dữ liệu tổng hợp QoE/QoS đang trống. Hệ thống đang tự động kích hoạt đồng bộ...");
+            await syncQoeQosSummary(); 
+            // Sau khi đồng bộ xong, truy vấn lại dữ liệu
+            [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+        }
+        
         res.json(rows);
-    } catch (e) { res.status(500).json([]); }
+    } catch (e) { 
+        console.error("Bảng qoe_qos chưa sẵn sàng, đang tự động khởi tạo lại:", e.message);
+        try {
+            // Nếu bảng lỗi hoặc chưa từng tồn tại, tạo bảng và truy vấn lại
+            await syncQoeQosSummary();
+            const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+            res.json(rows);
+        } catch (err) {
+            console.error("Lỗi khởi tạo bảng QoE/QoS:", err);
+            res.json([]); 
+        }
+    }
 };
 
 exports.saveCellNote = async (req, res) => {
