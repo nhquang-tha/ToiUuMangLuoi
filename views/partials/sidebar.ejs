@@ -1,172 +1,295 @@
-<%
-    let safeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
-    let isAdminMenu = safeUser && safeUser.role === 'admin';
-    let currentPath = typeof page !== 'undefined' ? page : '';
-%>
-
-<!-- STYLES DÀNH RIÊNG CHO SIDEBAR MỚI (GHI ĐÈ CSS CŨ) -->
 <style>
-    /* Nút Hamburger cho Mobile */
-    .mobile-toggle {
-        display: none; position: fixed; top: 15px; left: 15px; z-index: 1001;
-        background: #3498db; color: white; padding: 10px 15px; border-radius: 8px;
-        cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        transition: 0.3s;
-    }
-    .mobile-toggle:hover { background: #2980b9; transform: scale(1.05); }
-
-    /* Lớp phủ mờ khi mở Menu trên Mobile */
-    .sidebar-overlay {
-        display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(15, 23, 42, 0.7); z-index: 999; backdrop-filter: blur(3px);
-        opacity: 0; transition: opacity 0.3s ease;
-    }
-    .sidebar-overlay.show { display: block; opacity: 1; }
-
-    /* Khung Sidebar Chính */
-    .modern-sidebar {
-        width: 270px; background: #1e293b; color: #f8fafc; height: 100vh;
-        display: flex; flex-direction: column; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 4px 0 15px rgba(0,0,0,0.1); position: relative; z-index: 1000;
-        flex-shrink: 0;
-    }
-
-    /* Logo & Brand */
-    .sidebar-brand {
-        padding: 22px 20px; display: flex; align-items: center; gap: 12px;
-        background: #0f172a; border-bottom: 1px solid #334155;
-    }
-    .sidebar-brand .logo-icon { font-size: 24px; background: linear-gradient(135deg, #3498db, #9b59b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .sidebar-brand h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; color: #f1f5f9; }
-
-    /* Vùng chứa Menu có thanh cuộn mượt */
-    .sidebar-menu { flex: 1; overflow-y: auto; padding: 15px 12px; }
-    .sidebar-menu::-webkit-scrollbar { width: 5px; }
-    .sidebar-menu::-webkit-scrollbar-thumb { background: #475569; border-radius: 5px; }
-    .sidebar-menu::-webkit-scrollbar-track { background: transparent; }
-
-    .sidebar-menu ul { list-style: none; padding: 0; margin: 0; }
-
-    /* Tiêu đề Phân loại Menu */
-    .menu-category {
-        padding: 18px 15px 6px 15px; font-size: 11px; color: #94a3b8;
-        text-transform: uppercase; font-weight: 700; letter-spacing: 1px;
-    }
-
-    /* Các Nút Menu */
-    .sidebar-menu li a {
-        display: flex; align-items: center; padding: 12px 15px; color: #cbd5e1;
-        text-decoration: none; transition: all 0.2s ease; font-size: 14px; font-weight: 500;
-        border-radius: 8px; margin-bottom: 4px;
-    }
-
-    .sidebar-menu li a:hover {
-        background: #334155; color: #ffffff; transform: translateX(5px);
-    }
-
-    /* Hiệu ứng Nút đang được chọn (Active) */
-    .sidebar-menu li a.active {
-        background: linear-gradient(90deg, #3498db, #2980b9);
-        color: white; font-weight: 700;
-        box-shadow: 0 4px 10px rgba(52, 152, 219, 0.4);
+    /* CSS RIÊNG CHO SIDEBAR */
+    .sidebar { 
+        width: 260px; 
+        background: #ffffff; 
+        border-right: 1px solid #e2e8f0; 
+        height: 100vh; 
+        display: flex; 
+        flex-direction: column; 
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        z-index: 100;
+        position: relative;
     }
     
-    /* Ghi đè màu đặc biệt cho một số chức năng (VD: Admin, Đăng xuất) */
-    .sidebar-menu li a.highlight-warning:hover { background: #e74c3c; color: white; }
+    /* Trạng thái thu gọn */
+    .sidebar.collapsed { width: 72px; }
 
-    /* ====================================================
-       📱 RESPONSIVE (DÀNH CHO ĐIỆN THOẠI & TABLET)
-       ==================================================== */
-    @media (max-width: 992px) {
-        /* Hiển thị nút Hamburger */
-        .mobile-toggle { display: block; }
-        
-        /* Ẩn thanh Sidebar ra khỏi màn hình bên trái */
-        .modern-sidebar {
-            position: fixed; top: 0; left: -280px; height: 100vh;
-        }
-        
-        /* Khi click Hamburger thì trượt vào */
-        .modern-sidebar.show { transform: translateX(280px); }
-
-        /* Đẩy nội dung chính xuống một chút để không bị đè bởi nút Hamburger */
-        body .layout .main-content { padding-top: 70px !important; }
-        body .layout .topbar { display: none; /* Ẩn topbar mặc định trên mobile cho thoáng */ }
+    .sidebar-header { 
+        height: 60px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        padding: 0 16px; 
+        border-bottom: 1px solid #e2e8f0; 
     }
+    
+    .sidebar-logo { 
+        display: flex; 
+        align-items: center; 
+        gap: 10px; 
+        font-weight: 800; 
+        color: #0f172a; 
+        font-size: 16px; 
+        letter-spacing: -0.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        transition: opacity 0.2s;
+    }
+    
+    .sidebar.collapsed .sidebar-logo { opacity: 0; width: 0; pointer-events: none;}
+
+    .toggle-btn { 
+        background: #f1f5f9; 
+        border: none; 
+        color: #475569; 
+        width: 32px; 
+        height: 32px !important; 
+        border-radius: 8px; 
+        display: flex !important; 
+        align-items: center; 
+        justify-content: center; 
+        cursor: pointer; 
+        transition: 0.2s;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    .toggle-btn:hover { background: #e2e8f0; color: #0f172a; }
+
+    .sidebar-menu { 
+        flex: 1; 
+        overflow-y: auto; 
+        overflow-x: hidden; 
+        padding: 16px 12px; 
+        list-style: none; 
+        margin: 0; 
+    }
+
+    .menu-category { 
+        font-size: 11px; 
+        font-weight: 700; 
+        color: #94a3b8; 
+        text-transform: uppercase; 
+        letter-spacing: 0.5px; 
+        margin: 16px 0 8px 12px; 
+        white-space: nowrap;
+        transition: opacity 0.2s;
+    }
+    .sidebar.collapsed .menu-category { opacity: 0; height: 0; margin: 0; }
+
+    .menu-item a { 
+        display: flex; 
+        align-items: center; 
+        padding: 10px 12px; 
+        color: #475569; 
+        text-decoration: none; 
+        border-radius: 8px; 
+        font-weight: 500; 
+        font-size: 13.5px; 
+        margin-bottom: 4px;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+    
+    .menu-item a i { font-size: 20px; min-width: 24px; margin-right: 12px; transition: margin 0.3s; }
+    .sidebar.collapsed .menu-item a i { margin-right: 0; }
+    
+    .menu-text { transition: opacity 0.2s; }
+    .sidebar.collapsed .menu-text { opacity: 0; display: none; }
+
+    .menu-item a:hover { background: #f1f5f9; color: #0f172a; }
+    .menu-item a.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
+    .menu-item a.active i { color: #3b82f6; }
+
+    .menu-item a.danger-link { color: #ef4444; }
+    .menu-item a.danger-link:hover { background: #fef2f2; color: #dc2626; }
+
+    /* Tooltip khi thu gọn */
+    .menu-item { position: relative; }
+    .sidebar.collapsed .menu-item:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 60px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: #1e293b;
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1000;
+        pointer-events: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .user-profile {
+        padding: 16px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .avatar { width: 36px; height: 36px; border-radius: 10px; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #475569; flex-shrink: 0;}
+    .user-info { display: flex; flex-direction: column; }
+    .user-name { font-weight: 600; font-size: 13px; color: #0f172a; }
+    .user-role { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700;}
+    .sidebar.collapsed .user-info { display: none; }
 </style>
 
-<!-- ==========================================
-     MÃ HTML CẤU TRÚC SIDEBAR
-     ========================================== -->
-
-<!-- Nút mở Menu trên Điện thoại -->
-<div class="mobile-toggle" onclick="toggleSidebar()">
-    ☰ MENU
-</div>
-
-<!-- Lớp nền mờ khi mở Menu -->
-<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
-
-<nav class="modern-sidebar" id="mainSidebar">
-    <!-- Brand / Logo -->
-    <div class="sidebar-brand">
-        <span class="logo-icon">🌐</span>
-        <h2>VNPT TELECOM</h2>
+<aside class="sidebar" id="mainSidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <i class="ph-fill ph-broadcast" style="color: #2563eb; font-size: 24px;"></i>
+            <span>VNPT Telecom</span>
+        </div>
+        <button class="toggle-btn" id="toggleSidebar" title="Thu gọn / Mở rộng">
+            <i class="ph ph-list"></i>
+        </button>
     </div>
 
-    <!-- Danh sách Menu -->
-    <div class="sidebar">
-    <h2>📡 VNPT DASHBOARD</h2>
-    <ul>
-        <!-- Menu Tổng Quan -->
-        <li><a href="/" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Dashboard' ? 'active' : '' %>">📊 Tổng quan hệ thống</a></li>
+    <ul class="sidebar-menu">
         
-        <!-- Menu Cảnh Báo -->
-        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">CẢNH BÁO (ALERTS)</li>
-        <li><a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>">🔴 Worst Cells 4G</a></li>
-        <li><a href="/congestion-3g" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Congestion 3G' ? 'active' : '' %>">🟠 Nghẽn mạng 3G</a></li>
-        <li><a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>">📉 Sụt giảm lưu lượng</a></li>
-        
-        <!-- Menu Tối Ưu Hóa -->
-        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">TỐI ƯU HÓA (OPTIMIZING)</li>
-        <li><a href="/optimizing-qoe-qos" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>" style="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? '' : 'color: #2ecc71;' %>">🛠️ Tối ưu QoE/QoS (5 Bước)</a></li>
-        <!-- Thêm Menu Bad Cells vào nhóm Tối ưu hóa -->
-        <li><a href="/bad-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? 'active' : '' %>" style="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? '' : 'color: #e74c3c;' %>">☢️ Xử lý Điểm Đen (Bad Cell)</a></li>
-        <li><a href="/downtilt-coverage" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Downtilt Coverage' ? 'active' : '' %>">📐 Căn chỉnh Downtilt</a></li>
+        <!-- NHÓM CHUNG (All Users) -->
+        <li class="menu-category">TỔNG QUAN</li>
+        <li class="menu-item" data-tooltip="Dashboard">
+            <a href="/" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Dashboard' ? 'active' : '' %>">
+                <i class="ph ph-squares-four"></i> <span class="menu-text">Hệ thống Dashboard</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Bản đồ GIS">
+            <a href="/gis-map" class="<%= typeof currentPath !== 'undefined' && currentPath === 'GIS Map' ? 'active' : '' %>">
+                <i class="ph ph-map-trifold"></i> <span class="menu-text">Bản đồ quy hoạch (GIS)</span>
+            </a>
+        </li>
 
-        <!-- Menu Phân Tích Chuyên Sâu -->
-        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">PHÂN TÍCH (ANALYTICS)</li>
-        <li><a href="/kpi-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'KPI Analytics' ? 'active' : '' %>">📈 Tra cứu KPI đa mạng</a></li>
-        <li><a href="/qoe-qos-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'QoE QoS Analytics' ? 'active' : '' %>">⭐ Phân tích QoE/QoS</a></li>
-        <li><a href="/poi-report" class="<%= typeof currentPath !== 'undefined' && currentPath === 'POI Report' ? 'active' : '' %>">🏢 Báo cáo POI (Điểm nóng)</a></li>
+        <li class="menu-category">GIÁM SÁT & CẢNH BÁO</li>
+        <li class="menu-item" data-tooltip="Worst Cells 4G">
+            <a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>">
+                <i class="ph ph-warning-circle" style="color: #ef4444;"></i> <span class="menu-text">Worst Cells 4G</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Nghẽn Mạng 3G">
+            <a href="/congestion-3g" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Congestion 3G' ? 'active' : '' %>">
+                <i class="ph ph-cell-signal-low" style="color: #f59e0b;"></i> <span class="menu-text">Nghẽn Mạng 3G</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Sụt Giảm Lưu Lượng">
+            <a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>">
+                <i class="ph ph-trend-down" style="color: #8b5cf6;"></i> <span class="menu-text">Sụt giảm lưu lượng</span>
+            </a>
+        </li>
 
-        <!-- Menu Công Cụ & Dữ Liệu -->
-        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">CÔNG CỤ & DỮ LIỆU</li>
-        <li><a href="/gis-map" class="<%= typeof currentPath !== 'undefined' && currentPath === 'GIS Map' ? 'active' : '' %>">🌍 Bản đồ GIS & Mô phỏng TA</a></li>
-        <li><a href="/rf-database" class="<%= typeof currentPath !== 'undefined' && currentPath === 'RF Database' ? 'active' : '' %>">📡 Quản lý cơ sở dữ liệu Trạm</a></li>
-        <li><a href="/scrip" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Scrip' ? 'active' : '' %>">📜 Thư viện Scrip (O&M)</a></li>
-        
-        <!-- Menu Quản Trị -->
+        <li class="menu-category">PHÂN TÍCH & TỐI ƯU</li>
+        <li class="menu-item" data-tooltip="Tra cứu KPI">
+            <a href="/kpi-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'KPI Analytics' ? 'active' : '' %>">
+                <i class="ph ph-chart-line-up"></i> <span class="menu-text">Tra cứu KPI Đa mạng</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Phân tích QoE/QoS">
+            <a href="/qoe-qos-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'QoE QoS Analytics' ? 'active' : '' %>">
+                <i class="ph ph-star"></i> <span class="menu-text">Phân tích QoE / QoS</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Báo cáo POI">
+            <a href="/poi-report" class="<%= typeof currentPath !== 'undefined' && currentPath === 'POI Report' ? 'active' : '' %>">
+                <i class="ph ph-buildings"></i> <span class="menu-text">Báo cáo chuẩn POI</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Tối ưu Trải nghiệm">
+            <a href="/optimizing-qoe-qos" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>">
+                <i class="ph ph-wrench"></i> <span class="menu-text">Tối ưu QoE/QoS (5 Bước)</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Xử lý Điểm đen">
+            <a href="/bad-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? 'active' : '' %>">
+                <i class="ph ph-bug"></i> <span class="menu-text">Xử lý Điểm Đen (Bad Cell)</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Căn chỉnh Downtilt">
+            <a href="/downtilt-coverage" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Downtilt Coverage' ? 'active' : '' %>">
+                <i class="ph ph-compass-tool"></i> <span class="menu-text">Căn chỉnh Downtilt</span>
+            </a>
+        </li>
+
+        <!-- NHÓM QUẢN TRỊ VIÊN (Admin Only) -->
         <% if (currentUser && currentUser.role === 'admin') { %>
-            <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">QUẢN TRỊ HỆ THỐNG</li>
-            <li><a href="/import-data" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Import Data' ? 'active' : '' %>">📥 Nạp dữ liệu (Import)</a></li>
-            <li><a href="/system/users" class="<%= typeof currentPath !== 'undefined' && currentPath === 'User Manager' ? 'active' : '' %>">👥 Quản lý tài khoản</a></li>
+            <li class="menu-category" style="color: #3b82f6;">HỆ THỐNG CỐT LÕI (ADMIN)</li>
+            <li class="menu-item" data-tooltip="Database RF">
+                <a href="/rf-database" class="<%= typeof currentPath !== 'undefined' && currentPath === 'RF Database' ? 'active' : '' %>">
+                    <i class="ph ph-database"></i> <span class="menu-text">Cơ sở dữ liệu RF</span>
+                </a>
+            </li>
+            <li class="menu-item" data-tooltip="Sinh Script (O&M)">
+                <a href="/scrip" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Scrip' ? 'active' : '' %>">
+                    <i class="ph ph-terminal-window"></i> <span class="menu-text">Tool sinh Script (O&M)</span>
+                </a>
+            </li>
+            <li class="menu-item" data-tooltip="Nạp Dữ Liệu">
+                <a href="/import-data" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Import Data' ? 'active' : '' %>">
+                    <i class="ph ph-cloud-arrow-up"></i> <span class="menu-text">Nạp dữ liệu (Import)</span>
+                </a>
+            </li>
+            <li class="menu-item" data-tooltip="Quản lý User">
+                <a href="/system/users" class="<%= typeof currentPath !== 'undefined' && currentPath === 'User Manager' ? 'active' : '' %>">
+                    <i class="ph ph-users-three"></i> <span class="menu-text">Quản lý Tài khoản</span>
+                </a>
+            </li>
         <% } %>
 
-        <li style="padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-top: 10px;">TÀI KHOẢN</li>
-        <li><a href="/system/profile" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Profile' ? 'active' : '' %>">🔑 Đổi mật khẩu</a></li>
-        <li><a href="/logout" style="color: #e74c3c;">🚪 Đăng xuất</a></li>
+        <li class="menu-category">CÁ NHÂN</li>
+        <li class="menu-item" data-tooltip="Đổi mật khẩu">
+            <a href="/system/profile" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Profile' ? 'active' : '' %>">
+                <i class="ph ph-lock-key"></i> <span class="menu-text">Đổi mật khẩu</span>
+            </a>
+        </li>
+        <li class="menu-item" data-tooltip="Đăng xuất">
+            <a href="/logout" class="danger-link">
+                <i class="ph ph-sign-out"></i> <span class="menu-text">Đăng xuất</span>
+            </a>
+        </li>
     </ul>
-</div>
-</nav>
+
+    <!-- Hiển thị Avatar Người dùng -->
+    <div class="user-profile">
+        <div class="avatar"><%= currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U' %></div>
+        <div class="user-info">
+            <span class="user-name"><%= currentUser ? currentUser.username : 'Guest' %></span>
+            <span class="user-role" style="color: <%= (currentUser && currentUser.role === 'admin') ? '#ef4444' : '#10b981' %>">
+                <%= currentUser ? currentUser.role : 'USER' %>
+            </span>
+        </div>
+    </div>
+</aside>
 
 <script>
-    // Hàm bật/tắt hiển thị Sidebar trên các thiết bị màn hình nhỏ
-    function toggleSidebar() {
+    document.addEventListener('DOMContentLoaded', () => {
         const sidebar = document.getElementById('mainSidebar');
-        const overlay = document.querySelector('.sidebar-overlay');
-        
-        sidebar.classList.toggle('show');
-        overlay.classList.toggle('show');
-    }
+        const toggleBtn = document.getElementById('toggleSidebar');
+        const icon = toggleBtn.querySelector('i');
+
+        // Phục hồi trạng thái Sidebar từ LocalStorage
+        if(localStorage.getItem('sidebarCollapsed') === 'true') {
+            sidebar.classList.add('collapsed');
+            icon.className = 'ph ph-list';
+        } else {
+            icon.className = 'ph ph-x';
+        }
+
+        // Sự kiện Click thu/mở
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem('sidebarCollapsed', isCollapsed);
+            
+            // Đổi icon nút
+            if(isCollapsed) {
+                icon.className = 'ph ph-list';
+            } else {
+                icon.className = 'ph ph-x';
+            }
+        });
+    });
 </script>
