@@ -2,8 +2,8 @@
     /* CSS RIÊNG CHO SIDEBAR HIỆN ĐẠI */
     .sidebar { 
         width: 260px; 
-        background: var(--bg-surface); 
-        border-right: 1px solid var(--border-color); 
+        background: var(--bg-surface, #ffffff); 
+        border-right: 1px solid var(--border-color, #e2e8f0); 
         height: 100vh; 
         display: flex; 
         flex-direction: column; 
@@ -20,23 +20,23 @@
         align-items: center; 
         justify-content: space-between; 
         padding: 0 20px; 
-        border-bottom: 1px solid var(--border-color); 
+        border-bottom: 1px solid var(--border-color, #e2e8f0); 
     }
     .sidebar-logo { 
         display: flex; align-items: center; gap: 10px; 
-        font-weight: 800; color: var(--text-main); font-size: 16px; 
+        font-weight: 800; color: var(--text-main, #1e293b); font-size: 16px; 
         letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; 
         transition: opacity 0.2s;
     }
     .sidebar.collapsed .sidebar-logo { opacity: 0; width: 0; pointer-events: none;}
     
     .toggle-btn { 
-        background: #f1f5f9; border: none; color: var(--text-muted); 
+        background: #f1f5f9; border: none; color: var(--text-muted, #64748b); 
         width: 32px; height: 32px !important; border-radius: 8px; 
         display: flex !important; align-items: center; justify-content: center; 
         cursor: pointer; transition: 0.2s; padding: 0 !important; box-shadow: none !important;
     }
-    .toggle-btn:hover { background: #e2e8f0; color: var(--primary); }
+    .toggle-btn:hover { background: #e2e8f0; color: var(--primary, #4f46e5); }
     
     .sidebar-menu { 
         flex: 1; overflow-y: auto; overflow-x: hidden; 
@@ -55,7 +55,7 @@
     
     .menu-item a { 
         display: flex; align-items: center; padding: 10px 14px; 
-        color: var(--text-muted); text-decoration: none; border-radius: 8px; 
+        color: var(--text-muted, #64748b); text-decoration: none; border-radius: 8px; 
         font-weight: 500; font-size: 13.5px; margin-bottom: 4px; 
         transition: all 0.2s ease; white-space: nowrap;
     }
@@ -65,17 +65,16 @@
     .menu-text { transition: opacity 0.2s; }
     .sidebar.collapsed .menu-text { opacity: 0; display: none; }
     
-    .menu-item a:hover { background: #f8fafc; color: var(--text-main); }
-    .menu-item a:hover i { color: var(--primary); }
+    .menu-item a:hover { background: #f8fafc; color: var(--text-main, #1e293b); }
+    .menu-item a:hover i { color: var(--primary, #4f46e5); }
     
-    .menu-item a.active { background: #eef2ff; color: var(--primary); font-weight: 600; }
-    .menu-item a.active i { color: var(--primary); }
+    .menu-item a.active { background: #eef2ff; color: var(--primary, #4f46e5); font-weight: 600; }
+    .menu-item a.active i { color: var(--primary, #4f46e5); }
     
-    .menu-item a.danger-link { color: var(--danger); }
-    .menu-item a.danger-link i { color: var(--danger); }
+    .menu-item a.danger-link { color: var(--danger, #ef4444); }
+    .menu-item a.danger-link i { color: var(--danger, #ef4444); }
     .menu-item a.danger-link:hover { background: #fef2f2; color: #dc2626; }
     
-    /* Tooltip tự động hiện ra khi gập sidebar */
     .menu-item { position: relative; }
     .sidebar.collapsed .menu-item:hover::after {
         content: attr(data-tooltip); position: absolute; left: 72px; top: 50%; transform: translateY(-50%); 
@@ -85,49 +84,60 @@
     }
     
     .user-profile { 
-        padding: 16px 20px; border-top: 1px solid var(--border-color); 
+        padding: 16px 20px; border-top: 1px solid var(--border-color, #e2e8f0); 
         display: flex; align-items: center; gap: 12px; white-space: nowrap; 
         overflow: hidden; background: #f8fafc;
     }
     .avatar { 
         width: 38px; height: 38px; border-radius: 10px; 
-        background: linear-gradient(135deg, var(--primary), #3b82f6); 
+        background: linear-gradient(135deg, var(--primary, #4f46e5), #3b82f6); 
         display: flex; align-items: center; justify-content: center; 
         font-weight: bold; color: #ffffff; flex-shrink: 0; font-size: 16px; 
         box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
     }
     .user-info { display: flex; flex-direction: column; }
-    .user-name { font-weight: 600; font-size: 13.5px; color: var(--text-main); }
-    .user-role { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;}
+    .user-name { font-weight: 600; font-size: 13.5px; color: var(--text-main, #1e293b); }
+    .user-role { font-size: 11px; color: var(--text-muted, #64748b); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;}
     .sidebar.collapsed .user-info { display: none; }
 
     /* ==========================================
-       LỚP PHỦ & CỬA TRƯỢT MOBILE (OFF-CANVAS)
+       LỚP PHỦ & CỬA TRƯỢT MOBILE (ĐÃ FIX LỖI TÀNG HÌNH)
        ========================================== */
     .mobile-overlay {
         display: none; position: fixed; inset: 0; 
         background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(3px); 
-        z-index: 998; opacity: 0; transition: opacity 0.3s ease;
+        z-index: 9998; opacity: 0; transition: opacity 0.3s ease;
     }
     .mobile-overlay.show { display: block; opacity: 1; }
 
     @media (max-width: 768px) {
         .sidebar {
-            position: fixed;
-            left: -280px; /* Ẩn hoàn toàn ra ngoài màn hình bên trái */
+            position: fixed !important;
+            top: 0;
+            left: -300px !important; /* Đẩy ra xa hơn để chắc chắn giấu kín */
             width: 260px !important;
-            box-shadow: 4px 0 24px rgba(0,0,0,0.1);
+            height: 100vh !important;
+            z-index: 9999 !important; /* Đẩy lên lớp cao nhất chống đè */
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.15) !important;
         }
-        .sidebar.mobile-open { left: 0; /* Trượt vào trong màn hình khi bấm Hamburger */ }
-        .sidebar.collapsed { width: 260px; } /* Vô hiệu hóa tính năng thu nhỏ trên điện thoại */
+        .sidebar.mobile-open { 
+            left: 0 !important; /* Trượt mượt mà vào trong */
+        }
         
-        .toggle-btn { display: none !important; } /* Giấu nút gập mở truyền thống */
+        /* HỦY BỎ HOÀN TOÀN HIỆU ỨNG COLLAPSED TRÊN DI ĐỘNG */
+        .sidebar.collapsed .menu-category { opacity: 1 !important; height: auto !important; margin: 20px 0 8px 12px !important; }
+        .sidebar.collapsed .menu-text { opacity: 1 !important; display: inline-block !important; }
+        .sidebar.collapsed .sidebar-logo { opacity: 1 !important; width: auto !important; pointer-events: auto !important; }
+        .sidebar.collapsed .user-info { display: flex !important; }
+        .sidebar.collapsed .menu-item a i { margin-right: 12px !important; }
+        
+        .toggle-btn { display: none !important; }
         .sidebar-header { justify-content: center; }
     }
 </style>
 
 <%
-    // Thuật toán kiểm tra quyền
     const userPerms = currentUser && currentUser.permissions ? currentUser.permissions : [];
     const isAdm = currentUser && currentUser.role === 'admin';
     const canSee = (menuKey) => {
@@ -136,13 +146,12 @@
     };
 %>
 
-<!-- Lớp màng mờ khi mở menu trên điện thoại -->
 <div class="mobile-overlay" id="mobileOverlay"></div>
 
 <aside class="sidebar" id="mainSidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo">
-            <i class="ph-fill ph-broadcast" style="color: var(--primary); font-size: 24px;"></i>
+            <i class="ph-fill ph-broadcast" style="color: var(--primary, #4f46e5); font-size: 24px;"></i>
             <span>VNPT Telecom</span>
         </div>
         <button class="toggle-btn" id="toggleSidebar" title="Thu gọn / Mở rộng">
@@ -151,7 +160,6 @@
     </div>
 
     <ul class="sidebar-menu">
-        <!-- NHÓM TỔNG QUAN -->
         <% if (canSee('dashboard') || canSee('gis_map')) { %>
             <li class="menu-category">TỔNG QUAN</li>
             <% if (canSee('dashboard')) { %>
@@ -170,20 +178,19 @@
             <% } %>
         <% } %>
 
-        <!-- NHÓM GIÁM SÁT & CẢNH BÁO -->
         <% if (canSee('worst_cells') || canSee('congestion_3g') || canSee('traffic_down')) { %>
             <li class="menu-category">GIÁM SÁT & CẢNH BÁO</li>
             <% if (canSee('worst_cells')) { %>
             <li class="menu-item" data-tooltip="Worst Cells 4G">
                 <a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>">
-                    <i class="ph ph-warning-circle" style="color: var(--danger);"></i> <span class="menu-text">Worst Cells 4G</span>
+                    <i class="ph ph-warning-circle" style="color: var(--danger, #ef4444);"></i> <span class="menu-text">Worst Cells 4G</span>
                 </a>
             </li>
             <% } %>
             <% if (canSee('congestion_3g')) { %>
             <li class="menu-item" data-tooltip="Nghẽn Mạng 3G">
                 <a href="/congestion-3g" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Congestion 3G' ? 'active' : '' %>">
-                    <i class="ph ph-cell-signal-low" style="color: var(--warning);"></i> <span class="menu-text">Nghẽn Mạng 3G</span>
+                    <i class="ph ph-cell-signal-low" style="color: var(--warning, #f59e0b);"></i> <span class="menu-text">Nghẽn Mạng 3G</span>
                 </a>
             </li>
             <% } %>
@@ -196,7 +203,6 @@
             <% } %>
         <% } %>
 
-        <!-- NHÓM PHÂN TÍCH & TỐI ƯU -->
         <% if (canSee('kpi_analytics') || canSee('qoe_qos') || canSee('poi_report') || canSee('optimizing_qoe_qos') || canSee('bad_cells') || canSee('downtilt_coverage')) { %>
             <li class="menu-category">PHÂN TÍCH & TỐI ƯU</li>
             <% if (canSee('kpi_analytics')) { %>
@@ -243,9 +249,8 @@
             <% } %>
         <% } %>
 
-        <!-- NHÓM QUẢN TRỊ VIÊN -->
         <% if (canSee('rf_database') || canSee('scrip') || canSee('import_data') || canSee('user_manager')) { %>
-            <li class="menu-category" style="color: var(--primary);">HỆ THỐNG CỐT LÕI (ADMIN)</li>
+            <li class="menu-category" style="color: var(--primary, #4f46e5);">HỆ THỐNG CỐT LÕI (ADMIN)</li>
             <% if (canSee('rf_database')) { %>
             <li class="menu-item" data-tooltip="Database RF">
                 <a href="/rf-database" class="<%= typeof currentPath !== 'undefined' && currentPath === 'RF Database' ? 'active' : '' %>">
@@ -289,12 +294,11 @@
         </li>
     </ul>
 
-    <!-- Hiển thị Avatar Người dùng -->
     <div class="user-profile">
         <div class="avatar"><%= currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U' %></div>
         <div class="user-info">
             <span class="user-name"><%= currentUser ? currentUser.username : 'Guest' %></span>
-            <span class="user-role" style="color: <%= (currentUser && currentUser.role === 'admin') ? 'var(--danger)' : 'var(--success)' %>">
+            <span class="user-role" style="color: <%= (currentUser && currentUser.role === 'admin') ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)' %>">
                 <%= currentUser ? currentUser.role : 'USER' %>
             </span>
         </div>
@@ -307,26 +311,26 @@
         const overlay = document.getElementById('mobileOverlay');
         const topbar = document.querySelector('.topbar');
         
-        // 1. TỰ ĐỘNG BƠM NÚT HAMBURGER VÀO TOPBAR TRÊN MOBILE
-        // Thuật toán này giúp bạn không cần phải sửa từng trang HTML một, JavaScript sẽ tự động tìm và nhúng nút vào
-        if (topbar && window.innerWidth <= 768) {
+        // 1. TỰ ĐỘNG BƠM NÚT HAMBURGER VÀO TOPBAR MỘT CÁCH THÔNG MINH
+        // Luôn bơm vào DOM để khi xoay ngang/dọc điện thoại không bị mất nút
+        if (topbar && !document.getElementById('mobileMenuBtn')) {
             const h1 = topbar.querySelector('h1');
             if (h1) {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'topbar-left-wrap';
+                // CSS của .topbar-left-wrap đã được cấu hình trong head.ejs
                 
                 const btnHtml = `<button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu"><i class="ph ph-list"></i></button>`;
                 h1.insertAdjacentHTML('beforebegin', btnHtml);
                 
                 const btn = document.getElementById('mobileMenuBtn');
-                wrapper.appendChild(btn);
                 
-                // Đưa h1 vào trong wrapper để canh lề chuẩn
                 h1.parentNode.insertBefore(wrapper, h1);
+                wrapper.appendChild(btn);
                 wrapper.appendChild(h1);
                 
-                // Gắn sự kiện vuốt/mở menu
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     sidebar.classList.add('mobile-open');
                     overlay.classList.add('show');
                 });
@@ -341,7 +345,18 @@
             });
         }
 
-        // 3. LOGIC GẬP/MỞ MENU TRÊN MÀN HÌNH MÁY TÍNH (Lưu trạng thái)
+        // Tự động tắt Menu khi bấm vào 1 link bất kỳ trên di động
+        const menuLinks = sidebar.querySelectorAll('.menu-item a');
+        menuLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.remove('mobile-open');
+                    overlay.classList.remove('show');
+                }
+            });
+        });
+
+        // 3. LOGIC GẬP/MỞ MENU TRÊN MÀN HÌNH MÁY TÍNH
         const toggleBtn = document.getElementById('toggleSidebar');
         if (toggleBtn) {
             const icon = toggleBtn.querySelector('i');
