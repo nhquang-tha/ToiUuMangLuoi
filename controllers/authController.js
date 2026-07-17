@@ -19,17 +19,25 @@ exports.login = async (req, res) => {
 
         // 1. Tự động khởi tạo cấu trúc Bảng Users nếu chưa tồn tại
         try { 
-            await db.query('SELECT 1 FROM users LIMIT 1'); 
+            await db.query('SELECT permissions FROM users LIMIT 1'); 
         } catch (e) {
-            await db.query(`
-                CREATE TABLE users (
-                    id INT AUTO_INCREMENT PRIMARY KEY, 
-                    username VARCHAR(50) UNIQUE, 
-                    password VARCHAR(255), 
-                    role VARCHAR(20) DEFAULT 'user', 
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            `);
+            try {
+                // Thử nâng cấp bảng nếu thiếu cột permissions (Dành cho DB cũ)
+                await db.query('ALTER TABLE users ADD COLUMN permissions TEXT');
+                console.log("✅ Đã cập nhật bảng users: Thêm cột permissions");
+            } catch (err) {
+                // Tạo mới hoàn toàn nếu bảng chưa có
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INT AUTO_INCREMENT PRIMARY KEY, 
+                        username VARCHAR(50) UNIQUE, 
+                        password VARCHAR(255), 
+                        role VARCHAR(20) DEFAULT 'user', 
+                        permissions TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+            }
         }
 
         // 2. Tạo tài khoản admin mặc định (admin/admin123) nếu bảng trống
@@ -57,11 +65,21 @@ exports.login = async (req, res) => {
             if (isMatch || (username === 'admin' && password === 'admin123')) {
                 let cleanRole = username === 'admin' ? 'admin' : (user.role ? String(user.role).trim().toLowerCase() : 'user');
                 
+                // Trích xuất quyền hạn (Permissions)
+                let perms = [];
+                if (user && user.permissions) {
+                    try { perms = JSON.parse(user.permissions); } catch(e) {}
+                } else if (cleanRole === 'admin') {
+                    // Cấp full quyền mặc định cho admin nếu chưa tick
+                    perms = ['dashboard', 'gis_map', 'worst_cells', 'congestion_3g', 'traffic_down', 'kpi_analytics', 'qoe_qos', 'poi_report', 'optimizing_qoe_qos', 'bad_cells', 'downtilt_coverage', 'rf_database', 'scrip', 'import_data', 'user_manager'];
+                }
+
                 // Khởi tạo Phiên đăng nhập (Session)
                 req.session.user = { 
-                    id: user.id, 
-                    username: user.username, 
+                    id: user ? user.id : 0, 
+                    username: username, 
                     role: cleanRole, 
+                    permissions: perms,
                     isAdmin: (cleanRole === 'admin') 
                 };
                 
