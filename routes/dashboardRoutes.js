@@ -83,14 +83,14 @@ router.get('/api/export-all-poi', isAuthenticated, dashboardController.getAllPoi
 router.get('/api/poi-data', isAuthenticated, dashboardController.getPoiData);
 
 router.get('/api/kpi-data', isAuthenticated, dashboardController.getKpiData);
-router.get('/api/qoe-qos-data', isAuthenticated, dashboardController.getQoeQosData);
-router.get('/api/qoe-qos-list-all', isAuthenticated, dashboardController.getQoeQosListAll);
-router.post('/api/save-cell-note', isAuthenticated, dashboardController.saveCellNote);
-
+// ==========================================
+// 7. QUẢN LÝ HỆ THỐNG & USER
+// ==========================================
 router.get('/system/profile', isAuthenticated, userController.getProfilePage);
 router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
 router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
 router.post('/system/users/add', isAuthenticated, isAdmin, userController.addUser);
+router.post('/system/users/update-permissions/:id', isAuthenticated, isAdmin, userController.updatePermissions);
 router.post('/system/users/delete/:id', isAuthenticated, isAdmin, userController.deleteUser);
 
 router.get('/logout', (req, res) => { 
