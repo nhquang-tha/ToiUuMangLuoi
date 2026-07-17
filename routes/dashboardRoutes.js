@@ -83,6 +83,12 @@ router.get('/api/export-all-poi', isAuthenticated, dashboardController.getAllPoi
 router.get('/api/poi-data', isAuthenticated, dashboardController.getPoiData);
 
 router.get('/api/kpi-data', isAuthenticated, dashboardController.getKpiData);
+
+// [SỬA LỖI CRASH Ở ĐÂY]: Trỏ các API QoE/QoS về đúng dashboardController thay vì kpiController
+router.get('/api/qoe-qos-data', isAuthenticated, dashboardController.getQoeQosData);
+router.get('/api/qoe-qos-list-all', isAuthenticated, dashboardController.getQoeQosListAll);
+router.post('/api/save-cell-note', isAuthenticated, dashboardController.saveCellNote);
+
 // ==========================================
 // 7. QUẢN LÝ HỆ THỐNG & USER
 // ==========================================
