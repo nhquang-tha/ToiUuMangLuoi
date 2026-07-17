@@ -101,43 +101,80 @@
     .sidebar.collapsed .user-info { display: none; }
 
     /* ==========================================
-       LỚP PHỦ & CỬA TRƯỢT MOBILE (ĐÃ FIX LỖI TÀNG HÌNH)
+       GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (ĐIỆN THOẠI)
        ========================================== */
     .mobile-overlay {
         display: none; position: fixed; inset: 0; 
-        background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(3px); 
+        background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(3px); 
         z-index: 9998; opacity: 0; transition: opacity 0.3s ease;
     }
     .mobile-overlay.show { display: block; opacity: 1; }
+    
+    /* Ẩn nút Hamburger nổi trên giao diện máy tính */
+    .mobile-fixed-btn { display: none; }
 
     @media (max-width: 768px) {
+        /* Nút Hamburger vĩnh viễn trên Mobile */
+        .mobile-fixed-btn {
+            display: flex !important;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            width: 42px;
+            height: 42px;
+            background: #ffffff;
+            color: #4f46e5;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            z-index: 9997; /* Nằm dưới Overlay (9998) nhưng trên mọi bảng biểu */
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .mobile-fixed-btn:active {
+            background: #f1f5f9;
+            transform: scale(0.95);
+        }
+
+        /* Dịch chuyển thanh Tiêu đề (Topbar) để chừa chỗ cho Nút Hamburger */
+        .topbar {
+            padding-left: 70px !important;
+            min-height: 42px;
+        }
+
+        /* Sidebar trượt từ trái sang */
         .sidebar {
             position: fixed !important;
             top: 0;
-            left: -300px !important; /* Đẩy ra xa hơn để chắc chắn giấu kín */
-            width: 260px !important;
+            left: -320px !important; /* Đẩy ra xa để giấu hoàn toàn */
+            width: 280px !important;
             height: 100vh !important;
-            z-index: 9999 !important; /* Đẩy lên lớp cao nhất chống đè */
+            z-index: 9999 !important; /* Cao nhất để đè lên Overlay */
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
             box-shadow: 4px 0 24px rgba(0,0,0,0.15) !important;
         }
         .sidebar.mobile-open { 
-            left: 0 !important; /* Trượt mượt mà vào trong */
+            left: 0 !important; /* Trượt mượt mà vào màn hình */
         }
         
-        /* HỦY BỎ HOÀN TOÀN HIỆU ỨNG COLLAPSED TRÊN DI ĐỘNG */
+        /* Hủy chế độ Gập (Collapsed) trên Điện thoại */
         .sidebar.collapsed .menu-category { opacity: 1 !important; height: auto !important; margin: 20px 0 8px 12px !important; }
         .sidebar.collapsed .menu-text { opacity: 1 !important; display: inline-block !important; }
         .sidebar.collapsed .sidebar-logo { opacity: 1 !important; width: auto !important; pointer-events: auto !important; }
         .sidebar.collapsed .user-info { display: flex !important; }
         .sidebar.collapsed .menu-item a i { margin-right: 12px !important; }
         
+        /* Ẩn nút gập của màn hình máy tính */
         .toggle-btn { display: none !important; }
         .sidebar-header { justify-content: center; }
     }
 </style>
 
 <%
+    /* Logic Phân Quyền Động (RBAC) */
     const userPerms = currentUser && currentUser.permissions ? currentUser.permissions : [];
     const isAdm = currentUser && currentUser.role === 'admin';
     const canSee = (menuKey) => {
@@ -146,6 +183,12 @@
     };
 %>
 
+<!-- Nút Hamburger Cố định trên Mobile -->
+<button class="mobile-fixed-btn" id="mobileNavToggle" aria-label="Mở Menu">
+    <i class="ph ph-list"></i>
+</button>
+
+<!-- Lớp mờ nền khi mở Menu Mobile -->
 <div class="mobile-overlay" id="mobileOverlay"></div>
 
 <aside class="sidebar" id="mainSidebar">
@@ -307,37 +350,22 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        // --- STREAMING_CHUNK:Khởi tạo các biến DOM Menu ---
         const sidebar = document.getElementById('mainSidebar');
         const overlay = document.getElementById('mobileOverlay');
-        const topbar = document.querySelector('.topbar');
-        
-        // 1. TỰ ĐỘNG BƠM NÚT HAMBURGER VÀO TOPBAR MỘT CÁCH THÔNG MINH
-        // Luôn bơm vào DOM để khi xoay ngang/dọc điện thoại không bị mất nút
-        if (topbar && !document.getElementById('mobileMenuBtn')) {
-            const h1 = topbar.querySelector('h1');
-            if (h1) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'topbar-left-wrap';
-                // CSS của .topbar-left-wrap đã được cấu hình trong head.ejs
-                
-                const btnHtml = `<button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu"><i class="ph ph-list"></i></button>`;
-                h1.insertAdjacentHTML('beforebegin', btnHtml);
-                
-                const btn = document.getElementById('mobileMenuBtn');
-                
-                h1.parentNode.insertBefore(wrapper, h1);
-                wrapper.appendChild(btn);
-                wrapper.appendChild(h1);
-                
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    sidebar.classList.add('mobile-open');
-                    overlay.classList.add('show');
-                });
-            }
+        const mobileBtn = document.getElementById('mobileNavToggle');
+        const toggleDesktopBtn = document.getElementById('toggleSidebar');
+
+        // --- STREAMING_CHUNK:Xử lý sự kiện bấm Nút Hamburger trên Điện thoại ---
+        if (mobileBtn) {
+            mobileBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Tránh bị click đúp
+                sidebar.classList.add('mobile-open'); // Kéo Sidebar trượt vào màn hình
+                overlay.classList.add('show');        // Hiện màn mờ background
+            });
         }
-        
-        // 2. TẮT MENU KHI BẤM RA NGOÀI LỚP PHỦ MỜ (MOBILE)
+
+        // --- STREAMING_CHUNK:Xử lý đóng Menu khi người dùng bấm ra ngoài nền tối ---
         if (overlay) {
             overlay.addEventListener('click', () => {
                 sidebar.classList.remove('mobile-open');
@@ -345,7 +373,7 @@
             });
         }
 
-        // Tự động tắt Menu khi bấm vào 1 link bất kỳ trên di động
+        // --- STREAMING_CHUNK:Tự động đóng Menu ngay khi click vào 1 Tính năng (Mobile) ---
         const menuLinks = sidebar.querySelectorAll('.menu-item a');
         menuLinks.forEach(link => {
             link.addEventListener('click', () => {
@@ -356,11 +384,11 @@
             });
         });
 
-        // 3. LOGIC GẬP/MỞ MENU TRÊN MÀN HÌNH MÁY TÍNH
-        const toggleBtn = document.getElementById('toggleSidebar');
-        if (toggleBtn) {
-            const icon = toggleBtn.querySelector('i');
-
+        // --- STREAMING_CHUNK:Xử lý Gập/Mở Menu trên màn hình Máy tính ---
+        if (toggleDesktopBtn) {
+            const icon = toggleDesktopBtn.querySelector('i');
+            
+            // Giữ lại trạng thái gập nếu người dùng đã tùy chỉnh trước đó
             if(localStorage.getItem('sidebarCollapsed') === 'true' && window.innerWidth > 768) {
                 sidebar.classList.add('collapsed');
                 icon.className = 'ph ph-list';
@@ -368,16 +396,13 @@
                 icon.className = 'ph ph-x';
             }
 
-            toggleBtn.addEventListener('click', () => {
+            toggleDesktopBtn.addEventListener('click', () => {
                 sidebar.classList.toggle('collapsed');
                 const isCollapsed = sidebar.classList.contains('collapsed');
                 localStorage.setItem('sidebarCollapsed', isCollapsed);
                 
-                if(isCollapsed) {
-                    icon.className = 'ph ph-list';
-                } else {
-                    icon.className = 'ph ph-x';
-                }
+                // Đổi icon từ X (đóng) sang Danh sách (List)
+                icon.className = isCollapsed ? 'ph ph-list' : 'ph ph-x';
             });
         }
     });
