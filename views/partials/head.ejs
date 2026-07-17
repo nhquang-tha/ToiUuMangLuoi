@@ -12,14 +12,33 @@
 
     <style>
         /* ==========================================
-           QUY HOẠCH TOÀN CỤC (GLOBAL STYLES)
+           QUY HOẠCH TOÀN CỤC (GLOBAL STYLES) - BẢNG MÀU UI MỚI HIỆN ĐẠI
            ========================================== */
+        :root {
+            --primary: #4f46e5;       /* Indigo 600 - Màu nhấn chủ đạo */
+            --primary-hover: #4338ca; /* Indigo 700 */
+            --bg-body: #f1f5f9;       /* Slate 100 - Nền pastel dịu mắt */
+            --bg-surface: #ffffff;
+            --text-main: #1e293b;     /* Slate 800 - Chữ tối thanh lịch */
+            --text-muted: #64748b;    /* Slate 500 - Chữ phụ */
+            --border-color: #e2e8f0;  /* Slate 200 - Viền mềm mại */
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --info: #0ea5e9;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+        }
+
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
             margin: 0; 
-            background-color: #f0f4f8; 
-            color: #1e293b; 
-            font-size: 13px;
+            background-color: var(--bg-body); 
+            color: var(--text-main); 
+            font-size: 13.5px;
+            line-height: 1.5;
         }
 
         /* Tối ưu thanh cuộn cho toàn hệ thống */
@@ -30,63 +49,137 @@
 
         /* ==========================================
            ÉP KIỂU NHỎ GỌN (COMPACT UI OVERRIDES)
-           Ghi đè toàn bộ style cũ để nút/ô nhập liệu gọn gàng hơn
            ========================================== */
-        select, input[type="text"], input[type="number"], input[type="password"] {
-            padding: 6px 12px !important;
-            font-size: 13px !important;
-            height: 36px !important;
-            border-radius: 6px !important;
-            border: 1px solid #cbd5e1 !important;
-            color: #334155 !important;
-            background-color: #ffffff !important;
+        select, input[type="text"], input[type="number"], input[type="password"], textarea {
+            padding: 8px 12px !important;
+            font-size: 13.5px !important;
+            height: 36px !important; /* Thu nhỏ gọn gàng ô nhập liệu */
+            border-radius: var(--radius-sm) !important;
+            border: 1px solid var(--border-color) !important;
+            color: var(--text-main) !important;
+            background-color: var(--bg-surface) !important;
             box-sizing: border-box;
             transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
         }
-        select:focus, input:focus {
-            border-color: #3b82f6 !important;
+        textarea { height: auto !important; } /* Loại trừ textarea khỏi ép height */
+        
+        select:focus, input:focus, textarea:focus {
+            border-color: var(--primary) !important;
             outline: none !important;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
         }
 
         button, .btn-primary, .btn-success, .btn-danger, .btn-kpi {
-            padding: 6px 16px !important;
-            font-size: 13px !important;
+            padding: 8px 16px !important;
+            font-size: 13.5px !important;
             font-weight: 600 !important;
-            height: 36px !important;
-            border-radius: 6px !important;
+            height: 36px !important; /* Nút bấm gọn gàng, tinh tế */
+            border-radius: var(--radius-sm) !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             gap: 6px !important;
             transition: all 0.2s ease !important;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+            border: none !important;
+            cursor: pointer;
             font-family: 'Inter', sans-serif !important;
         }
-        button:hover { transform: translateY(-1px) !important; box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important; }
+        
+        .btn-primary { background: var(--primary) !important; color: white !important; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2) !important; }
+        .btn-primary:hover { background: var(--primary-hover) !important; transform: translateY(-1px) !important; box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3) !important; }
+
+        .btn-success { background: var(--success) !important; color: white !important; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2) !important; }
+        .btn-success:hover { background: #059669 !important; transform: translateY(-1px) !important; }
+
+        .btn-danger { background: var(--danger) !important; color: white !important; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2) !important; }
+        .btn-danger:hover { background: #dc2626 !important; transform: translateY(-1px) !important; }
+
+        /* Nút KPI siêu nhỏ trong các bảng */
+        .btn-kpi { background: var(--info) !important; color: white !important; height: 30px !important; padding: 4px 12px !important; font-size: 12px !important; box-shadow: none !important; border-radius: 6px !important;}
+        .btn-kpi:hover { background: #0284c7 !important; transform: none !important; }
 
         /* ==========================================
            BỐ CỤC CHÍNH (LAYOUT) & TOPBAR
            ========================================== */
         .layout { display: flex; height: 100vh; overflow: hidden; }
+        .main-content { flex: 1; overflow-y: auto; padding: 24px; position: relative; }
         
         .topbar { 
-            background: #ffffff; 
-            padding: 12px 24px; 
-            border-bottom: 1px solid #e2e8f0; 
-            margin-bottom: 20px; 
+            background: var(--bg-surface); 
+            padding: 16px 24px; 
+            border-radius: var(--radius-md); 
+            box-shadow: var(--shadow-sm); 
+            margin-bottom: 24px; 
             display: flex;
             align-items: center;
             justify-content: space-between;
+            border: 1px solid var(--border-color);
         }
-        .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; color: #0f172a; letter-spacing: -0.3px;}
-        .topbar p { margin: 4px 0 0 0 !important; font-size: 12px !important; color: #64748b !important; }
         
-        .card { background: white; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.02); margin-bottom: 20px; }
+        /* Căn chỉnh để nút Hamburger nằm cạnh Tiêu đề */
+        .topbar-left-wrap { display: flex; align-items: center; gap: 12px; }
+        .topbar h1 { margin: 0; font-size: 20px; font-weight: 700; color: var(--text-main); letter-spacing: -0.5px;}
+        .topbar p { margin: 4px 0 0 0 !important; font-size: 13px !important; color: var(--text-muted) !important; }
         
-        /* Bảng dữ liệu */
-        .data-table th { font-size: 12px !important; letter-spacing: 0.2px; background: #f8fafc !important; color: #475569 !important; padding: 10px 12px !important;}
-        .data-table td { font-size: 13px !important; padding: 10px 12px !important; color: #334155;}
+        .card { background: var(--bg-surface); padding: 24px; border-radius: var(--radius-md); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); margin-bottom: 24px; }
+        
+        /* Bảng dữ liệu: Xóa border cứng nhắc, làm mềm đường kẻ */
+        .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .data-table th { 
+            font-size: 12px !important; 
+            letter-spacing: 0.5px; 
+            text-transform: uppercase;
+            background: #f8fafc !important; 
+            color: var(--text-muted) !important; 
+            padding: 14px 16px !important; 
+            border-bottom: 2px solid var(--border-color) !important;
+            font-weight: 700 !important;
+        }
+        .data-table td { 
+            font-size: 13.5px !important; 
+            padding: 14px 16px !important; 
+            color: var(--text-main); 
+            border-bottom: 1px solid var(--border-color) !important;
+            vertical-align: middle;
+        }
+        .data-table tbody tr:hover td { background-color: #f1f5f9 !important; }
+
+        /* Nút Hamburger cho Mobile */
+        .mobile-menu-btn {
+            display: none !important;
+            background: #f1f5f9 !important;
+            color: var(--text-main) !important;
+            border: 1px solid var(--border-color) !important;
+            font-size: 20px !important;
+            padding: 6px !important;
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: var(--radius-sm) !important;
+            cursor: pointer;
+        }
+        .mobile-menu-btn:hover { background: #e2e8f0 !important; }
+
+        /* ==========================================
+           RESPONSIVE DI ĐỘNG (MOBILE LAYOUT)
+           ========================================== */
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: inline-flex !important; }
+            .main-content { padding: 16px; }
+            .topbar { 
+                padding: 12px 16px; 
+                flex-direction: column; 
+                align-items: flex-start; 
+                gap: 10px;
+                border-radius: var(--radius-sm);
+                margin-bottom: 16px;
+            }
+            .card { padding: 16px; margin-bottom: 16px; }
+            .topbar h1 { font-size: 18px; }
+            
+            /* Tự động cho phép cuộn ngang các bảng dữ liệu trên điện thoại */
+            .table-wrapper { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+        }
     </style>
 </head>
 <body>
