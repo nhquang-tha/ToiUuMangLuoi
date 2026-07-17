@@ -43,6 +43,8 @@
     .note-input { width: 100%; padding: 6px 10px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 11px; outline: none; box-sizing: border-box; }
     .note-input:focus { border-color: #3498db; }
 
+    #btnExport:hover { background: #219653 !important; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3) !important; }
+
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
@@ -58,7 +60,12 @@
         <div class="content-body">
             
             <div class="process-card">
-                <h3 style="margin-top: 0; color: #c0392b; margin-bottom: 15px;">🔄 Quy Trình Chuẩn 4 Bước (CEM Standard)</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #c0392b;">🔄 Quy Trình Chuẩn 4 Bước (CEM Standard)</h3>
+                    <button onclick="exportToExcel()" id="btnExport" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; display: none; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                        📥 Xuất File Excel
+                    </button>
+                </div>
                 
                 <div class="steps-container">
                     <div class="step-box" style="border-left-color:#3498db;">
@@ -123,6 +130,15 @@
 </div>
 
 <script>
+    // Tự động tải thư viện xuất Excel (SheetJS)
+    document.addEventListener('DOMContentLoaded', function() {
+        const xlsxScript = document.createElement('script');
+        xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
+        document.head.appendChild(xlsxScript);
+    });
+
+    window.badCellsData = []; // Lưu trữ cache cho việc xuất Excel
+
     function openTab(evt, tabName) {
         let i, tabcontent, tablinks;
         tabcontent = document.getElementsByClassName("tab-content");
@@ -145,8 +161,12 @@
                 return;
             }
 
+            // Lưu dữ liệu vào biến toàn cục để xuất Excel
+            window.badCellsData = result.data;
+
             document.getElementById('latestDate').innerText = result.latestDate;
             document.getElementById('dashboardArea').style.display = 'block';
+            document.getElementById('btnExport').style.display = 'block'; // Hiển thị nút Xuất Excel
 
             let hP1 = '', hP2 = '', hP3 = '';
             let cP1 = 0, cP2 = 0, cP3 = 0;
@@ -211,11 +231,21 @@
     async function updateStatus(id, selectEl) {
         let newStatus = selectEl.value;
         selectEl.className = `status-select status-${newStatus}`;
+        
+        // Cập nhật vào cache để xuất Excel không bị lệch
+        let rowData = window.badCellsData.find(r => r.id === id);
+        if(rowData) rowData.status = newStatus;
+
         await pushUpdate(id, newStatus, selectEl.closest('tr').querySelector('.note-input').value);
     }
 
     async function updateNote(id, newNote) {
         let status = document.querySelector(`select[onchange="updateStatus(${id}, this)"]`).value;
+        
+        // Cập nhật vào cache để xuất Excel không bị lệch
+        let rowData = window.badCellsData.find(r => r.id === id);
+        if(rowData) rowData.action_note = newNote;
+
         await pushUpdate(id, status, newNote);
     }
 
@@ -226,6 +256,43 @@
                 body: JSON.stringify({ id: id, status: status, action_note: note })
             });
         } catch (e) { alert("Lỗi mạng khi lưu trạng thái!"); }
+    }
+
+    // ==========================================
+    // THUẬT TOÁN XUẤT EXCEL TỪ BIẾN CACHE
+    // ==========================================
+    function exportToExcel() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel chưa tải xong, vui lòng đợi vài giây...');
+            return;
+        }
+        if (!window.badCellsData || window.badCellsData.length === 0) {
+            alert('Không có dữ liệu để xuất!');
+            return;
+        }
+
+        // Ánh xạ dữ liệu thô sang format tiếng Việt chuẩn chỉnh cho Excel
+        let exportData = window.badCellsData.map(r => ({
+            "Tên Cell": r.cell_name,
+            "Mạng": (r.network || '').toUpperCase(),
+            "Mức Độ": r.priority,
+            "Ngày Cập Nhật": r.latest_date,
+            "Vi Phạm (Ngày)": r.violation_days + '/7',
+            "TB Traffic (GB)": r.avg_traffic ? Number(r.avg_traffic.toFixed(2)) : 0,
+            "TB Throughput": r.avg_thput ? Number(r.avg_thput.toFixed(2)) : 0,
+            "TB PRB DL (%)": r.avg_prb ? Number(r.avg_prb.toFixed(2)) : 0,
+            "TB CQI (%)": r.avg_cqi ? Number(r.avg_cqi.toFixed(2)) : 0,
+            "TB Drop / Latency": r.network === '4g' ? (r.avg_latency ? r.avg_latency.toFixed(2) + ' ms' : '0 ms') : (r.avg_drop ? r.avg_drop.toFixed(2) + ' %' : '0 %'),
+            "Trạng Thái": r.status || 'Pending',
+            "Ghi Chú Xử Lý": r.action_note || ''
+        }));
+
+        let ws = XLSX.utils.json_to_sheet(exportData);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Bad_Cells_Report");
+        
+        let dateStr = window.badCellsData[0].latest_date.replace(/\//g, '_');
+        XLSX.writeFile(wb, `Bao_Cao_Bad_Cells_${dateStr}.xlsx`);
     }
 
     window.onload = loadBadCells;
