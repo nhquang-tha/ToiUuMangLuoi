@@ -113,7 +113,7 @@ async function getKpiHistory() {
 
 async function aggregateDashboardData() {
     try {
-        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
+        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard (SQL Native 6 Chars)...");
 
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
@@ -1155,7 +1155,7 @@ exports.getAllPoiExportData = async (req, res) => {
             SELECT p.POI, k.Thoi_gian, 
                    SUM(k.Total_Data_Traffic_Volume_GB) as Traf_4G, AVG(k.User_DL_Avg_Throughput_Kbps) as Thput_4G, AVG(k.CQI_4G) as CQI_4G,
                    0 as Traf_5G, 0 as Thput_5G, 0 as CQI_5G
-            FROM poi_4g p JOIN kpi_4g k ON p.Cell_name = p.Cell_Code 
+            FROM poi_4g p JOIN kpi_4g k ON p.Cell_Code = k.Cell_name 
             WHERE k.Thoi_gian IS NOT NULL GROUP BY p.POI, k.Thoi_gian
             UNION ALL
             SELECT p.POI, k.Thoi_gian, 
@@ -1196,46 +1196,29 @@ exports.getPoiData = async (req, res) => {
     if (!poiName) return res.json({ data: [], has4g: false, has5g: false });
 
     try {
-        const query4G = `
+        const [data4g] = await db.query(`
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g 
             FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code 
             WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
-        `;
-        const [data4g] = await db.query(query4G, [poiName]);
+        `, [poiName]);
 
-        const query5G = `
+        const [data5g] = await db.query(`
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g 
             FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code 
             WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
-        `;
-        const [data5g] = await db.query(query5G, [poiName]);
+        `, [poiName]);
 
         let mergedData = {};
-        data4g.forEach(r => {
-            mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: r.traffic_4g, thput_4g: r.thput_4g, traffic_5g: 0, thput_5g: 0 };
-        });
+        data4g.forEach(r => mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: r.traffic_4g, thput_4g: r.thput_4g, traffic_5g: 0, thput_5g: 0 });
         data5g.forEach(r => {
-            if (!mergedData[r.Thoi_gian]) {
-                mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
-            }
-            mergedData[r.Thoi_gian].traffic_5g = r.traffic_5g;
-            mergedData[r.Thoi_gian].thput_5g = r.thput_5g;
+            if (!mergedData[r.Thoi_gian]) mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
+            mergedData[r.Thoi_gian].traffic_5g = r.traffic_5g; mergedData[r.Thoi_gian].thput_5g = r.thput_5g;
         });
 
-        res.json({
-            data: Object.values(mergedData),
-            has4g: data4g.length > 0,
-            has5g: data5g.length > 0
-        });
-    } catch (error) { 
-        console.error("Lỗi lấy dữ liệu vẽ biểu đồ POI:", error);
-        res.status(500).json({ error: "Lỗi cơ sở dữ liệu." }); 
-    }
+        res.json({ data: Object.values(mergedData), has4g: data4g.length > 0, has5g: data5g.length > 0 });
+    } catch (error) { res.json({ error: "Lỗi cơ sở dữ liệu." }); }
 };
 
-// =========================================================================
-// THUẬT TOÁN TÁCH MÃ LÕI BẢO VỆ CHUỖI TÌM KIẾM (CORE CODE EXTRACTOR)
-// =========================================================================
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1248,43 +1231,53 @@ exports.getKpiData = async (req, res) => {
             return res.json(rows);
         } else if (type === 'keyword') {
             const table = `kpi_${network}`;
+            const rfTable = `rf_${network}`;
             const cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
+            const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
+            if (keywords.length === 0) return res.json([]);
             
+            // [THUẬT TOÁN ĐỒNG BỘ RF - KPI]
+            // Bước 1: Tìm tất cả các Cell_code thuộc Site_code từ bảng RF tương ứng
+            let rfConditions = [];
+            let rfParams = [];
+            keywords.forEach(k => {
+                rfConditions.push(`Site_code LIKE ? OR Cell_code LIKE ?`);
+                rfParams.push(`%${k}%`, `%${k}%`);
+            });
+            
+            let matchedCells = [];
+            try {
+                const [rfRows] = await db.query(`SELECT Cell_code FROM ${rfTable} WHERE ${rfConditions.join(' OR ')} LIMIT 300`, rfParams);
+                matchedCells = rfRows.map(r => r.Cell_code).filter(Boolean);
+            } catch (e) {
+                console.log(`⚠️ Bảng RF (${rfTable}) chưa có dữ liệu để ánh xạ Site_code.`);
+            }
+
+            // Bước 2: Gộp Cell_code tìm được với các Keyword gốc
+            const searchList = [...new Set([...matchedCells, ...keywords])];
+            
+            const conditions = [];
+            const params = [];
+
+            // Ép điều kiện quét trên cột Tên Cell của bảng KPI
+            searchList.forEach(k => {
+                conditions.push(`k.${cellCol} LIKE ?`);
+                params.push(`%${k}%`);
+            });
+
+            // Bước 3: Dự phòng quét thêm trên cột Site_name
             let siteCol = null;
             if (network === '4g') siteCol = 'Site_name';
             if (network === '5g') siteCol = 'Ten_GNODEB';
 
-            const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
-            if (rawKeywords.length === 0) return res.json([]);
-            
-            let conditions = [];
-            let params = [];
-
-            rawKeywords.forEach(k => {
-                // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
-                // VD: 3G_HHA028M_THA -> 3G_HHA028M
-                let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
-
-                let cond = `(k.${cellCol} LIKE ?`;
-                params.push(`%${k}%`);
-                
-                if (siteCol) {
-                    cond += ` OR k.${siteCol} LIKE ?`;
+            if (siteCol) {
+                keywords.forEach(k => {
+                    conditions.push(`k.${siteCol} LIKE ?`);
                     params.push(`%${k}%`);
-                }
+                });
+            }
 
-                if (coreCode !== k) {
-                    cond += ` OR k.${cellCol} LIKE ?`;
-                    params.push(`%${coreCode}%`);
-                    if (siteCol) {
-                        cond += ` OR k.${siteCol} LIKE ?`;
-                        params.push(`%${coreCode}%`);
-                    }
-                }
-                cond += `)`;
-                conditions.push(cond);
-            });
-
+            // Bước 4: Chạy lệnh truy vấn KPI cuối cùng
             const placeholders = conditions.join(' OR ');
             const [rows] = await db.query(`SELECT k.* FROM ${table} k WHERE ${placeholders}`, params);
             return res.json(rows);
@@ -1301,35 +1294,18 @@ exports.getQoeQosData = async (req, res) => {
     if (!value) return res.json({ qoe: [], qos: [] });
 
     try {
-        const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
-        if (rawKeywords.length === 0) return res.json({ qoe: [], qos: [] });
+        const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
+        if (keywords.length === 0) return res.json({ qoe: [], qos: [] });
 
-        let conditions = [];
-        let params = [];
-
-        rawKeywords.forEach(k => {
-            // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
-            let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
-            
-            if (coreCode !== k) {
-                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ? OR Cell_Name LIKE ? OR Site_Name LIKE ?)`);
-                params.push(`%${k}%`, `%${k}%`, `%${coreCode}%`, `%${coreCode}%`);
-            } else {
-                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
-                params.push(`%${k}%`, `%${k}%`);
-            }
-        });
-
-        const placeholders = conditions.join(' OR ');
+        const placeholders = keywords.map(() => `Cell_Name LIKE ? OR Site_Name LIKE ?`).join(' OR ');
+        const params = [];
+        keywords.forEach(k => { params.push(`%${k}%`, `%${k}%`); });
 
         const [qoe] = await db.query(`SELECT * FROM mbb_qoe WHERE ${placeholders}`, params);
         const [qos] = await db.query(`SELECT * FROM mbb_qos WHERE ${placeholders}`, params);
 
         res.json({ qoe: qoe, qos: qos });
-    } catch (error) { 
-        console.error("Lỗi getQoeQosData:", error);
-        res.json({ qoe: [], qos: [] }); 
-    }
+    } catch (error) { res.json({ qoe: [], qos: [] }); }
 };
 
 exports.getQoeQosListAll = async (req, res) => {
