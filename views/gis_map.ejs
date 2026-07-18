@@ -234,8 +234,9 @@
                     <input type="range" id="markerSizeSlider" min="1" max="10" step="0.5" value="3.5">
                 </div>
                 <div>
-                    <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">100%</span></label>
-                    <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="100">
+                    <!-- SỬA GIÁ TRỊ value THÀNH 10 VÀ hiển thị 10% -->
+                    <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">10%</span></label>
+                    <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="10">
                 </div>
             `;
             L.DomEvent.disableClickPropagation(div);
