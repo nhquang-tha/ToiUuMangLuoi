@@ -113,7 +113,7 @@ async function getKpiHistory() {
 
 async function aggregateDashboardData() {
     try {
-        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard (SQL Native 6 Chars)...");
+        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
 
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
@@ -922,7 +922,7 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Nha_cung_cap', 'Tinh', 'Ten_RNC', 'Ten_GNODEB', 'Ma_VNP', 'Loai_NE', 'CellType', 'District_code', 'MIMO', 'LAC', 'CI', 'GNODEB_ID', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Site_Code', 'Cell_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'nhom_canh_bao', 'tu_khoa', 'nguyen_nhan', 'phuong_an_xu_ly', 'ma_vt', 'ten_vt', 'ten_day_du', 'don_vi_tinh', 'ma_thiet_bi', 'loai_card', 'ten_viet_tat'];
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -1155,7 +1155,7 @@ exports.getAllPoiExportData = async (req, res) => {
             SELECT p.POI, k.Thoi_gian, 
                    SUM(k.Total_Data_Traffic_Volume_GB) as Traf_4G, AVG(k.User_DL_Avg_Throughput_Kbps) as Thput_4G, AVG(k.CQI_4G) as CQI_4G,
                    0 as Traf_5G, 0 as Thput_5G, 0 as CQI_5G
-            FROM poi_4g p JOIN kpi_4g k ON p.Cell_Code = k.Cell_name 
+            FROM poi_4g p JOIN kpi_4g k ON p.Cell_name = p.Cell_Code 
             WHERE k.Thoi_gian IS NOT NULL GROUP BY p.POI, k.Thoi_gian
             UNION ALL
             SELECT p.POI, k.Thoi_gian, 
@@ -1233,6 +1233,9 @@ exports.getPoiData = async (req, res) => {
     }
 };
 
+// =========================================================================
+// THUẬT TOÁN TÁCH MÃ LÕI BẢO VỆ CHUỖI TÌM KIẾM (CORE CODE EXTRACTOR)
+// =========================================================================
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1240,18 +1243,49 @@ exports.getKpiData = async (req, res) => {
         if (type === 'poi') {
             const table = `kpi_${network}`;
             const poiTable = `poi_${network}`;
-            // Cập nhật lại logic nhận diện: 4G dùng Cell_name, còn 3G và 5G dùng chung Ten_CELL
             const cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
             const [rows] = await db.query(`SELECT k.* FROM ${table} k JOIN ${poiTable} p ON k.${cellCol} = p.Cell_Code WHERE p.POI = ?`, [value]);
             return res.json(rows);
         } else if (type === 'keyword') {
             const table = `kpi_${network}`;
-            // Cập nhật lại logic nhận diện: 4G dùng Cell_name, còn 3G và 5G dùng chung Ten_CELL
             const cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
-            const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
-            if (keywords.length === 0) return res.json([]);
-            const placeholders = keywords.map(() => `k.${cellCol} LIKE ?`).join(' OR ');
-            const params = keywords.map(k => `%${k}%`);
+            
+            let siteCol = null;
+            if (network === '4g') siteCol = 'Site_name';
+            if (network === '5g') siteCol = 'Ten_GNODEB';
+
+            const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
+            if (rawKeywords.length === 0) return res.json([]);
+            
+            let conditions = [];
+            let params = [];
+
+            rawKeywords.forEach(k => {
+                // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
+                // VD: 3G_HHA028M_THA -> 3G_HHA028M
+                let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
+
+                let cond = `(k.${cellCol} LIKE ?`;
+                params.push(`%${k}%`);
+                
+                if (siteCol) {
+                    cond += ` OR k.${siteCol} LIKE ?`;
+                    params.push(`%${k}%`);
+                }
+
+                if (coreCode !== k) {
+                    cond += ` OR k.${cellCol} LIKE ?`;
+                    params.push(`%${coreCode}%`);
+                    if (siteCol) {
+                        cond += ` OR k.${siteCol} LIKE ?`;
+                        params.push(`%${coreCode}%`);
+                    }
+                }
+                cond += `)`;
+                conditions.push(cond);
+            });
+
+            const placeholders = conditions.join(' OR ');
             const [rows] = await db.query(`SELECT k.* FROM ${table} k WHERE ${placeholders}`, params);
             return res.json(rows);
         }
@@ -1267,34 +1301,48 @@ exports.getQoeQosData = async (req, res) => {
     if (!value) return res.json({ qoe: [], qos: [] });
 
     try {
-        const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
-        if (keywords.length === 0) return res.json({ qoe: [], qos: [] });
+        const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
+        if (rawKeywords.length === 0) return res.json({ qoe: [], qos: [] });
 
-        const placeholders = keywords.map(() => `Cell_Name LIKE ? OR Site_Name LIKE ?`).join(' OR ');
-        const params = [];
-        keywords.forEach(k => { params.push(`%${k}%`, `%${k}%`); });
+        let conditions = [];
+        let params = [];
+
+        rawKeywords.forEach(k => {
+            // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
+            let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
+            
+            if (coreCode !== k) {
+                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ? OR Cell_Name LIKE ? OR Site_Name LIKE ?)`);
+                params.push(`%${k}%`, `%${k}%`, `%${coreCode}%`, `%${coreCode}%`);
+            } else {
+                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
+                params.push(`%${k}%`, `%${k}%`);
+            }
+        });
+
+        const placeholders = conditions.join(' OR ');
 
         const [qoe] = await db.query(`SELECT * FROM mbb_qoe WHERE ${placeholders}`, params);
         const [qos] = await db.query(`SELECT * FROM mbb_qos WHERE ${placeholders}`, params);
 
         res.json({ qoe: qoe, qos: qos });
-    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL QoE/QoS." }); }
+    } catch (error) { 
+        console.error("Lỗi getQoeQosData:", error);
+        res.json({ qoe: [], qos: [] }); 
+    }
 };
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
         let [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
-        
-        // CƠ CHẾ AN TOÀN: Nếu bảng trống, chỉ cảnh báo chứ không lỗi
         if (rows.length === 0) {
             console.log("⚡ Dữ liệu tổng hợp QoE/QoS đang trống. Hệ thống đang tự động kích hoạt đồng bộ...");
             await syncQoeQosSummary();
             [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
         }
-        
         res.json(rows);
     } catch (e) {
-        console.error("Lỗi lấy danh sách qoe_qos, đang tự động khởi tạo lại:", e.message);
+        console.error("Lỗi lấy danh sách qoe_qos, đang tự động khởi tạo lại:", e);
         try {
             await syncQoeQosSummary();
             const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
