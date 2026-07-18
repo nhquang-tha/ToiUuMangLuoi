@@ -701,7 +701,8 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('tuan') || rowStr.includes('tuần') || 
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
-                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
+                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number') ||
+                        rowStr.includes('equipment') || rowStr.includes('csht_code') || rowStr.includes('frequency')) {
                         headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
@@ -711,8 +712,9 @@ exports.handleImportData = async (req, res) => {
 
             const excelHeaders = rawData[headerRowIdx];
             
-            // --- TÍNH NĂNG MỚI: TỰ ĐỘNG THÊM CỘT CÒN THIẾU VÀO DATABASE CHO BẢNG RF ---
-            if (networkType.startsWith('rf_')) {
+            // --- TÍNH NĂNG MỚI: TỰ ĐỘNG THÊM CỘT CÒN THIẾU VÀO DATABASE ---
+            // Bổ sung hỗ trợ tạo cột tự động cho cả bảng CSHT_DATA
+            if (networkType.startsWith('rf_') || networkType === 'csht_data') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
                     if (!h) continue;
@@ -725,7 +727,8 @@ exports.handleImportData = async (req, res) => {
                     if (!exists) {
                         try {
                             console.log(`⚡ Auto-Migration: Thêm cột mới [${safeName}] vào bảng ${networkType}`);
-                            await db.query(`ALTER TABLE ${networkType} ADD COLUMN \`${safeName}\` TEXT`);
+                            // Đã sửa thành VARCHAR(255) thay vì TEXT để tối ưu hiệu năng và tránh lỗi khi gộp câu lệnh SQL
+                            await db.query(`ALTER TABLE ${networkType} ADD COLUMN \`${safeName}\` VARCHAR(255)`);
                             isSchemaChanged = true;
                         } catch (e) {
                             console.error(`Lỗi tạo cột ${safeName}:`, e.message);
@@ -894,6 +897,7 @@ exports.handleImportData = async (req, res) => {
                         else if (h === 'tên viết tắt' || h.includes('viet tat') || h.includes('viết tắt')) mappedCol = 'ten_viet_tat';
                     }
 
+                    // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
                     let actualDbCol = null;
                     if (mappedCol) {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
@@ -922,7 +926,8 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code'];
+            // XÁC ĐỊNH CÁC CỘT LÀ TEXT (CHUỖI) ĐỂ KHÔNG BỊ ÉP KIỂU THÀNH SỐ
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'Equipment', 'Frequency', 'CSHT_code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -935,9 +940,9 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
                     
-                    // --- BẢO VỆ DỮ LIỆU CHỮ CHO BẢNG RF ---
-                    if (networkType.startsWith('rf_')) {
-                        let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height'];
+                    // --- BẢO VỆ DỮ LIỆU CHỮ CHO BẢNG RF VÀ CSHT ---
+                    if (networkType.startsWith('rf_') || networkType === 'csht_data') {
+                        let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height', 'chieu_cao_cot', 'chieu_cao_mat_dat'];
                         if (!floatRfCols.includes(map.dbCol.toLowerCase())) {
                             isStrCol = true;
                         }
@@ -988,10 +993,18 @@ exports.handleImportData = async (req, res) => {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
                     let chunk = insertData.slice(i, i + chunkSize);
-                    const keys = Object.keys(chunk[0]); 
                     
+                    // -- GIẢI PHÁP SỬA LỖI MỚI CHO SQL LỆNH ĐỘNG --
+                    // Thay vì dùng Object.keys của dòng đầu tiên (có thể bị thiếu trường nếu ô bị rỗng)
+                    // Ta sẽ gộp tất cả các Keys có trong Chunk để tạo cấu trúc SQL đầy đủ
+                    let allKeys = new Set();
+                    chunk.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
+                    const keys = Array.from(allKeys);
+
                     const valuesArr = chunk.map(obj => keys.map(k => {
                         let val = obj[k];
+                        // Nếu trường không có trong Obj (do undefined), ép thành null
+                        if (val === undefined) return null;
                         return (typeof val === 'string') ? val.trim() : val;
                     })); 
                     
@@ -1196,27 +1209,41 @@ exports.getPoiData = async (req, res) => {
     if (!poiName) return res.json({ data: [], has4g: false, has5g: false });
 
     try {
-        const [data4g] = await db.query(`
+        const query4G = `
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g 
             FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code 
             WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
-        `, [poiName]);
+        `;
+        const [data4g] = await db.query(query4G, [poiName]);
 
-        const [data5g] = await db.query(`
+        const query5G = `
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g 
             FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code 
             WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
-        `, [poiName]);
+        `;
+        const [data5g] = await db.query(query5G, [poiName]);
 
         let mergedData = {};
-        data4g.forEach(r => mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: r.traffic_4g, thput_4g: r.thput_4g, traffic_5g: 0, thput_5g: 0 });
+        data4g.forEach(r => {
+            mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: r.traffic_4g, thput_4g: r.thput_4g, traffic_5g: 0, thput_5g: 0 };
+        });
         data5g.forEach(r => {
-            if (!mergedData[r.Thoi_gian]) mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
-            mergedData[r.Thoi_gian].traffic_5g = r.traffic_5g; mergedData[r.Thoi_gian].thput_5g = r.thput_5g;
+            if (!mergedData[r.Thoi_gian]) {
+                mergedData[r.Thoi_gian] = { Thoi_gian: r.Thoi_gian, traffic_4g: 0, thput_4g: 0 };
+            }
+            mergedData[r.Thoi_gian].traffic_5g = r.traffic_5g;
+            mergedData[r.Thoi_gian].thput_5g = r.thput_5g;
         });
 
-        res.json({ data: Object.values(mergedData), has4g: data4g.length > 0, has5g: data5g.length > 0 });
-    } catch (error) { res.json({ error: "Lỗi cơ sở dữ liệu." }); }
+        res.json({
+            data: Object.values(mergedData),
+            has4g: data4g.length > 0,
+            has5g: data5g.length > 0
+        });
+    } catch (error) { 
+        console.error("Lỗi lấy dữ liệu vẽ biểu đồ POI:", error);
+        res.status(500).json({ error: "Lỗi cơ sở dữ liệu." }); 
+    }
 };
 
 exports.getKpiData = async (req, res) => {
@@ -1236,8 +1263,6 @@ exports.getKpiData = async (req, res) => {
             const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
             if (keywords.length === 0) return res.json([]);
             
-            // [THUẬT TOÁN ĐỒNG BỘ RF - KPI]
-            // Bước 1: Tìm tất cả các Cell_code thuộc Site_code từ bảng RF tương ứng
             let rfConditions = [];
             let rfParams = [];
             keywords.forEach(k => {
@@ -1253,19 +1278,16 @@ exports.getKpiData = async (req, res) => {
                 console.log(`⚠️ Bảng RF (${rfTable}) chưa có dữ liệu để ánh xạ Site_code.`);
             }
 
-            // Bước 2: Gộp Cell_code tìm được với các Keyword gốc
             const searchList = [...new Set([...matchedCells, ...keywords])];
             
             const conditions = [];
             const params = [];
 
-            // Ép điều kiện quét trên cột Tên Cell của bảng KPI
             searchList.forEach(k => {
                 conditions.push(`k.${cellCol} LIKE ?`);
                 params.push(`%${k}%`);
             });
 
-            // Bước 3: Dự phòng quét thêm trên cột Site_name
             let siteCol = null;
             if (network === '4g') siteCol = 'Site_name';
             if (network === '5g') siteCol = 'Ten_GNODEB';
@@ -1277,7 +1299,6 @@ exports.getKpiData = async (req, res) => {
                 });
             }
 
-            // Bước 4: Chạy lệnh truy vấn KPI cuối cùng
             const placeholders = conditions.join(' OR ');
             const [rows] = await db.query(`SELECT k.* FROM ${table} k WHERE ${placeholders}`, params);
             return res.json(rows);
@@ -1305,27 +1326,29 @@ exports.getQoeQosData = async (req, res) => {
         const [qos] = await db.query(`SELECT * FROM mbb_qos WHERE ${placeholders}`, params);
 
         res.json({ qoe: qoe, qos: qos });
-    } catch (error) { res.json({ qoe: [], qos: [] }); }
+    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL QoE/QoS." }); }
 };
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
         let [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+        
         if (rows.length === 0) {
             console.log("⚡ Dữ liệu tổng hợp QoE/QoS đang trống. Hệ thống đang tự động kích hoạt đồng bộ...");
-            await syncQoeQosSummary();
+            await syncQoeQosSummary(); 
             [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
         }
+        
         res.json(rows);
-    } catch (e) {
-        console.error("Lỗi lấy danh sách qoe_qos, đang tự động khởi tạo lại:", e);
+    } catch (e) { 
+        console.error("Bảng qoe_qos chưa sẵn sàng, đang tự động khởi tạo lại:", e.message);
         try {
             await syncQoeQosSummary();
             const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
             res.json(rows);
         } catch (err) {
             console.error("Lỗi khởi tạo bảng QoE/QoS:", err);
-            res.json([]);
+            res.json([]); 
         }
     }
 };
