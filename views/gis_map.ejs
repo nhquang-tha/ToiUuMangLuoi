@@ -129,6 +129,12 @@
     // [TỐI ƯU 1]: BẬT PREFER CANVAS LÊN TRUE ĐỂ VẼ BẰNG GPU THAY VÌ SVG DOM
     let map = L.map('map', { preferCanvas: true }).setView([19.806692, 105.776153], 10); 
     
+    // ĐẢM BẢO MARKER CSHT LUÔN NỔI LÊN TRÊN CÁC KHỐI ĐA GIÁC CỦA CELL
+    // Tạo một pane tùy chỉnh có Z-index cao hơn overlayPane mặc định
+    map.createPane('cshtPane');
+    map.getPane('cshtPane').style.zIndex = 450; // Cao hơn overlayPane (400)
+    map.getPane('cshtPane').style.pointerEvents = 'auto'; // Cho phép người dùng click chuột
+    
     // LAYER GROUP
     let layerGroup = L.layerGroup().addTo(map);   
     let cshtLayer = L.layerGroup().addTo(map);    
@@ -429,8 +435,10 @@
             globalCshtData = [];
 
             data.forEach(item => {
+                // Nhúng pane: 'cshtPane' vào Marker để nó nằm ở tầng Z-index ưu tiên
                 const marker = L.circleMarker([item.lat, item.lng], {
-                    radius: 5, fillColor: '#34495e', color: '#ffffff', weight: 2, fillOpacity: 1
+                    radius: 5, fillColor: '#34495e', color: '#ffffff', weight: 2, fillOpacity: 1,
+                    pane: 'cshtPane'
                 });
 
                 marker.bindTooltip(item.Ten_CSHT, {
