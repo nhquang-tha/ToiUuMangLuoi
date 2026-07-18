@@ -28,7 +28,6 @@
     @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
-    /* Modal Zoom */
     .modal-overlay {
         display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6);
         align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; backdrop-filter: blur(4px);
@@ -43,7 +42,6 @@
     .close-btn:hover { color: #e74c3c; }
     .modal-body { flex: 1; position: relative; width: 100%; height: 100%; }
 
-    /* CSS Cho Bảng Danh Sách Virtual Render */
     .table-wrapper { width: 100%; max-height: 600px; overflow: auto; background: #fff; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: none; animation: fadeIn 0.5s ease; margin-bottom: 30px; border: 1px solid #ecf0f1;}
     .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
     .data-table th, .data-table td { padding: 12px 15px; text-align: center; }
@@ -57,7 +55,6 @@
     .trend-down { color: #e74c3c; font-weight: bold; font-size: 11px;}
     .trend-flat { color: #95a5a6; font-size: 11px;}
     
-    /* Cải thiện bộ lọc trên bảng */
     .table-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; position: sticky; left: 15px;}
     .table-filter-select { padding: 8px 12px; border: 1px solid #dcdde1; border-radius: 6px; outline: none; font-size: 13px; color: #34495e;}
 </style>
@@ -79,7 +76,6 @@
                         <label style="display:block; margin-bottom:8px; font-weight:bold; color:#f39c12;">Nhập Tên Cell_Code hoặc Site_Code (Nhập nhiều cách nhau dấu phẩy):</label>
                         <input type="text" id="keywordInput" placeholder="Ví dụ: 4G-THA001M (tìm cả trạm), hoặc 4G-THA001M11, 4G-THA002M (so sánh các cell)" style="width: 100%; outline: none; border-left: 4px solid #f1c40f; box-sizing: border-box;">
                     </div>
-                    <!-- BỘ LỌC GIỚI HẠN SỐ TUẦN HIỂN THỊ TRÊN BIỂU ĐỒ -->
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display:block; margin-bottom:8px; font-weight:bold; color:#f39c12;">Thời gian vẽ biểu đồ:</label>
                         <select id="chartWeeksLimit" style="width: 100%; outline: none; font-size: 13px; box-sizing: border-box; cursor: pointer;">
@@ -376,8 +372,6 @@
 
         try {
             const res = await fetch('/api/qoe-qos-list-all');
-            if(!res.ok) throw new Error("Lỗi API");
-            
             window.allQoeQosData = await res.json();
 
             document.getElementById('loadingMsg').style.display = 'none';
