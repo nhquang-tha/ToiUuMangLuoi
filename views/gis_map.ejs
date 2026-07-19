@@ -126,14 +126,15 @@
     let isTAMode = false;
     let taDataCache = []; 
 
-    // [TỐI ƯU 1]: BẬT PREFER CANVAS LÊN TRUE ĐỂ VẼ BẰNG GPU THAY VÌ SVG DOM
+   // [TỐI ƯU 1]: BẬT PREFER CANVAS LÊN TRUE ĐỂ VẼ BẰNG GPU THAY VÌ SVG DOM
     let map = L.map('map', { preferCanvas: true }).setView([19.806692, 105.776153], 10); 
     
     // ĐẢM BẢO MARKER CSHT LUÔN NỔI LÊN TRÊN CÁC KHỐI ĐA GIÁC CỦA CELL
     // Tạo một pane tùy chỉnh có Z-index cao hơn overlayPane mặc định
     map.createPane('cshtPane');
     map.getPane('cshtPane').style.zIndex = 450; // Cao hơn overlayPane (400)
-    map.getPane('cshtPane').style.pointerEvents = 'auto'; // Cho phép người dùng click chuột
+    // SỬA LỖI: Dùng SVG Renderer cho lớp CSHT để nền trong suốt không che khuất thao tác Click chuột xuống lớp đa giác Cell bên dưới
+    const cshtRenderer = L.svg({ pane: 'cshtPane' });
     
     // LAYER GROUP
     let layerGroup = L.layerGroup().addTo(map);   
@@ -234,7 +235,6 @@
                     <input type="range" id="markerSizeSlider" min="1" max="10" step="0.5" value="3.5">
                 </div>
                 <div>
-                    <!-- SỬA GIÁ TRỊ value THÀNH 10 VÀ hiển thị 10% -->
                     <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">10%</span></label>
                     <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="10">
                 </div>
@@ -427,7 +427,7 @@
     // ====================================================
     // HIỂN THỊ CSHT LÊN BẢN ĐỒ
     // ====================================================
-    async function loadCshtData() {
+         async function loadCshtData() {
         try {
             const res = await fetch('/api/csht-data');
             const data = await res.json();
@@ -436,10 +436,9 @@
             globalCshtData = [];
 
             data.forEach(item => {
-                // Nhúng pane: 'cshtPane' vào Marker để nó nằm ở tầng Z-index ưu tiên
                 const marker = L.circleMarker([item.lat, item.lng], {
                     radius: 5, fillColor: '#34495e', color: '#ffffff', weight: 2, fillOpacity: 1,
-                    pane: 'cshtPane'
+                    renderer: cshtRenderer
                 });
 
                 marker.bindTooltip(item.Ten_CSHT, {
