@@ -1,9 +1,8 @@
 <style>
-    /* CSS RIÊNG CHO SIDEBAR HIỆN ĐẠI */
     .sidebar { 
         width: 260px; 
-        background: var(--bg-surface, #ffffff); 
-        border-right: 1px solid var(--border-color, #e2e8f0); 
+        background-color: var(--bg-surface) !important; 
+        border-right: 1px solid var(--border-color) !important; 
         height: 100vh; 
         display: flex; 
         flex-direction: column; 
@@ -20,157 +19,129 @@
         align-items: center; 
         justify-content: space-between; 
         padding: 0 20px; 
-        border-bottom: 1px solid var(--border-color, #e2e8f0);
-        transition: padding 0.3s ease;
+        border-bottom: 1px solid var(--border-color) !important; 
     }
     .sidebar-logo { 
         display: flex; align-items: center; gap: 10px; 
-        font-weight: 800; color: var(--text-main, #1e293b); font-size: 16px; 
+        font-weight: 800; color: var(--text-main) !important; font-size: 16px; 
         letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; 
-        transition: opacity 0.2s, width 0.2s;
+        transition: opacity 0.2s;
     }
-    
-    /* Căn giữa nút Hamburger khi Menu máy tính bị thu gọn */
-    .sidebar.collapsed .sidebar-header { padding: 0; justify-content: center; }
-    .sidebar.collapsed .sidebar-logo { opacity: 0; width: 0; pointer-events: none; display: none;}
+    .sidebar.collapsed .sidebar-logo { opacity: 0; width: 0; pointer-events: none;}
     
     .toggle-btn { 
-        background: #f1f5f9; border: none; color: var(--text-muted, #64748b); 
+        background: var(--bg-body); border: 1px solid var(--border-color); color: var(--text-muted); 
         width: 32px; height: 32px !important; border-radius: 8px; 
         display: flex !important; align-items: center; justify-content: center; 
-        cursor: pointer; transition: 0.2s; padding: 0 !important; box-shadow: none !important;
+        cursor: pointer; transition: 0.2s; padding: 0 !important;
     }
-    .toggle-btn:hover { background: #e2e8f0; color: var(--primary, #4f46e5); }
+    .toggle-btn:hover { color: var(--primary); border-color: var(--primary); }
     
     .sidebar-menu { 
         flex: 1; overflow-y: auto; overflow-x: hidden; 
         padding: 20px 14px; list-style: none; margin: 0; 
     }
-    .sidebar-menu::-webkit-scrollbar { width: 4px; }
-    .sidebar-menu::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-    .sidebar:hover .sidebar-menu::-webkit-scrollbar-thumb { background: #cbd5e1; }
-
+    
     .menu-category { 
-        font-size: 11px; font-weight: 700; color: #94a3b8; 
+        font-size: 11px; font-weight: 700; color: var(--text-muted); 
         text-transform: uppercase; letter-spacing: 0.8px; 
         margin: 20px 0 8px 12px; white-space: nowrap; transition: opacity 0.2s;
+        opacity: 0.6;
     }
     .sidebar.collapsed .menu-category { opacity: 0; height: 0; margin: 0; overflow: hidden;}
     
     .menu-item a { 
         display: flex; align-items: center; padding: 10px 14px; 
-        color: var(--text-muted, #64748b); text-decoration: none; border-radius: 8px; 
+        color: var(--text-muted); text-decoration: none; border-radius: 8px; 
         font-weight: 500; font-size: 13.5px; margin-bottom: 4px; 
         transition: all 0.2s ease; white-space: nowrap;
     }
-    .menu-item a i { font-size: 20px; min-width: 24px; margin-right: 12px; transition: margin 0.3s; color: #94a3b8; }
+    .menu-item a i { font-size: 20px; min-width: 24px; margin-right: 12px; transition: margin 0.3s; color: var(--text-muted); opacity: 0.8;}
     .sidebar.collapsed .menu-item a i { margin-right: 0; }
     
     .menu-text { transition: opacity 0.2s; }
     .sidebar.collapsed .menu-text { opacity: 0; display: none; }
     
-    .menu-item a:hover { background: #f8fafc; color: var(--text-main, #1e293b); }
-    .menu-item a:hover i { color: var(--primary, #4f46e5); }
+    .menu-item a:hover { background: var(--bg-body); color: var(--text-main); }
+    .menu-item a:hover i { color: var(--primary); opacity: 1;}
     
-    .menu-item a.active { background: #eef2ff; color: var(--primary, #4f46e5); font-weight: 600; }
-    .menu-item a.active i { color: var(--primary, #4f46e5); }
-    
-    .menu-item a.danger-link { color: var(--danger, #ef4444); }
-    .menu-item a.danger-link i { color: var(--danger, #ef4444); }
-    .menu-item a.danger-link:hover { background: #fef2f2; color: #dc2626; }
-    
-    .menu-item { position: relative; }
-    .sidebar.collapsed .menu-item:hover::after {
-        content: attr(data-tooltip); position: absolute; left: 72px; top: 50%; transform: translateY(-50%); 
-        background: #1e293b; color: white; padding: 6px 12px; border-radius: 6px; 
-        font-size: 12px; white-space: nowrap; z-index: 1000; pointer-events: none; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-weight: 500;
+    .menu-item a.active { 
+        background: var(--cta-gradient); /* Áp dụng Gradient cho Menu Active */
+        color: #ffffff !important; 
+        font-weight: 600; 
+        box-shadow: var(--cta-shadow);
     }
+    .menu-item a.active i { color: #ffffff !important; opacity: 1;}
+    
+    .menu-item a.danger-link { color: var(--danger); }
+    .menu-item a.danger-link i { color: var(--danger); }
+    .menu-item a.danger-link:hover { background: rgba(239, 68, 68, 0.1); }
     
     .user-profile { 
-        padding: 16px 20px; border-top: 1px solid var(--border-color, #e2e8f0); 
+        padding: 16px 20px; border-top: 1px solid var(--border-color) !important; 
         display: flex; align-items: center; gap: 12px; white-space: nowrap; 
-        overflow: hidden; background: #f8fafc;
+        background: var(--bg-body); justify-content: space-between;
     }
+    .user-left { display: flex; align-items: center; gap: 12px; overflow: hidden; }
     .avatar { 
         width: 38px; height: 38px; border-radius: 10px; 
-        background: linear-gradient(135deg, var(--primary, #4f46e5), #3b82f6); 
+        background: var(--cta-gradient); 
         display: flex; align-items: center; justify-content: center; 
         font-weight: bold; color: #ffffff; flex-shrink: 0; font-size: 16px; 
-        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
     }
     .user-info { display: flex; flex-direction: column; }
-    .user-name { font-weight: 600; font-size: 13.5px; color: var(--text-main, #1e293b); }
-    .user-role { font-size: 11px; color: var(--text-muted, #64748b); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;}
+    .user-name { font-weight: 600; font-size: 13.5px; color: var(--text-main); }
+    .user-role { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;}
     .sidebar.collapsed .user-info { display: none; }
 
+    /* NÚT TOGGLE DARK MODE */
+    .theme-toggle-btn {
+        background: transparent; border: none; color: var(--text-muted);
+        cursor: pointer; padding: 6px; border-radius: 6px; transition: 0.3s;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .theme-toggle-btn:hover { background: var(--bg-surface); color: var(--primary); }
+    .sidebar.collapsed .theme-toggle-btn { display: none; }
+
     /* ==========================================
-       GIAO DIỆN CHUYÊN BIỆT CHO MOBILE (ĐIỆN THOẠI)
+       GIAO DIỆN CHUYÊN BIỆT CHO MOBILE
        ========================================== */
     .mobile-overlay {
         display: none; position: fixed; inset: 0; 
-        background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(3px); 
+        background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(3px); 
         z-index: 9998; opacity: 0; transition: opacity 0.3s ease;
     }
     .mobile-overlay.show { display: block; opacity: 1; }
-    
-    /* ẨN TRIỆT ĐỂ NÚT HAMBURGER THỪA BÊN NGOÀI TRÊN MÁY TÍNH */
     .mobile-fixed-btn { display: none !important; }
 
     @media (max-width: 768px) {
-        /* Hiển thị Nút Hamburger vĩnh viễn trên Mobile */
         .mobile-fixed-btn {
-            display: flex !important;
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            width: 40px;
-            height: 40px;
-            background: #ffffff;
-            color: #4f46e5;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            z-index: 9997; /* Nằm dưới Overlay nhưng trên biểu đồ */
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            cursor: pointer;
-            transition: 0.2s;
+            display: flex !important; position: fixed; top: 16px; left: 16px;
+            width: 42px; height: 42px; background: var(--bg-surface); color: var(--primary);
+            border: 1px solid var(--border-color); border-radius: 8px;
+            box-shadow: var(--shadow-card); z-index: 9997; 
+            align-items: center; justify-content: center; font-size: 24px; cursor: pointer; transition: 0.2s;
         }
-        .mobile-fixed-btn:active { background: #f1f5f9; transform: scale(0.95); }
-
-        /* Dịch chuyển thanh Tiêu đề (Topbar) để chừa chỗ cho Nút Hamburger */
-        .topbar { padding-left: 65px !important; min-height: 42px; }
-
-        /* Sidebar mặc định giấu hẳn đi (Off-canvas) */
+        .topbar { padding-left: 70px !important; }
         .sidebar {
-            position: fixed !important;
-            top: 0;
-            left: -320px !important;
-            width: 280px !important;
-            height: 100vh !important;
-            z-index: 9999 !important;
+            position: fixed !important; top: 0; left: -320px !important; 
+            width: 280px !important; z-index: 9999 !important; 
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 4px 0 24px rgba(0,0,0,0.15) !important;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.5) !important;
         }
         .sidebar.mobile-open { left: 0 !important; }
-        
-        /* Hủy chế độ Thu Gọn (Collapsed) để trên Mobile luôn hiện đầy đủ Menu */
-        .sidebar.collapsed .menu-category { opacity: 1 !important; height: auto !important; margin: 20px 0 8px 12px !important; }
+        .sidebar.collapsed .menu-category { opacity: 0.6 !important; height: auto !important; margin: 20px 0 8px 12px !important; }
         .sidebar.collapsed .menu-text { opacity: 1 !important; display: inline-block !important; }
-        .sidebar.collapsed .sidebar-logo { opacity: 1 !important; width: auto !important; pointer-events: auto !important; display: flex !important;}
+        .sidebar.collapsed .sidebar-logo { opacity: 1 !important; width: auto !important; pointer-events: auto !important; }
         .sidebar.collapsed .user-info { display: flex !important; }
+        .sidebar.collapsed .theme-toggle-btn { display: flex !important; }
         .sidebar.collapsed .menu-item a i { margin-right: 12px !important; }
-        .sidebar.collapsed .sidebar-header { padding: 0 20px !important; justify-content: space-between !important; }
-        
-        /* Ẩn nút gập của màn hình máy tính đi */
         .toggle-btn { display: none !important; }
+        .sidebar-header { justify-content: center; }
     }
 </style>
 
 <%
-    /* Logic Phân Quyền Động (RBAC) */
     const userPerms = currentUser && currentUser.permissions ? currentUser.permissions : [];
     const isAdm = currentUser && currentUser.role === 'admin';
     const canSee = (menuKey) => {
@@ -179,214 +150,140 @@
     };
 %>
 
-<!-- Nút Hamburger Cố định (Chỉ hiển thị trên Mobile) -->
-<button class="mobile-fixed-btn" id="mobileNavToggle" aria-label="Mở Menu">
-    <i class="ph ph-list"></i>
-</button>
-
-<!-- Lớp mờ nền khi mở Menu Mobile -->
+<button class="mobile-fixed-btn" id="mobileNavToggle" aria-label="Mở Menu"><i class="ph ph-list"></i></button>
 <div class="mobile-overlay" id="mobileOverlay"></div>
 
 <aside class="sidebar" id="mainSidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo">
-            <i class="ph-fill ph-broadcast" style="color: var(--primary, #4f46e5); font-size: 24px;"></i>
+            <i class="ph-fill ph-broadcast" style="color: var(--primary); font-size: 24px;"></i>
             <span>VNPT Telecom</span>
         </div>
-        <!-- Nút thu gọn menu trên Máy tính -->
-        <button class="toggle-btn" id="toggleSidebar" title="Thu gọn / Mở rộng">
-            <i class="ph ph-x"></i>
-        </button>
+        <button class="toggle-btn" id="toggleSidebar" title="Thu gọn / Mở rộng"><i class="ph ph-list"></i></button>
     </div>
 
     <ul class="sidebar-menu">
         <% if (canSee('dashboard') || canSee('gis_map')) { %>
             <li class="menu-category">TỔNG QUAN</li>
             <% if (canSee('dashboard')) { %>
-            <li class="menu-item" data-tooltip="Dashboard">
-                <a href="/" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Dashboard' ? 'active' : '' %>">
-                    <i class="ph ph-squares-four"></i> <span class="menu-text">Hệ thống Dashboard</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Dashboard' ? 'active' : '' %>"><i class="ph ph-squares-four"></i> <span class="menu-text">Hệ thống Dashboard</span></a></li>
             <% } %>
             <% if (canSee('gis_map')) { %>
-            <li class="menu-item" data-tooltip="Bản đồ GIS">
-                <a href="/gis-map" class="<%= typeof currentPath !== 'undefined' && currentPath === 'GIS Map' ? 'active' : '' %>">
-                    <i class="ph ph-map-trifold"></i> <span class="menu-text">Bản đồ quy hoạch (GIS)</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/gis-map" class="<%= typeof currentPath !== 'undefined' && currentPath === 'GIS Map' ? 'active' : '' %>"><i class="ph ph-map-trifold"></i> <span class="menu-text">Bản đồ quy hoạch (GIS)</span></a></li>
             <% } %>
         <% } %>
 
         <% if (canSee('worst_cells') || canSee('congestion_3g') || canSee('traffic_down')) { %>
             <li class="menu-category">GIÁM SÁT & CẢNH BÁO</li>
             <% if (canSee('worst_cells')) { %>
-            <li class="menu-item" data-tooltip="Worst Cells 4G">
-                <a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>">
-                    <i class="ph ph-warning-circle" style="color: var(--danger, #ef4444);"></i> <span class="menu-text">Worst Cells 4G</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>"><i class="ph ph-warning-circle" style="color: var(--danger);"></i> <span class="menu-text">Worst Cells 4G</span></a></li>
             <% } %>
             <% if (canSee('congestion_3g')) { %>
-            <li class="menu-item" data-tooltip="Nghẽn Mạng 3G">
-                <a href="/congestion-3g" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Congestion 3G' ? 'active' : '' %>">
-                    <i class="ph ph-cell-signal-low" style="color: var(--warning, #f59e0b);"></i> <span class="menu-text">Nghẽn Mạng 3G</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/congestion-3g" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Congestion 3G' ? 'active' : '' %>"><i class="ph ph-cell-signal-low" style="color: var(--warning);"></i> <span class="menu-text">Nghẽn Mạng 3G</span></a></li>
             <% } %>
             <% if (canSee('traffic_down')) { %>
-            <li class="menu-item" data-tooltip="Sụt Giảm Lưu Lượng">
-                <a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>">
-                    <i class="ph ph-trend-down" style="color: #8b5cf6;"></i> <span class="menu-text">Sụt giảm lưu lượng</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>"><i class="ph ph-trend-down" style="color: #8b5cf6;"></i> <span class="menu-text">Sụt giảm lưu lượng</span></a></li>
             <% } %>
         <% } %>
 
         <% if (canSee('kpi_analytics') || canSee('qoe_qos') || canSee('poi_report') || canSee('optimizing_qoe_qos') || canSee('bad_cells') || canSee('downtilt_coverage')) { %>
             <li class="menu-category">PHÂN TÍCH & TỐI ƯU</li>
             <% if (canSee('kpi_analytics')) { %>
-            <li class="menu-item" data-tooltip="Tra cứu KPI">
-                <a href="/kpi-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'KPI Analytics' ? 'active' : '' %>">
-                    <i class="ph ph-chart-line-up"></i> <span class="menu-text">Tra cứu KPI Đa mạng</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/kpi-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'KPI Analytics' ? 'active' : '' %>"><i class="ph ph-chart-line-up"></i> <span class="menu-text">Tra cứu KPI Đa mạng</span></a></li>
             <% } %>
             <% if (canSee('qoe_qos')) { %>
-            <li class="menu-item" data-tooltip="Phân tích QoE/QoS">
-                <a href="/qoe-qos-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'QoE QoS Analytics' ? 'active' : '' %>">
-                    <i class="ph ph-star"></i> <span class="menu-text">Phân tích QoE / QoS</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/qoe-qos-analytics" class="<%= typeof currentPath !== 'undefined' && currentPath === 'QoE QoS Analytics' ? 'active' : '' %>"><i class="ph ph-star"></i> <span class="menu-text">Phân tích QoE / QoS</span></a></li>
             <% } %>
             <% if (canSee('poi_report')) { %>
-            <li class="menu-item" data-tooltip="Báo cáo POI">
-                <a href="/poi-report" class="<%= typeof currentPath !== 'undefined' && currentPath === 'POI Report' ? 'active' : '' %>">
-                    <i class="ph ph-buildings"></i> <span class="menu-text">Báo cáo chuẩn POI</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/poi-report" class="<%= typeof currentPath !== 'undefined' && currentPath === 'POI Report' ? 'active' : '' %>"><i class="ph ph-buildings"></i> <span class="menu-text">Báo cáo chuẩn POI</span></a></li>
             <% } %>
             <% if (canSee('optimizing_qoe_qos')) { %>
-            <li class="menu-item" data-tooltip="Tối ưu Trải nghiệm">
-                <a href="/optimizing-qoe-qos" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>">
-                    <i class="ph ph-wrench"></i> <span class="menu-text">Tối ưu QoE/QoS (5 Bước)</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/optimizing-qoe-qos" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Optimizing QoE/QoS' ? 'active' : '' %>"><i class="ph ph-wrench"></i> <span class="menu-text">Tối ưu QoE/QoS</span></a></li>
             <% } %>
             <% if (canSee('bad_cells')) { %>
-            <li class="menu-item" data-tooltip="Xử lý Điểm đen">
-                <a href="/bad-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? 'active' : '' %>">
-                    <i class="ph ph-bug"></i> <span class="menu-text">Xử lý Điểm Đen (Bad Cell)</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/bad-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Bad Cells' ? 'active' : '' %>"><i class="ph ph-bug"></i> <span class="menu-text">Xử lý Điểm Đen</span></a></li>
             <% } %>
             <% if (canSee('downtilt_coverage')) { %>
-            <li class="menu-item" data-tooltip="Căn chỉnh Downtilt">
-                <a href="/downtilt-coverage" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Downtilt Coverage' ? 'active' : '' %>">
-                    <i class="ph ph-compass-tool"></i> <span class="menu-text">Căn chỉnh Downtilt</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/downtilt-coverage" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Downtilt Coverage' ? 'active' : '' %>"><i class="ph ph-compass-tool"></i> <span class="menu-text">Căn chỉnh Downtilt</span></a></li>
             <% } %>
         <% } %>
 
         <% if (canSee('rf_database') || canSee('scrip') || canSee('import_data') || canSee('user_manager')) { %>
-            <li class="menu-category" style="color: var(--primary, #4f46e5);">HỆ THỐNG CỐT LÕI (ADMIN)</li>
+            <li class="menu-category" style="color: var(--primary);">HỆ THỐNG (ADMIN)</li>
             <% if (canSee('rf_database')) { %>
-            <li class="menu-item" data-tooltip="Database RF">
-                <a href="/rf-database" class="<%= typeof currentPath !== 'undefined' && currentPath === 'RF Database' ? 'active' : '' %>">
-                    <i class="ph ph-database"></i> <span class="menu-text">Cơ sở dữ liệu RF</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/rf-database" class="<%= typeof currentPath !== 'undefined' && currentPath === 'RF Database' ? 'active' : '' %>"><i class="ph ph-database"></i> <span class="menu-text">Cơ sở dữ liệu RF</span></a></li>
             <% } %>
             <% if (canSee('scrip')) { %>
-            <li class="menu-item" data-tooltip="Sinh Script (O&M)">
-                <a href="/scrip" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Scrip' ? 'active' : '' %>">
-                    <i class="ph ph-terminal-window"></i> <span class="menu-text">Tool sinh Script (O&M)</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/scrip" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Scrip' ? 'active' : '' %>"><i class="ph ph-terminal-window"></i> <span class="menu-text">Tool sinh Script</span></a></li>
             <% } %>
             <% if (canSee('import_data')) { %>
-            <li class="menu-item" data-tooltip="Nạp Dữ Liệu">
-                <a href="/import-data" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Import Data' ? 'active' : '' %>">
-                    <i class="ph ph-cloud-arrow-up"></i> <span class="menu-text">Nạp dữ liệu (Import)</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/import-data" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Import Data' ? 'active' : '' %>"><i class="ph ph-cloud-arrow-up"></i> <span class="menu-text">Nạp dữ liệu (Import)</span></a></li>
             <% } %>
             <% if (canSee('user_manager')) { %>
-            <li class="menu-item" data-tooltip="Quản lý User">
-                <a href="/system/users" class="<%= typeof currentPath !== 'undefined' && currentPath === 'User Manager' ? 'active' : '' %>">
-                    <i class="ph ph-users-three"></i> <span class="menu-text">Quản lý Tài khoản</span>
-                </a>
-            </li>
+            <li class="menu-item"><a href="/system/users" class="<%= typeof currentPath !== 'undefined' && currentPath === 'User Manager' ? 'active' : '' %>"><i class="ph ph-users-three"></i> <span class="menu-text">Quản lý Tài khoản</span></a></li>
             <% } %>
         <% } %>
 
         <li class="menu-category">CÁ NHÂN</li>
-        <li class="menu-item" data-tooltip="Đổi mật khẩu">
-            <a href="/system/profile" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Profile' ? 'active' : '' %>">
-                <i class="ph ph-lock-key"></i> <span class="menu-text">Đổi mật khẩu</span>
-            </a>
-        </li>
-        <li class="menu-item" data-tooltip="Đăng xuất">
-            <a href="/logout" class="danger-link">
-                <i class="ph ph-sign-out"></i> <span class="menu-text">Đăng xuất</span>
-            </a>
-        </li>
+        <li class="menu-item"><a href="/system/profile" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Profile' ? 'active' : '' %>"><i class="ph ph-lock-key"></i> <span class="menu-text">Đổi mật khẩu</span></a></li>
+        <li class="menu-item"><a href="/logout" class="danger-link"><i class="ph ph-sign-out"></i> <span class="menu-text">Đăng xuất</span></a></li>
     </ul>
 
+    <!-- KHU VỰC AVATAR & NÚT THEME -->
     <div class="user-profile">
-        <div class="avatar"><%= currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U' %></div>
-        <div class="user-info">
-            <span class="user-name"><%= currentUser ? currentUser.username : 'Guest' %></span>
-            <span class="user-role" style="color: <%= (currentUser && currentUser.role === 'admin') ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)' %>">
-                <%= currentUser ? currentUser.role : 'USER' %>
-            </span>
+        <div class="user-left">
+            <div class="avatar"><%= currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U' %></div>
+            <div class="user-info">
+                <span class="user-name"><%= currentUser ? currentUser.username : 'Guest' %></span>
+                <span class="user-role" style="color: <%= (currentUser && currentUser.role === 'admin') ? 'var(--danger)' : 'var(--success)' %>">
+                    <%= currentUser ? currentUser.role : 'USER' %>
+                </span>
+            </div>
         </div>
+        
+        <!-- NÚT CHUYỂN DARK MODE -->
+        <button class="theme-toggle-btn" id="themeToggleBtn" title="Chuyển chế độ Sáng/Tối">
+            <i class="ph ph-moon" style="font-size: 20px;"></i>
+        </button>
     </div>
 </aside>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // Khởi tạo các biến DOM Menu
         const sidebar = document.getElementById('mainSidebar');
         const overlay = document.getElementById('mobileOverlay');
         const mobileBtn = document.getElementById('mobileNavToggle');
         const toggleDesktopBtn = document.getElementById('toggleSidebar');
+        const themeBtn = document.getElementById('themeToggleBtn');
+        const themeIcon = themeBtn.querySelector('i');
 
-        // Hàm cập nhật Icon cho nút gập/mở trên máy tính
-        const updateDesktopIcon = () => {
-            if(!toggleDesktopBtn) return;
-            const icon = toggleDesktopBtn.querySelector('i');
-            const isCollapsed = sidebar.classList.contains('collapsed');
-            // Đổi icon: Nếu bị thu gọn thì biến thành nút Hamburger, nếu đang mở thì thành chữ X
-            icon.className = isCollapsed ? 'ph ph-list' : 'ph ph-x';
-        };
-
-        // Khôi phục trạng thái gập/mở của người dùng trên máy tính
-        if (localStorage.getItem('sidebarCollapsed') === 'true' && window.innerWidth > 768) {
-            sidebar.classList.add('collapsed');
+        // --- XỬ LÝ THEME (DARK/LIGHT MODE) ---
+        function updateThemeIcon(theme) {
+            themeIcon.className = theme === 'dark' ? 'ph-fill ph-sun' : 'ph ph-moon';
+            themeIcon.style.color = theme === 'dark' ? '#fbbf24' : 'var(--text-muted)';
         }
-        updateDesktopIcon();
+        
+        // Gắn sự kiện click đổi Theme
+        themeBtn.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        // Khởi tạo icon ban đầu
+        updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
 
-        // Xử lý Gập/Mở Menu trên màn hình Máy tính
-        if (toggleDesktopBtn) {
-            toggleDesktopBtn.addEventListener('click', () => {
-                sidebar.classList.toggle('collapsed');
-                localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-                updateDesktopIcon();
-            });
-        }
-
-        // Xử lý sự kiện bấm Nút Hamburger trên Điện thoại
+        // --- XỬ LÝ ĐIỀU KHIỂN SIDEBAR ---
         if (mobileBtn) {
             mobileBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                sidebar.classList.add('mobile-open'); // Kéo Sidebar trượt vào màn hình
-                overlay.classList.add('show');        // Hiện màn mờ background
+                sidebar.classList.add('mobile-open');
+                overlay.classList.add('show');
             });
         }
 
-        // Xử lý đóng Menu Mobile khi bấm ra ngoài nền tối
         if (overlay) {
             overlay.addEventListener('click', () => {
                 sidebar.classList.remove('mobile-open');
@@ -394,7 +291,6 @@
             });
         }
 
-        // Tự động đóng Menu Mobile ngay khi click vào 1 Tính năng
         const menuLinks = sidebar.querySelectorAll('.menu-item a');
         menuLinks.forEach(link => {
             link.addEventListener('click', () => {
@@ -404,5 +300,23 @@
                 }
             });
         });
+
+        if (toggleDesktopBtn) {
+            const icon = toggleDesktopBtn.querySelector('i');
+            
+            if(localStorage.getItem('sidebarCollapsed') === 'true' && window.innerWidth > 768) {
+                sidebar.classList.add('collapsed');
+                icon.className = 'ph ph-list';
+            } else {
+                icon.className = 'ph ph-x';
+            }
+
+            toggleDesktopBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+                const isCollapsed = sidebar.classList.contains('collapsed');
+                localStorage.setItem('sidebarCollapsed', isCollapsed);
+                icon.className = isCollapsed ? 'ph ph-list' : 'ph ph-x';
+            });
+        }
     });
 </script>
