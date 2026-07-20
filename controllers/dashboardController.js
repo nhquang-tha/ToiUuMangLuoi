@@ -857,6 +857,7 @@ exports.handleImportData = async (req, res) => {
                         else if (h === 'long' || h === 'longitude' || h.includes('kinh độ')) mappedCol = 'Longitude';
                         else if (h === 'azimuth' || h === 'dir') mappedCol = 'Azimuth';
                         else if (h === 'tilt' || h === 'm_tilt') mappedCol = 'Tilt';
+                        else if (h.includes('mimo')) mappedCol = 'MIMO';
                         else mappedCol = createSafeColumnName(exHeader);
                     } 
                     else if (networkType === 'csht_data') {
