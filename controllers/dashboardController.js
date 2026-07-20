@@ -113,7 +113,7 @@ async function getKpiHistory() {
 
 async function aggregateDashboardData() {
     try {
-        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard (SQL Native 6 Chars)...");
+        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
 
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
@@ -701,8 +701,7 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('tuan') || rowStr.includes('tuần') || 
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
-                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number') ||
-                        rowStr.includes('equipment') || rowStr.includes('csht_code') || rowStr.includes('frequency')) {
+                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
                         headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
@@ -713,8 +712,9 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             
             // --- TÍNH NĂNG MỚI: TỰ ĐỘNG THÊM CỘT CÒN THIẾU VÀO DATABASE ---
-            // Bổ sung hỗ trợ tạo cột tự động cho cả bảng CSHT_DATA
-            if (networkType.startsWith('rf_') || networkType === 'csht_data') {
+            // [ĐÃ SỬA] Chỉ áp dụng Auto-Migration cho bảng cấu hình (RF, CSHT, VAT_TU). 
+            // KHÔNG ÁP DỤNG CHO BẢNG KPI để bảo vệ chuẩn 40 trường dữ liệu cơ bản.
+            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
                     if (!h) continue;
@@ -727,7 +727,6 @@ exports.handleImportData = async (req, res) => {
                     if (!exists) {
                         try {
                             console.log(`⚡ Auto-Migration: Thêm cột mới [${safeName}] vào bảng ${networkType}`);
-                            // Đã sửa thành VARCHAR(255) thay vì TEXT để tối ưu hiệu năng và tránh lỗi khi gộp câu lệnh SQL
                             await db.query(`ALTER TABLE ${networkType} ADD COLUMN \`${safeName}\` VARCHAR(255)`);
                             isSchemaChanged = true;
                         } catch (e) {
@@ -903,6 +902,8 @@ exports.handleImportData = async (req, res) => {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                         if (dbMatch) actualDbCol = dbMatch.original;
                     }
+                    
+                    // Nhận diện theo tên không dấu (Normalize)
                     if (!actualDbCol) {
                         const normEx = normalizeStr(exHeader);
                         if (normEx) {
@@ -910,6 +911,14 @@ exports.handleImportData = async (req, res) => {
                             if (match) actualDbCol = match.original;
                         }
                     }
+                    
+                    // [SỬA LỖI MAPPING]: Nếu vẫn chưa tìm thấy, cố gắng ép khớp 100% định dạng Text với 40 cột có sẵn trong CSDL
+                    if (!actualDbCol) {
+                        let safeName = String(exHeader).trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
+                        if (exactMatch) actualDbCol = exactMatch.original;
+                    }
+
                     if (actualDbCol) colMapping.push({ excelIdx: idx, dbCol: actualDbCol });
                 });
             }
@@ -926,8 +935,7 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            // XÁC ĐỊNH CÁC CỘT LÀ TEXT (CHUỖI) ĐỂ KHÔNG BỊ ÉP KIỂU THÀNH SỐ
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'Equipment', 'Frequency', 'CSHT_code'];
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -940,9 +948,9 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
                     
-                    // --- BẢO VỆ DỮ LIỆU CHỮ CHO BẢNG RF VÀ CSHT ---
-                    if (networkType.startsWith('rf_') || networkType === 'csht_data') {
-                        let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height', 'chieu_cao_cot', 'chieu_cao_mat_dat'];
+                    // --- BẢO VỆ DỮ LIỆU CHỮ CHO BẢNG RF ---
+                    if (networkType.startsWith('rf_')) {
+                        let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height'];
                         if (!floatRfCols.includes(map.dbCol.toLowerCase())) {
                             isStrCol = true;
                         }
@@ -993,18 +1001,10 @@ exports.handleImportData = async (req, res) => {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
                     let chunk = insertData.slice(i, i + chunkSize);
+                    const keys = Object.keys(chunk[0]); 
                     
-                    // -- GIẢI PHÁP SỬA LỖI MỚI CHO SQL LỆNH ĐỘNG --
-                    // Thay vì dùng Object.keys của dòng đầu tiên (có thể bị thiếu trường nếu ô bị rỗng)
-                    // Ta sẽ gộp tất cả các Keys có trong Chunk để tạo cấu trúc SQL đầy đủ
-                    let allKeys = new Set();
-                    chunk.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
-                    const keys = Array.from(allKeys);
-
                     const valuesArr = chunk.map(obj => keys.map(k => {
                         let val = obj[k];
-                        // Nếu trường không có trong Obj (do undefined), ép thành null
-                        if (val === undefined) return null;
                         return (typeof val === 'string') ? val.trim() : val;
                     })); 
                     
@@ -1168,7 +1168,7 @@ exports.getAllPoiExportData = async (req, res) => {
             SELECT p.POI, k.Thoi_gian, 
                    SUM(k.Total_Data_Traffic_Volume_GB) as Traf_4G, AVG(k.User_DL_Avg_Throughput_Kbps) as Thput_4G, AVG(k.CQI_4G) as CQI_4G,
                    0 as Traf_5G, 0 as Thput_5G, 0 as CQI_5G
-            FROM poi_4g p JOIN kpi_4g k ON p.Cell_Code = k.Cell_name 
+            FROM poi_4g p JOIN kpi_4g k ON p.Cell_name = p.Cell_Code 
             WHERE k.Thoi_gian IS NOT NULL GROUP BY p.POI, k.Thoi_gian
             UNION ALL
             SELECT p.POI, k.Thoi_gian, 
@@ -1246,6 +1246,9 @@ exports.getPoiData = async (req, res) => {
     }
 };
 
+// =========================================================================
+// THUẬT TOÁN TÁCH MÃ LÕI BẢO VỆ CHUỖI TÌM KIẾM (CORE CODE EXTRACTOR)
+// =========================================================================
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1258,46 +1261,42 @@ exports.getKpiData = async (req, res) => {
             return res.json(rows);
         } else if (type === 'keyword') {
             const table = `kpi_${network}`;
-            const rfTable = `rf_${network}`;
             const cellCol = network === '4g' ? 'Cell_name' : 'Ten_CELL';
-            const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
-            if (keywords.length === 0) return res.json([]);
             
-            let rfConditions = [];
-            let rfParams = [];
-            keywords.forEach(k => {
-                rfConditions.push(`Site_code LIKE ? OR Cell_code LIKE ?`);
-                rfParams.push(`%${k}%`, `%${k}%`);
-            });
-            
-            let matchedCells = [];
-            try {
-                const [rfRows] = await db.query(`SELECT Cell_code FROM ${rfTable} WHERE ${rfConditions.join(' OR ')} LIMIT 300`, rfParams);
-                matchedCells = rfRows.map(r => r.Cell_code).filter(Boolean);
-            } catch (e) {
-                console.log(`⚠️ Bảng RF (${rfTable}) chưa có dữ liệu để ánh xạ Site_code.`);
-            }
-
-            const searchList = [...new Set([...matchedCells, ...keywords])];
-            
-            const conditions = [];
-            const params = [];
-
-            searchList.forEach(k => {
-                conditions.push(`k.${cellCol} LIKE ?`);
-                params.push(`%${k}%`);
-            });
-
             let siteCol = null;
             if (network === '4g') siteCol = 'Site_name';
             if (network === '5g') siteCol = 'Ten_GNODEB';
 
-            if (siteCol) {
-                keywords.forEach(k => {
-                    conditions.push(`k.${siteCol} LIKE ?`);
+            const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
+            if (rawKeywords.length === 0) return res.json([]);
+            
+            let conditions = [];
+            let params = [];
+
+            rawKeywords.forEach(k => {
+                // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
+                // VD: 3G_HHA028M_THA -> 3G_HHA028M
+                let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
+
+                let cond = `(k.${cellCol} LIKE ?`;
+                params.push(`%${k}%`);
+                
+                if (siteCol) {
+                    cond += ` OR k.${siteCol} LIKE ?`;
                     params.push(`%${k}%`);
-                });
-            }
+                }
+
+                if (coreCode !== k) {
+                    cond += ` OR k.${cellCol} LIKE ?`;
+                    params.push(`%${coreCode}%`);
+                    if (siteCol) {
+                        cond += ` OR k.${siteCol} LIKE ?`;
+                        params.push(`%${coreCode}%`);
+                    }
+                }
+                cond += `)`;
+                conditions.push(cond);
+            });
 
             const placeholders = conditions.join(' OR ');
             const [rows] = await db.query(`SELECT k.* FROM ${table} k WHERE ${placeholders}`, params);
@@ -1315,40 +1314,55 @@ exports.getQoeQosData = async (req, res) => {
     if (!value) return res.json({ qoe: [], qos: [] });
 
     try {
-        const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
-        if (keywords.length === 0) return res.json({ qoe: [], qos: [] });
+        const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
+        if (rawKeywords.length === 0) return res.json({ qoe: [], qos: [] });
 
-        const placeholders = keywords.map(() => `Cell_Name LIKE ? OR Site_Name LIKE ?`).join(' OR ');
-        const params = [];
-        keywords.forEach(k => { params.push(`%${k}%`, `%${k}%`); });
+        let conditions = [];
+        let params = [];
+
+        rawKeywords.forEach(k => {
+            // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
+            let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
+            
+            if (coreCode !== k) {
+                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ? OR Cell_Name LIKE ? OR Site_Name LIKE ?)`);
+                params.push(`%${k}%`, `%${k}%`, `%${coreCode}%`, `%${coreCode}%`);
+            } else {
+                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
+                params.push(`%${k}%`, `%${k}%`);
+            }
+        });
+
+        const placeholders = conditions.join(' OR ');
 
         const [qoe] = await db.query(`SELECT * FROM mbb_qoe WHERE ${placeholders}`, params);
         const [qos] = await db.query(`SELECT * FROM mbb_qos WHERE ${placeholders}`, params);
 
         res.json({ qoe: qoe, qos: qos });
-    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất CSDL QoE/QoS." }); }
+    } catch (error) { 
+        console.error("Lỗi getQoeQosData:", error);
+        res.json({ qoe: [], qos: [] }); 
+    }
 };
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
         let [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
-        
         if (rows.length === 0) {
             console.log("⚡ Dữ liệu tổng hợp QoE/QoS đang trống. Hệ thống đang tự động kích hoạt đồng bộ...");
-            await syncQoeQosSummary(); 
+            await syncQoeQosSummary();
             [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
         }
-        
         res.json(rows);
-    } catch (e) { 
-        console.error("Bảng qoe_qos chưa sẵn sàng, đang tự động khởi tạo lại:", e.message);
+    } catch (e) {
+        console.error("Lỗi lấy danh sách qoe_qos, đang tự động khởi tạo lại:", e);
         try {
             await syncQoeQosSummary();
             const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
             res.json(rows);
         } catch (err) {
             console.error("Lỗi khởi tạo bảng QoE/QoS:", err);
-            res.json([]); 
+            res.json([]);
         }
     }
 };
