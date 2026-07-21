@@ -83,20 +83,42 @@ exports.exportData = async (req, res) => {
 };
 
 exports.getForm = async (req, res) => {
-    const action = req.params.action;
-    const network = req.params.network;
+    const action = req.params.action; // 'add' hoặc 'edit'
+    const network = req.params.network || '4g';
     const id = req.params.id;
-    
-    let row = null;
-    if (action === 'edit' && id) {
-        try {
-            const [rows] = await db.query(`SELECT * FROM rf_${network} WHERE id = ?`, [id]);
-            if (rows.length > 0) row = rows[0];
-        } catch (error) {
-            console.error(error);
+    const activeUser = req.session ? req.session.user : null;
+
+    try {
+        const tableName = `rf_${network}`;
+        
+        // GIẢI PHÁP: Chủ động lấy danh sách cột trực tiếp từ cấu trúc Database
+        const [cols] = await db.query(`SHOW COLUMNS FROM ${tableName}`);
+        const columns = cols.map(c => c.Field);
+
+        let data = {};
+        // Nếu là hành động Sửa, lấy dữ liệu cũ đắp vào Form
+        if (action === 'edit' && id) {
+            const [rows] = await db.query(`SELECT * FROM ${tableName} WHERE id = ?`, [id]);
+            if (rows.length > 0) {
+                data = rows[0];
+            }
         }
+
+        // Render ra giao diện với đầy đủ các biến cần thiết
+        res.render('rf_form', {
+            title: action === 'add' ? `Thêm mới trạm ${network.toUpperCase()}` : `Sửa trạm ${network.toUpperCase()}`,
+            page: 'RF Database',
+            currentUser: activeUser,
+            action: action,
+            network: network,
+            currentNetwork: network,
+            columns: columns, // Chắc chắn 100% luôn có mảng cột
+            data: data
+        });
+    } catch (error) {
+        console.error("Lỗi tải form RF:", error);
+        res.status(500).send("Lỗi truy xuất cơ sở dữ liệu để tải Form. Vui lòng thử lại.");
     }
-    res.render('rf_form', { title: action === 'add' ? 'Thêm Trạm' : 'Sửa Trạm', page: 'RF Database', action, network, row });
 };
 
 exports.saveData = async (req, res) => {
