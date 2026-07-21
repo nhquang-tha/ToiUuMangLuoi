@@ -4,17 +4,21 @@
     let rawRole = activeUser && activeUser.role ? activeUser.role : '';
     let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
     let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+    
+    // Xử lý an toàn: Bắt mọi trường hợp tên biến chứa mạng lưới từ Controller truyền xuống
+    let net = locals.network || locals.currentNetwork || locals.currentNet || '4g';
+    let safeAction = locals.action || 'add';
 %>
 <style>
-    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: var(--bg-body); }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
     .form-card { 
-        background: white; 
+        background: var(--bg-surface); 
         padding: 30px; 
         border-radius: 12px; 
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
-        border-top: 4px solid #3498db; 
+        box-shadow: var(--shadow-card); 
+        border-top: 4px solid var(--primary); 
         max-width: 1000px; 
         margin: 0 auto; 
     }
@@ -28,7 +32,7 @@
     .form-group { display: flex; flex-direction: column; }
     .form-group label { 
         font-weight: bold; 
-        color: #2c3e50; 
+        color: var(--text-main); 
         font-size: 13px; 
         margin-bottom: 8px; 
         text-transform: uppercase;
@@ -37,26 +41,26 @@
     
     .form-group input { 
         padding: 12px 15px; 
-        border: 1.5px solid #bdc3c7; 
+        border: 1.5px solid var(--border-color); 
         border-radius: 8px; 
         font-size: 14px; 
         outline: none; 
         transition: 0.3s; 
-        background: #fdfdfd; 
-        color: #34495e;
+        background: var(--bg-body); 
+        color: var(--text-main);
         font-weight: bold;
     }
     
     .form-group input:focus { 
-        border-color: #3498db; 
-        box-shadow: 0 0 0 3px rgba(52,152,219,0.15); 
-        background: #fff;
+        border-color: var(--primary); 
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); 
+        background: var(--bg-surface);
     }
     
     .form-actions { 
         margin-top: 30px; 
         padding-top: 20px; 
-        border-top: 1px dashed #bdc3c7; 
+        border-top: 1px dashed var(--border-color); 
         display: flex; 
         justify-content: flex-end; 
         gap: 15px; 
@@ -64,7 +68,7 @@
     
     .btn-cancel { 
         padding: 12px 25px; 
-        background: #95a5a6; 
+        background: var(--text-muted); 
         color: white; 
         border-radius: 8px; 
         font-weight: bold; 
@@ -74,11 +78,11 @@
         align-items: center;
         justify-content: center;
     }
-    .btn-cancel:hover { background: #7f8c8d; }
+    .btn-cancel:hover { filter: brightness(0.9); color: white;}
     
     .btn-save { 
         padding: 12px 25px; 
-        background: #27ae60; 
+        background: var(--success); 
         color: white; 
         border: none; 
         border-radius: 8px; 
@@ -88,9 +92,9 @@
         font-size: 14px; 
     }
     .btn-save:hover { 
-        background: #219653; 
+        filter: brightness(1.1); 
         transform: translateY(-2px); 
-        box-shadow: 0 4px 10px rgba(39,174,96,0.3); 
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); 
     }
 </style>
 
@@ -98,16 +102,16 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1><%= action === 'add' ? '✨ Thêm Mới' : '✏️ Chỉnh Sửa' %> Cấu Hình Trạm <%= currentNetwork.toUpperCase() %></h1>
-            <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 13px;">Cập nhật thông tin chi tiết cho cơ sở dữ liệu RF</p>
+            <h1><%= safeAction === 'add' ? '✨ Thêm Mới' : '✏️ Chỉnh Sửa' %> Cấu Hình Trạm <%= net.toUpperCase() %></h1>
+            <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 13px;">Cập nhật thông tin chi tiết cho cơ sở dữ liệu RF</p>
         </header>
 
         <div class="content-body">
             <div class="form-card">
-                <!-- Xử lý an toàn URL (Sửa lỗi ID is not defined) -->
+                <!-- Xử lý URL Động -->
                 <% 
-                    let submitUrl = '/rf-database/' + action + '/' + currentNetwork;
-                    if (action === 'edit' && locals.data && data.id) {
+                    let submitUrl = '/rf-database/' + safeAction + '/' + net;
+                    if (safeAction === 'edit' && locals.data && data.id) {
                         submitUrl += '/' + data.id;
                     }
                 %>
@@ -124,12 +128,14 @@
                                 <% } %>
                             <% }) %>
                         <% } else { %>
-                            <div style="color: #e74c3c; font-weight: bold; grid-column: 1 / -1;">❌ Lỗi: Không thể tải cấu trúc Database. Vui lòng kiểm tra kết nối mạng.</div>
+                            <div style="color: var(--danger); font-weight: bold; grid-column: 1 / -1; padding: 20px; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">
+                                ❌ Lỗi: Không thể tải cấu trúc Database. Vui lòng kiểm tra lại kết nối.
+                            </div>
                         <% } %>
                     </div>
 
                     <div class="form-actions">
-                        <a href="/rf-database?network=<%= currentNetwork %>" class="btn-cancel">✖ Hủy Bỏ</a>
+                        <a href="/rf-database?network=<%= net %>" class="btn-cancel">✖ Hủy Bỏ</a>
                         <button type="submit" class="btn-save">💾 Lưu Dữ Liệu</button>
                     </div>
                 </form>
@@ -139,6 +145,3 @@
 </div>
 </body>
 </html>
-```eof
-
-Chỉ cần lưu lại, trang web sẽ không bao giờ văng lỗi "ID is not defined" nữa và giao diện cũng sẽ gọn gàng, chia làm các ô (Grid) để bạn thao tác dễ dàng hơn!
