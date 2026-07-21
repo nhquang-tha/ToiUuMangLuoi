@@ -76,22 +76,9 @@ const formatExcelDate = (excelDate) => {
     return excelDate; 
 };
 
-// Hàm chuẩn hóa tiếng Việt siêu chuẩn xác, không sinh ra ký tự rác
 const normalizeStr = (str) => {
     if (!str) return '';
-    return String(str)
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "") // Xóa dấu tiếng Việt
-        .replace(/đ/g, 'd')             // Xử lý riêng chữ đ
-        .replace(/[^a-z0-9_]/g, '_')    // Thay thế ký tự đặc biệt bằng dấu gạch dưới
-        .replace(/_+/g, '_')            // Xóa gạch dưới liên tiếp
-        .replace(/^_|_$/g, '');         // Xóa gạch dưới ở đầu và cuối chuỗi
-};
-
-// Hàm tạo tên cột an toàn cho SQL
-const createSafeColumnName = (str) => {
-    return normalizeStr(str);
+    return String(str).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ''); 
 };
 
 async function getKpiHistory() {
@@ -126,7 +113,7 @@ async function getKpiHistory() {
 
 async function aggregateDashboardData() {
     try {
-        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard (SQL Native 6 Chars)...");
+        console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
 
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
@@ -221,7 +208,6 @@ async function syncWorstCells() {
                 if (r.CQI_4G < 93) vios.push('CQI Thấp');
                 if (r.Service_Drop_all > 0.3) vios.push('Drop Rate Cao');
                 
-                // Sử dụng getSafeFloat để chống lỗi NaN
                 insertData.push([
                     r.Latest_Date || null, 
                     days, 
@@ -262,7 +248,6 @@ async function syncCongestion3G() {
             if (targetDates.length === 0) continue;
             const placeholders = targetDates.map(() => '?').join(',');
 
-            // LƯU Ý: Lệnh is_in_t0 > 0 dưới đây chính là chốt chặn ép trạm phải có mặt trong file mới nhất
             const query = `
                 SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
                     AVG(CSCONGES) as CSCONGES, AVG(CS_SO_ATT) as CS_SO_ATT, AVG(PSCONGES) as PSCONGES, AVG(PS_SO_ATT) as PS_SO_ATT,
@@ -279,7 +264,6 @@ async function syncCongestion3G() {
                 if (r.CSCONGES > 2 && r.CS_SO_ATT > 100) vios.push('Nghẽn CS');
                 if (r.PSCONGES > 2 && r.PS_SO_ATT > 500) vios.push('Nghẽn PS');
                 
-                // Sử dụng getSafeFloat để chống lỗi NaN
                 insertData.push([
                     r.Latest_Date || null, 
                     days, 
@@ -305,12 +289,10 @@ async function syncCongestion3G() {
     }
 }
 
-// [FIX] Cập nhật lại logic tránh lỗi sập khi không đủ số ngày dữ liệu
 async function syncTrafficDown() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Traffic Down...");
         
-        // 1. Kiểm tra cấu trúc bảng traffic_down (Tránh lỗi cột `network` nếu thiếu)
         try {
             await db.query("SELECT network FROM traffic_down LIMIT 1");
         } catch (e) {
@@ -333,33 +315,40 @@ async function syncTrafficDown() {
 
         await db.query('TRUNCATE TABLE traffic_down');
         
-        const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
-        if (datesRaw.length === 0) {
-            console.log("⚠️ Không có dữ liệu kpi_4g để tính Traffic Down.");
+        // [CẬP NHẬT 1]: Lấy ngày từ TẤT CẢ các bảng để tránh lỗi khi bảng 4G rỗng
+        const [dates3gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
+        const [dates4gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
+        const [dates5gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
+
+        let allDatesSet = new Set();
+        if(dates3gRaw) dates3gRaw.forEach(d => allDatesSet.add(d.Thoi_gian));
+        if(dates4gRaw) dates4gRaw.forEach(d => allDatesSet.add(d.Thoi_gian));
+        if(dates5gRaw) dates5gRaw.forEach(d => allDatesSet.add(d.Thoi_gian));
+
+        if (allDatesSet.size === 0) {
+            console.log("⚠️ Không có dữ liệu KPI nào để tính Traffic Down.");
             return;
         }
 
-        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
+        const dates = Array.from(allDatesSet).sort((a, b) => {
             const pA = a.split('/'); const pB = b.split('/');
             return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
         });
 
-        // Chỉ lấy tối đa 15 ngày để phân tích. Nếu ít hơn vẫn chạy, hàm bên dưới sẽ xử lý mềm dẻo.
         const targetDates = dates.slice(0, 15); 
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // THÊM BẪY LỖI KHI QUERY DB (Trường hợp bảng rỗng)
         let data3g = [], data4g = [], data5g = [];
         try { [data3g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, TRAFFIC as traffic FROM kpi_3g WHERE Thoi_gian IN (${placeholders})`, targetDates); } catch(e) {}
         try { [data4g] = await db.query(`SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`, targetDates); } catch(e) {}
         try { [data5g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_5g WHERE Thoi_gian IN (${placeholders})`, targetDates); } catch(e) {}
 
-        const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g');
-        const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g');
+        const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g').catch(()=>[[]]);
+        const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g').catch(()=>[[]]);
         const cellToPoi = {};
-        poi4g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
-        poi5g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
+        if(poi4g) poi4g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
+        if(poi5g) poi5g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
 
         let zeroTrafficCells = [];
         let droppedTrafficCells = [];
@@ -368,20 +357,15 @@ async function syncTrafficDown() {
         const analyzeData = (dataArray, network) => {
             const cellMap = {};
             dataArray.forEach(row => {
-                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = { has_t0: false };
+                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = {};
                 cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
-                
-                if (row.Thoi_gian === t0) {
-                    cellMap[row.Cell_name].has_t0 = true;
-                }
                 
                 if (network === '4g' || network === '5g') {
                     let poi = cellToPoi[row.Cell_name];
                     if (poi) {
-                        if (!poiTrafficMap[poi]) poiTrafficMap[poi] = { has_t0: false };
-                        if (!poiTrafficMap[poi][row.Thoi_gian]) poiTrafficMap[poi][row.Thoi_gian] = 0;
+                        if (!poiTrafficMap[poi]) poiTrafficMap[poi] = {};
+                        if (poiTrafficMap[poi][row.Thoi_gian] === undefined) poiTrafficMap[poi][row.Thoi_gian] = 0;
                         poiTrafficMap[poi][row.Thoi_gian] += parseFloat(row.traffic) || 0;
-                        if (row.Thoi_gian === t0) poiTrafficMap[poi].has_t0 = true;
                     }
                 }
             });
@@ -389,10 +373,8 @@ async function syncTrafficDown() {
             for (let cell in cellMap) {
                 const c = cellMap[cell];
                 
-                // Trạm phải tồn tại trong báo cáo ngày mới nhất
-                if (!c.has_t0) continue;
-
-                const v0 = c[t0] || 0; 
+                // [CẬP NHẬT 2]: Nhận diện thông minh: Trạm sập -> không có trong file KPI -> Gán v0 = 0
+                const v0 = c[t0] !== undefined ? c[t0] : 0; 
                 const v1 = targetDates[1] ? (c[targetDates[1]] || 0) : 0;
                 const v2 = targetDates[2] ? (c[targetDates[2]] || 0) : 0;
                 const v3 = targetDates[3] ? (c[targetDates[3]] || 0) : 0;
@@ -400,18 +382,17 @@ async function syncTrafficDown() {
                 const v5 = targetDates[5] ? (c[targetDates[5]] || 0) : 0;
                 const v6 = targetDates[6] ? (c[targetDates[6]] || 0) : 0;
                 
-                // MỀM DẺO: Tính trung bình các kỳ có sẵn
-                let avgPast1 = 0, countPast1 = 0;
-                for(let i=1; i<=7; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { avgPast1 += c[targetDates[i]]; countPast1++; }
-                avgPast1 = countPast1 > 0 ? avgPast1/countPast1 : 0;
+                let sumPast1 = 0, countPast1 = 0;
+                for(let i=1; i<=7; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast1 += c[targetDates[i]]; countPast1++; }
+                let avgPast1 = countPast1 > 0 ? sumPast1/countPast1 : 0;
 
-                let avgPast3 = 0, countPast3 = 0;
-                for(let i=3; i<=9; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { avgPast3 += c[targetDates[i]]; countPast3++; }
-                avgPast3 = countPast3 > 0 ? avgPast3/countPast3 : 0;
+                let sumPast3 = 0, countPast3 = 0;
+                for(let i=3; i<=9; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast3 += c[targetDates[i]]; countPast3++; }
+                let avgPast3 = countPast3 > 0 ? sumPast3/countPast3 : 0;
 
-                let avgPast7 = 0, countPast7 = 0;
-                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { avgPast7 += c[targetDates[i]]; countPast7++; }
-                avgPast7 = countPast7 > 0 ? avgPast7/countPast7 : 0;
+                let sumPast7 = 0, countPast7 = 0;
+                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast7 += c[targetDates[i]]; countPast7++; }
+                let avgPast7 = countPast7 > 0 ? sumPast7/countPast7 : 0;
 
                 // LỌC ZERO CELL
                 if (targetDates.length >= 8 && v0===0 && v1===0 && v2===0 && v3===0 && v4===0 && v5===0 && v6===0 && avgPast7 > 0) {
@@ -424,44 +405,19 @@ async function syncTrafficDown() {
                     zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1 });
                 }
 
-                // LỌC DROPPED CELL (Mạng 4G/5G) - Cần ít nhất 8 ngày để đối chiếu với t7
+                // LỌC DROPPED CELL 
                 if ((network === '4g' || network === '5g') && targetDates.length >= 8) {
-                    const v7 = c[targetDates[7]] || 0; 
+                    const v7 = c[targetDates[7]] !== undefined ? c[targetDates[7]] : 0; 
                     
-                    // So sánh 3 ngày nếu có đủ data, nếu không thì chỉ so sánh 1 ngày
                     if (targetDates.length >= 10) {
-                        const v8 = c[targetDates[8]] || 0; const v9 = c[targetDates[9]] || 0;
+                        const v8 = c[targetDates[8]] !== undefined ? c[targetDates[8]] : 0; 
+                        const v9 = c[targetDates[9]] !== undefined ? c[targetDates[9]] : 0;
                         if (v0 < 0.7 * v7 && v7 > 5 && v1 < v8 && v2 < v9) {
                             droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
                         }
                     } else {
-                        // Nếu database mới có 8,9 ngày, chỉ đối chiếu t0 < 0.7*t7
                         if (v0 < 0.7 * v7 && v7 > 5) {
                             droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
-                        }
-                    }
-                }
-            }
-
-            // LỌC DROPPED POI 
-            for (let poi in poiTrafficMap) {
-                const p = poiTrafficMap[poi];
-                
-                if (!p.has_t0) continue;
-
-                if (targetDates.length >= 8) {
-                    const v0 = p[t0] || 0; 
-                    const v7 = p[targetDates[7]] || 0; 
-
-                    if (targetDates.length >= 10) {
-                        const v1 = p[targetDates[1]] || 0; const v2 = p[targetDates[2]] || 0;
-                        const v8 = p[targetDates[8]] || 0; const v9 = p[targetDates[9]] || 0;
-                        if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
-                            droppedTrafficPOIs.push({ POI: poi, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
-                        }
-                    } else {
-                        if (v7 > 0 && v0 < 0.7 * v7) {
-                            droppedTrafficPOIs.push({ POI: poi, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
                         }
                     }
                 }
@@ -471,6 +427,29 @@ async function syncTrafficDown() {
         analyzeData(data3g, '3g');
         analyzeData(data4g, '4g');
         analyzeData(data5g, '5g');
+
+        // LỌC DROPPED POI 
+        for (let poi in poiTrafficMap) {
+            const p = poiTrafficMap[poi];
+            if (targetDates.length >= 8) {
+                const v0 = p[t0] !== undefined ? p[t0] : 0; 
+                const v7 = p[targetDates[7]] !== undefined ? p[targetDates[7]] : 0; 
+
+                if (targetDates.length >= 10) {
+                    const v1 = p[targetDates[1]] !== undefined ? p[targetDates[1]] : 0; 
+                    const v2 = p[targetDates[2]] !== undefined ? p[targetDates[2]] : 0;
+                    const v8 = p[targetDates[8]] !== undefined ? p[targetDates[8]] : 0; 
+                    const v9 = p[targetDates[9]] !== undefined ? p[targetDates[9]] : 0;
+                    if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
+                        droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
+                    }
+                } else {
+                    if (v7 > 0 && v0 < 0.7 * v7) {
+                        droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
+                    }
+                }
+            }
+        }
         
         let insertData = [];
         const safeT7 = targetDates.length >= 8 ? targetDates[7] : 'N/A';
@@ -481,7 +460,6 @@ async function syncTrafficDown() {
 
         if (insertData.length > 0) {
             const chunkSize = 500;
-            // SỬA CÚ PHÁP ĐẢM BẢO CHÈN ĐÚNG TRƯỜNG DỮ LIỆU VÀO ĐÚNG CỘT
             const sqlInsert = `INSERT INTO traffic_down (latest_date, last_week_date, category, network, name, val_t0, val_compare, ratio) VALUES ?`;
             for (let i = 0; i < insertData.length; i += chunkSize) {
                 await db.query(sqlInsert, [insertData.slice(i, i + chunkSize)]);
@@ -646,7 +624,6 @@ async function syncQoeQosSummary() {
                 }
             }
 
-            // Chống chèn biến undefined gây sập Database
             insertData.push([
                 siteName || '', cellName || '', district || '', mimo || '',
                 qoeRank !== null && qoeRank !== undefined ? qoeRank : null, 
@@ -757,7 +734,8 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('tuan') || rowStr.includes('tuần') || 
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
-                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
+                        rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number') ||
+                        rowStr.includes('equipment') || rowStr.includes('csht_code') || rowStr.includes('frequency')) {
                         headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
@@ -768,15 +746,14 @@ exports.handleImportData = async (req, res) => {
             const excelHeaders = rawData[headerRowIdx];
             
             // --- TÍNH NĂNG MỚI: TỰ ĐỘNG THÊM CỘT CÒN THIẾU VÀO DATABASE ---
-            // Chỉ áp dụng Auto-Migration cho bảng cấu hình (RF, CSHT, VAT_TU, ALARM). 
-            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data') {
+            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
                     if (!h) continue;
-                    let safeName = createSafeColumnName(h);
+                    let safeName = String(h).trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
                     if (!safeName) continue;
                     
-                    let normH = normalizeStr(h);
+                    let normH = normalizeStr(safeName);
                     let exists = dbCols.some(c => c.norm === normH || c.original.toLowerCase() === safeName.toLowerCase());
                     
                     if (!exists) {
@@ -918,18 +895,7 @@ exports.handleImportData = async (req, res) => {
                         if (h.includes('cell_code') || h === 'cell code') mappedCol = 'Cell_Code';
                         else if (h.includes('site_code') || h === 'site code') mappedCol = 'Site_Code';
                         else if (h === 'poi') mappedCol = 'POI';
-                    } 
-                    else if (networkType.startsWith('rf_')) {
-                        if (h.includes('cell_code') || h === 'cell code' || h === 'cell name' || h.includes('ten_cell')) mappedCol = 'Cell_code';
-                        else if (h === 'site_code' || h === 'site code' || h === 'site name') mappedCol = 'Site_code';
-                        else if (h === 'lat' || h === 'latitude' || h.includes('vĩ độ')) mappedCol = 'Latitude';
-                        else if (h === 'long' || h === 'longitude' || h.includes('kinh độ')) mappedCol = 'Longitude';
-                        else if (h === 'azimuth' || h === 'dir') mappedCol = 'Azimuth';
-                        else if (h === 'tilt' || h === 'm_tilt') mappedCol = 'Tilt';
-                        else if (h.includes('mimo')) mappedCol = 'MIMO';
-                        else mappedCol = createSafeColumnName(exHeader);
-                    } 
-                    else if (networkType === 'csht_data') {
+                    } else if (networkType === 'csht_data') {
                         if (h === 'mã csht' || h.includes('ma csht')) mappedCol = 'Ma_CSHT';
                         else if (h === 'tên csht' || h.includes('ten csht')) mappedCol = 'Ten_CSHT';
                         else if (h === 'địa chỉ' || h.includes('dia chi')) mappedCol = 'Dia_Chi';
@@ -947,16 +913,12 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('so với mặt đất') || h.includes('mat dat')) mappedCol = 'Chieu_Cao_Mat_Dat';
                         else if (h.includes('chiều cao cột') || h.includes('chieu cao cot')) mappedCol = 'Chieu_Cao_Cot';
                         else if (h.includes('hình thức sở hữu') || h.includes('so huu')) mappedCol = 'Hinh_Thuc_So_Huu';
-                        else mappedCol = createSafeColumnName(exHeader);
-                    } 
-                    else if (networkType === 'alarm_data') {
+                    } else if (networkType === 'alarm_data') {
                         if (h === 'nhóm cảnh báo' || h.includes('nhóm')) mappedCol = 'nhom_canh_bao';
                         else if (h === 'từ khóa chính trong tin nhắn' || h.includes('từ khóa')) mappedCol = 'tu_khoa';
                         else if (h === 'nguyên nhân' || h.includes('nguyên nhân')) mappedCol = 'nguyen_nhan';
                         else if (h === 'phương án kiểm tra, xử lý' || h.includes('phương án')) mappedCol = 'phuong_an_xu_ly';
-                        else mappedCol = createSafeColumnName(exHeader);
-                    } 
-                    else if (networkType === 'vat_tu') {
+                    } else if (networkType === 'vat_tu') {
                         if (h === 'mã' || h === 'ma') mappedCol = 'ma_vt';
                         else if (h === 'tên' || h === 'ten') mappedCol = 'ten_vt';
                         else if (h === 'tên đầy đủ' || h.includes('ten day du') || h.includes('tên đầy đủ')) mappedCol = 'ten_day_du';
@@ -964,19 +926,16 @@ exports.handleImportData = async (req, res) => {
                         else if (h.includes('mã thiết bị') || h.includes('part number')) mappedCol = 'ma_thiet_bi';
                         else if (h === 'loại card' || h.includes('loai card') || h.includes('loại card')) mappedCol = 'loai_card';
                         else if (h === 'tên viết tắt' || h.includes('viet tat') || h.includes('viết tắt')) mappedCol = 'ten_viet_tat';
-                        else mappedCol = createSafeColumnName(exHeader);
+                    } else if (networkType.startsWith('rf_')) {
+                        if (h.includes('mimo')) mappedCol = 'MIMO';
                     }
 
                     // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
                     let actualDbCol = null;
-                    
-                    // [BƯỚC 1]: Mapping theo từ khóa hardcode
                     if (mappedCol) {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                         if (dbMatch) actualDbCol = dbMatch.original;
                     }
-                    
-                    // [BƯỚC 2]: Mapping theo Normalize
                     if (!actualDbCol) {
                         const normEx = normalizeStr(exHeader);
                         if (normEx) {
@@ -984,10 +943,8 @@ exports.handleImportData = async (req, res) => {
                             if (match) actualDbCol = match.original;
                         }
                     }
-                    
-                    // [BƯỚC 3]: Mapping vét máng (So sánh chính xác 100% định dạng Text)
                     if (!actualDbCol) {
-                        let safeName = createSafeColumnName(exHeader);
+                        let safeName = String(exHeader).trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
                         let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
                         if (exactMatch) actualDbCol = exactMatch.original;
                     }
@@ -1008,8 +965,7 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            // XÁC ĐỊNH CÁC CỘT LÀ TEXT (CHUỖI) ĐỂ KHÔNG BỊ ÉP KIỂU THÀNH SỐ
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code'];
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code', 'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 'Ma_Tram_2G', 'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu', 'Equipment', 'Frequency', 'CSHT_code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -1022,6 +978,7 @@ exports.handleImportData = async (req, res) => {
                     let val = row[map.excelIdx];
                     let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
                     
+                    // --- BẢO VỆ DỮ LIỆU CHỮ CHO BẢNG RF VÀ CSHT ---
                     if (networkType.startsWith('rf_') || networkType === 'csht_data') {
                         let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height', 'chieu_cao_cot', 'chieu_cao_mat_dat'];
                         if (!floatRfCols.includes(map.dbCol.toLowerCase())) {
@@ -1074,8 +1031,6 @@ exports.handleImportData = async (req, res) => {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
                     let chunk = insertData.slice(i, i + chunkSize);
-                    
-                    // Tập hợp tất cả các Keys thực sự có dữ liệu để chống lỗi thiếu cột
                     let allKeys = new Set();
                     chunk.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
                     const keys = Array.from(allKeys);
@@ -1086,12 +1041,11 @@ exports.handleImportData = async (req, res) => {
                         return (typeof val === 'string') ? val.trim() : val;
                     })); 
                     
-                    let sql = `INSERT INTO ${networkType} (${keys.map(k => `\`${k}\``).join(',')}) VALUES ?`;
+                    let sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ?`;
                     
-                    // Lệnh UPDATE cho các bảng hệ thống
                     if (networkType === 'alarm_data' || networkType === 'csht_data' || networkType === 'vat_tu') {
-                        let updateCols = keys.map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(', ');
-                        sql += ` ON DUPLICATE KEY UPDATE ${updateCols}`;
+                        let updateCols = keys.map(k => `${k}=VALUES(${k})`).join(', ');
+                        sql = `INSERT INTO ${networkType} (${keys.join(',')}) VALUES ? ON DUPLICATE KEY UPDATE ${updateCols}`;
                     }
 
                     await db.query(sql, [valuesArr]);
@@ -1183,15 +1137,25 @@ exports.getCongestion3gData = async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Lỗi CSDL." }); }
 };
 
+// [CẬP NHẬT 3]: Không trả về Lỗi Đỏ nếu bảng Traffic Down rỗng (Vì điều đó có nghĩa là mạng lưới tốt 100%)
 exports.getTrafficDownData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM traffic_down');
-        if (rows.length === 0) {
-            return res.json({ error: "Chưa đủ dữ liệu hoặc hệ thống chưa cập nhật bộ nhớ đệm. Vui lòng nạp lại dữ liệu." });
+        
+        let latestDate = "N/A";
+        let lastWeekDate = "N/A";
+        
+        if (rows.length > 0) {
+            latestDate = rows[0].latest_date || "N/A";
+            lastWeekDate = rows[0].last_week_date || "N/A";
+        } else {
+            // Nếu không có trạm nào sụt giảm, tìm ngày mới nhất trong Database để thông báo cho người dùng
+            try {
+                const [datesRaw] = await db.query(`SELECT MAX(Thoi_gian) as t0 FROM kpi_4g`);
+                if (datesRaw.length > 0 && datesRaw[0].t0) latestDate = datesRaw[0].t0;
+            } catch(e) {}
         }
         
-        let latestDate = rows[0].latest_date;
-        let lastWeekDate = rows[0].last_week_date;
         let zero_1d = []; let zero_3d = []; let zero_7d = [];
         let droppedTrafficCells = [];
         let droppedTrafficPOIs = [];
@@ -1218,7 +1182,10 @@ exports.getTrafficDownData = async (req, res) => {
             droppedTrafficCells: droppedTrafficCells.sort((a,b) => a.ratio - b.ratio),
             droppedTrafficPOIs: droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio)
         });
-    } catch (error) { res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." }); }
+    } catch (error) { 
+        console.error("Lỗi API Traffic Down:", error);
+        res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." }); 
+    }
 };
 
 exports.getBadCellsData = async (req, res) => {
@@ -1294,19 +1261,17 @@ exports.getPoiData = async (req, res) => {
     if (!poiName) return res.json({ data: [], has4g: false, has5g: false });
 
     try {
-        const query4G = `
+        const [data4g] = await db.query(`
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g 
             FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code 
             WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
-        `;
-        const [data4g] = await db.query(query4G, [poiName]);
+        `, [poiName]);
 
-        const query5G = `
+        const [data5g] = await db.query(`
             SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g 
             FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code 
             WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
-        `;
-        const [data5g] = await db.query(query5G, [poiName]);
+        `, [poiName]);
 
         let mergedData = {};
         data4g.forEach(r => {
@@ -1331,9 +1296,6 @@ exports.getPoiData = async (req, res) => {
     }
 };
 
-// =========================================================================
-// THUẬT TOÁN TÁCH MÃ LÕI BẢO VỆ CHUỖI TÌM KIẾM (CORE CODE EXTRACTOR)
-// =========================================================================
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1360,8 +1322,6 @@ exports.getKpiData = async (req, res) => {
             let params = [];
 
             rawKeywords.forEach(k => {
-                // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
-                // VD: 3G_HHA028M_THA -> 3G_HHA028M
                 let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
 
                 let cond = `(k.${cellCol} LIKE ?`;
@@ -1407,7 +1367,6 @@ exports.getQoeQosData = async (req, res) => {
         let params = [];
 
         rawKeywords.forEach(k => {
-            // Tách hậu tố tỉnh (VD: -THA, _HN) để lấy mã lõi (core code)
             let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
             
             if (coreCode !== k) {
