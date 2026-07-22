@@ -10,66 +10,65 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: var(--bg-body); }
     .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     
-    .map-header { background: white; padding: 10px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
-    .map-header h1 { margin: 0; font-size: 18px; color: #2c3e50; font-weight: bold; white-space: nowrap;}
+    .map-header { background: var(--bg-surface); padding: 10px 20px; box-shadow: var(--shadow-card); z-index: 10; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color);}
+    .map-header h1 { margin: 0; font-size: 18px; color: var(--text-main); font-weight: bold; white-space: nowrap;}
     
     .map-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
-    .map-controls select { padding: 6px 12px; height: 34px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer; font-size: 13px; }
+    .map-controls select { padding: 6px 12px; height: 34px; border-radius: 6px; border: 1.5px solid var(--border-color); outline: none; font-weight: bold; color: var(--text-main); background: var(--bg-body); cursor: pointer; font-size: 13px; }
     
-    .search-box { display: flex; align-items: center; border: 1px solid #bdc3c7; border-radius: 4px; overflow: hidden; background: white; height: 34px;}
-    .search-box input { border: none; padding: 6px 12px; width: 220px; outline: none; font-size: 13px; height: 100%; box-sizing: border-box; }
-    .search-box button { border: none; background: #3498db; color: white; padding: 0 15px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 13px; height: 100%; }
-    .search-box button:hover { background: #2980b9; }
+    .search-box { display: flex; align-items: center; border: 1.5px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); height: 34px;}
+    .search-box input { border: none; padding: 6px 12px; width: 220px; outline: none; font-size: 13px; height: 100%; box-sizing: border-box; background: transparent; color: var(--text-main); }
+    .search-box button { border: none; background: var(--primary); color: white; padding: 0 15px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 13px; height: 100%; }
+    .search-box button:hover { filter: brightness(1.1); }
 
     .map-wrapper { position: relative; flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; }
-    #map { flex: 1; height: 100%; width: 100%; z-index: 1; background: #e5e3df; }
+    #map { flex: 1; height: 100%; width: 100%; z-index: 1; background: var(--bg-body); }
     
-    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.95); padding: 20px 40px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 1000; display: none; text-align: center; font-weight: bold; color: #2980b9; font-size: 15px; border: 2px solid #3498db;}
+    #mapLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-surface); padding: 20px 40px; border-radius: 12px; box-shadow: var(--shadow-card); z-index: 1000; display: none; text-align: center; font-weight: bold; color: var(--primary); font-size: 15px; border: 2px solid var(--primary);}
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
     .rf-popup-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .rf-popup-table th, .rf-popup-table td { padding: 5px; border: 1px solid #ecf0f1; text-align: left; }
-    .rf-popup-table th { background: #f8f9fa; color: #2c3e50; width: 45%; font-weight: bold; text-transform: uppercase;}
-    .rf-popup-table tr:hover { background: #f4f6f8; }
-    .rf-popup-container { max-height: 250px; overflow-y: auto; overflow-x: hidden; border: 1px solid #bdc3c7; border-radius: 4px; margin-top: 10px;}
+    .rf-popup-table th, .rf-popup-table td { padding: 5px; border: 1px solid var(--border-color); text-align: left; }
+    .rf-popup-table th { background: var(--bg-body); color: var(--text-muted); width: 45%; font-weight: bold; text-transform: uppercase;}
+    .rf-popup-table tr:hover { background: var(--bg-body); }
+    .rf-popup-container { max-height: 250px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--border-color); border-radius: 6px; margin-top: 10px;}
     .rf-popup-container::-webkit-scrollbar { width: 4px; }
-    .rf-popup-container::-webkit-scrollbar-track { background: #f1f1f1; }
-    .rf-popup-container::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 2px; }
+    .rf-popup-container::-webkit-scrollbar-track { background: var(--bg-body); }
+    .rf-popup-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
 
-    .custom-leaflet-btn a { font-size: 16px !important; display: flex !important; justify-content: center; align-items: center; text-decoration: none; color: #333; width: 30px; height: 30px; line-height: 1 !important;}
-    .custom-leaflet-btn a:hover { background-color: #f4f4f4; color: #2980b9; }
+    .custom-leaflet-btn a { font-size: 16px !important; display: flex !important; justify-content: center; align-items: center; text-decoration: none; color: var(--text-main); width: 32px; height: 32px; background: var(--bg-surface); border-radius: 6px;}
+    .custom-leaflet-btn a:hover { background-color: var(--bg-body); color: var(--primary); }
 
-    .info.legend { background: rgba(255,255,255,0.95); padding: 10px 15px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); color: #333; min-width: 180px; }
+    .info.legend { background: var(--bg-surface); padding: 12px 16px; border-radius: 8px; box-shadow: var(--shadow-card); color: var(--text-main); min-width: 180px; border: 1px solid var(--border-color); }
 
-    .slider-control { background: rgba(255,255,255,0.95); padding: 10px 15px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); width: 200px; }
-    .slider-control input[type=range] { -webkit-appearance: none; width: 100%; margin: 6px 0; background: transparent; }
-    .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 5px; cursor: pointer; background: #bdc3c7; border-radius: 2.5px; }
-    .slider-control input[type=range]::-webkit-slider-thumb { height: 14px; width: 14px; border-radius: 50%; background: #3498db; cursor: pointer; -webkit-appearance: none; margin-top: -4.5px; }
+    .slider-control { background: var(--bg-surface); padding: 12px 16px; border-radius: 8px; box-shadow: var(--shadow-card); width: 220px; border: 1px solid var(--border-color); color: var(--text-main); }
+    .slider-control input[type=range] { -webkit-appearance: none; width: 100%; margin: 8px 0; background: transparent; }
+    .slider-control input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 5px; cursor: pointer; background: var(--border-color); border-radius: 2.5px; }
+    .slider-control input[type=range]::-webkit-slider-thumb { height: 14px; width: 14px; border-radius: 50%; background: var(--primary); cursor: pointer; -webkit-appearance: none; margin-top: -4.5px; }
 
     .azi-tool-container { position: relative; }
     .azi-sub-menu {
-        display: none; position: absolute; left: 36px; top: 0; background: white; border-radius: 6px; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 220px; z-index: 1000; flex-direction: column; border: 1px solid #bdc3c7; overflow: hidden;
+        display: none; position: absolute; left: 38px; top: 0; background: var(--bg-surface); border-radius: 8px; 
+        box-shadow: var(--shadow-card); width: 220px; z-index: 1000; flex-direction: column; border: 1px solid var(--border-color); overflow: hidden;
     }
     .azi-sub-menu.show { display: flex; }
-    .azi-menu-item { padding: 10px 15px; border-bottom: 1px solid #ecf0f1; cursor: pointer; font-size: 13px; font-weight: bold; color: #2c3e50; transition: 0.2s;}
-    .azi-menu-item:hover { background: #f4f6f8; color: #2980b9; }
+    .azi-menu-item { padding: 10px 15px; border-bottom: 1px solid var(--border-color); cursor: pointer; font-size: 13px; font-weight: bold; color: var(--text-main); transition: 0.2s;}
+    .azi-menu-item:hover { background: var(--bg-body); color: var(--primary); }
     .azi-menu-item:last-child { border-bottom: none; }
     
     .azi-end-icon { background: #e74c3c; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-    .azi-permanent-label { background: rgba(255,255,255,0.9); border: 2px solid #8e44ad; border-radius: 4px; font-size: 11px; padding: 2px 6px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.2);}
+    .azi-permanent-label { background: var(--bg-surface); border: 2px solid #8e44ad; border-radius: 4px; font-size: 11px; padding: 2px 6px; font-weight: bold; white-space: nowrap; box-shadow: var(--shadow-card); color: var(--text-main);}
     .leaflet-tooltip.azi-permanent-label::before { border-right-color: #8e44ad; }
 
-    /* CSS hiển thị tên CSHT dính vào chấm tròn */
     .csht-tooltip {
         background: transparent; border: none; box-shadow: none;
-        color: #2c3e50; font-weight: 800; font-size: 12px;
-        text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(0,0,0,0.5);
+        color: var(--text-main); font-weight: 800; font-size: 12px;
+        text-shadow: 1px 1px 0 var(--bg-surface), -1px -1px 0 var(--bg-surface), 1px -1px 0 var(--bg-surface), -1px 1px 0 var(--bg-surface), 0 2px 4px rgba(0,0,0,0.5);
     }
-    .leaflet-tooltip.csht-tooltip::before { display: none; } /* Bỏ mũi tên tooltip mặc định */
+    .leaflet-tooltip.csht-tooltip::before { display: none; }
 </style>
 
 <div class="layout">
@@ -80,17 +79,17 @@
             <h1>Bản Đồ Vùng Phủ Sóng (GIS Map)</h1>
             <div class="map-controls">
                 
-                <button id="btnTAMode" onclick="toggleTAMode()" style="background: #9b59b6; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
+                <button id="btnTAMode" onclick="toggleTAMode()" style="background: #9b59b6; color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📶 Mô Phỏng TA
                 </button>
 
                 <input type="file" id="itsLogInput" accept=".txt,.csv" multiple style="display: none;" onchange="processItsLog(event)">
-                <button onclick="document.getElementById('itsLogInput').click()" style="background: #e67e22; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
+                <button onclick="document.getElementById('itsLogInput').click()" style="background: #e67e22; color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📥 Import Log ITS
                 </button>
 
                 <div class="search-box">
-                    <input type="text" id="mapSearchInput" placeholder="Nhập Cell/Site hoặc Tên CSHT..." onkeypress="if(event.key === 'Enter') searchMap()">
+                    <input type="text" id="mapSearchInput" placeholder="Nhập Cell/Site hoặc CSHT..." onkeypress="if(event.key === 'Enter') searchMap()">
                     <button onclick="searchMap()">🔍 Tìm kiếm</button>
                 </div>
 
@@ -99,7 +98,7 @@
                     <option value="3g">Mạng 3G WCDMA</option>
                     <option value="5g">Mạng 5G NR</option>
                 </select>
-                <button onclick="loadAllMapData()" style="background: #27ae60; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
+                <button onclick="loadAllMapData()" style="background: var(--success); color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     🔄 Tải Lại
                 </button>
             </div>
@@ -126,17 +125,27 @@
     let isTAMode = false;
     let taDataCache = []; 
 
-   // [TỐI ƯU 1]: BẬT PREFER CANVAS LÊN TRUE ĐỂ VẼ BẰNG GPU THAY VÌ SVG DOM
+    // Hệ thống Toast thông báo thay thế hoàn toàn alert()
+    function showToast(message, isError = false) {
+        let toast = document.getElementById('mapToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'mapToast';
+            toast.style.cssText = 'position:fixed; bottom:20px; right:20px; background:rgba(0,0,0,0.85); color:#fff; padding:12px 20px; border-radius:8px; font-size:13px; z-index:9999; box-shadow:0 4px 15px rgba(0,0,0,0.3); transition:opacity 0.3s;';
+            document.body.appendChild(toast);
+        }
+        toast.style.background = isError ? '#e74c3c' : '#27ae60';
+        toast.innerText = message;
+        toast.style.opacity = '1';
+        setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+    }
+
     let map = L.map('map', { preferCanvas: true }).setView([19.806692, 105.776153], 10); 
     
-    // ĐẢM BẢO MARKER CSHT LUÔN NỔI LÊN TRÊN CÁC KHỐI ĐA GIÁC CỦA CELL
-    // Tạo một pane tùy chỉnh có Z-index cao hơn overlayPane mặc định
     map.createPane('cshtPane');
-    map.getPane('cshtPane').style.zIndex = 450; // Cao hơn overlayPane (400)
-    // SỬA LỖI: Dùng SVG Renderer cho lớp CSHT để nền trong suốt không che khuất thao tác Click chuột xuống lớp đa giác Cell bên dưới
+    map.getPane('cshtPane').style.zIndex = 450; 
     const cshtRenderer = L.svg({ pane: 'cshtPane' });
     
-    // LAYER GROUP
     let layerGroup = L.layerGroup().addTo(map);   
     let cshtLayer = L.layerGroup().addTo(map);    
     let itsLogLayer = L.layerGroup().addTo(map);  
@@ -157,7 +166,6 @@
         "🛰️ Google Map (Vệ tinh)": googleHybrid
     }).addTo(map);
 
-    // --- CÁC NÚT ĐIỀU KHIỂN LEAFLET ---
     L.Control.FullScreen = L.Control.extend({
         options: { position: 'topleft' },
         onAdd: function(map) {
@@ -206,7 +214,7 @@
                     <div class="azi-menu-item" onclick="createAzimuthOrigin('gps')">📍 Lấy điểm gốc trùng GPS</div>
                     <div class="azi-menu-item" onclick="createAzimuthOrigin('center')">🎯 Lấy gốc giữa màn hình</div>
                     <div class="azi-menu-item" style="color: #27ae60;" onclick="addDirectionToLatest()">➕ Add Direction</div>
-                    <div class="azi-menu-item" style="color: #c0392b; border-top: 1px solid #ecf0f1;" onclick="clearAzimuthTool()">🗑️ Clear Azimuth</div>
+                    <div class="azi-menu-item" style="color: #c0392b; border-top: 1px solid var(--border-color);" onclick="clearAzimuthTool()">🗑️ Clear Azimuth</div>
                 </div>
             `;
             L.DomEvent.disableClickPropagation(container);
@@ -231,11 +239,11 @@
             let div = L.DomUtil.create('div', 'slider-control');
             div.innerHTML = `
                 <div style="margin-bottom: 8px;">
-                    <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Kích thước Điểm đo ITS: <span id="markerSizeVal" style="color:#e67e22">3.5</span></label>
+                    <label style="font-size: 11px; font-weight: bold;">Kích thước Điểm đo ITS: <span id="markerSizeVal" style="color:#e67e22">3.5</span></label>
                     <input type="range" id="markerSizeSlider" min="1" max="10" step="0.5" value="3.5">
                 </div>
                 <div>
-                    <label style="font-size: 11px; font-weight: bold; color: #2c3e50;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">10%</span></label>
+                    <label style="font-size: 11px; font-weight: bold;">Bán kính Bản đồ (Scale): <span id="sectorSizeVal" style="color:#2980b9">10%</span></label>
                     <input type="range" id="sectorSizeSlider" min="10" max="300" step="10" value="10">
                 </div>
             `;
@@ -280,9 +288,6 @@
     document.addEventListener('fullscreenchange', () => { setTimeout(() => map.invalidateSize(), 200); });
     setTimeout(() => { map.invalidateSize(); }, 500);
 
-    // ====================================================
-    // CÔNG CỤ AZIMUTH
-    // ====================================================
     function getBearing(startLat, startLng, destLat, destLng) {
         startLat = startLat * Math.PI / 180; startLng = startLng * Math.PI / 180;
         destLat = destLat * Math.PI / 180; destLng = destLng * Math.PI / 180;
@@ -292,11 +297,10 @@
         return (brng + 360) % 360;
     }
 
-    // Các hàm AzimuthTool như gốc
     window.createAzimuthOrigin = function(type) {
         document.getElementById('aziSubMenu').classList.remove('show'); 
         let center = type === 'gps' ? (userMarker ? userMarker.getLatLng() : null) : map.getCenter();
-        if (!center && type === 'gps') return alert("Chưa có tín hiệu GPS!");
+        if (!center && type === 'gps') { showToast("Chưa có tín hiệu GPS!", true); return; }
         let marker = L.marker(center, {draggable: true}).addTo(azimuthLayer);
         let id = marker._leaflet_id; latestOriginId = id; 
         azimuthOrigins[id] = { marker: marker, lines: [], name: "Trạm Gốc " + id };
@@ -314,13 +318,16 @@
         }
         updatePopup(); marker.on('dragend', function() { updatePopup(); redrawLines(id); }); marker.openPopup();
     };
+
     window.addDirectionToLatest = function() {
         document.getElementById('aziSubMenu').classList.remove('show');
-        if (latestOriginId && azimuthOrigins[latestOriginId]) addDirection(latestOriginId); else alert("Vui lòng tạo một Điểm Gốc trước!");
+        if (latestOriginId && azimuthOrigins[latestOriginId]) addDirection(latestOriginId); else showToast("Vui lòng tạo một Điểm Gốc trước!", true);
     };
+
     function updatePermanentLabel(marker, name, az) {
         marker.setTooltipContent(`<div style="text-align:center; line-height:1.2;"><b style="color:#8e44ad; font-size:11px;">${name}</b><br><span style="color:#e74c3c; font-weight:bold; font-size:11px;">${az.toFixed(1)}°</span></div>`);
     }
+
     window.addDirection = function(originId) {
         let originObj = azimuthOrigins[originId]; let origPos = originObj.marker.getLatLng(); let destCoords = getDestination(origPos.lat, origPos.lng, 0, 500); 
         let endLatLng = L.latLng(destCoords[0], destCoords[1]); let endIcon = L.divIcon({className: 'azi-end-icon', iconSize: [12, 12], iconAnchor: [6, 6]});
@@ -345,12 +352,14 @@
         });
         endMarker.on('dragend', function() { updateEndPopup(); });
     };
+
     window.updateOrigin = function(id) {
         let name = document.getElementById('origName_'+id).value; let lat = parseFloat(document.getElementById('origLat_'+id).value); let lng = parseFloat(document.getElementById('origLng_'+id).value);
-        if(isNaN(lat) || isNaN(lng)) return alert("Tọa độ không hợp lệ!");
+        if(isNaN(lat) || isNaN(lng)) { showToast("Tọa độ không hợp lệ!", true); return; }
         let obj = azimuthOrigins[id]; obj.name = name; let newLatLng = L.latLng(lat, lng);
         obj.marker.setLatLng(newLatLng); map.setView(newLatLng, 17); redrawLines(id);
     };
+
     window.redrawLines = function(originId) {
         let obj = azimuthOrigins[originId]; let origPos = obj.marker.getLatLng();
         obj.lines.forEach(lObj => {
@@ -360,6 +369,7 @@
         });
         obj.marker.closePopup(); 
     };
+
     window.updateEndMarker = function(originId, endId) {
         let obj = azimuthOrigins[originId]; let lObj = obj.lines.find(l => l.endMarker._leaflet_id === endId);
         lObj.name = document.getElementById('endName_'+endId).value; lObj.azimuth = parseFloat(document.getElementById('endAz_'+endId).value); lObj.distance = parseFloat(document.getElementById('endDist_'+endId).value);
@@ -367,9 +377,6 @@
         lObj.endMarker.setLatLng(newLatLng); lObj.line.setLatLngs([origPos, newLatLng]); updatePermanentLabel(lObj.endMarker, lObj.name, lObj.azimuth); lObj.endMarker.closePopup();
     };
 
-    // ====================================================
-    // THUẬT TOÁN TÍNH TOÁN LƯỢNG GIÁC
-    // ====================================================
     function getDestination(lat, lng, azimuth, distanceMeters) {
         const R = 6378137; 
         const brng = azimuth * Math.PI / 180;
@@ -388,7 +395,6 @@
         const startAngle = azimuth - beamwidth / 2;
         const endAngle = azimuth + beamwidth / 2;
 
-        // [TỐI ƯU 3]: GIẢM ĐỘ CHIA ĐỂ VẼ CÁNH QUẠT (TỪ 5 XUỐNG 15) -> Giảm 66% phép tính lượng giác
         for (let i = startAngle; i <= endAngle; i += 15) {
             points.push(getDestination(lat, lng, i, radius));
         }
@@ -416,7 +422,7 @@
         polygon.bindPopup(`
             <div style="font-family: Arial; min-width: 250px;">
                 <h4 style="margin: 0 0 5px 0; color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 5px; font-size:14px;">📡 Cell: ${cellName}</h4>
-                <div style="font-size: 11px; color: #7f8c8d;"><strong>Tọa độ:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} &nbsp;|&nbsp; <strong>Góc phát:</strong> ${azimuth}°</div>
+                <div style="font-size: 11px; color: var(--text-muted);"><strong>Tọa độ:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} &nbsp;|&nbsp; <strong>Góc phát:</strong> ${azimuth}°</div>
                 ${tableHtml}
             </div>
         `, { maxWidth: 400 });
@@ -424,10 +430,7 @@
         return polygon;
     }
 
-    // ====================================================
-    // HIỂN THỊ CSHT LÊN BẢN ĐỒ
-    // ====================================================
-         async function loadCshtData() {
+    async function loadCshtData() {
         try {
             const res = await fetch('/api/csht-data');
             const data = await res.json();
@@ -456,7 +459,7 @@
                 marker.bindPopup(`
                     <div style="font-family: Arial; min-width: 280px;">
                         <h4 style="margin: 0 0 5px 0; color: #34495e; border-bottom: 2px solid #34495e; padding-bottom: 5px; font-size:14px;">🏢 CSHT: ${item.Ten_CSHT}</h4>
-                        <div style="font-size: 11px; color: #7f8c8d; margin-bottom:5px;"><strong>Mã CSHT:</strong> ${item.Ma_CSHT}</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-bottom:5px;"><strong>Mã CSHT:</strong> ${item.Ma_CSHT}</div>
                         ${tableHtml}
                     </div>
                 `, { maxWidth: 400 });
@@ -476,10 +479,6 @@
         }
     }
 
-    // ====================================================
-    // MÔ PHỎNG TA (BIỂU ĐỒ NHIỆT ĐA SẮC)
-    // ====================================================
-    // [TỐI ƯU 2.1]: Rút gọn hàm cắt tên để chạy siêu tốc trong vòng lặp
     function extractCoreName(name) {
         if (!name) return '';
         return String(name).toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
@@ -498,7 +497,6 @@
         const startAngle = azimuth - beamwidth / 2;
         const endAngle = azimuth + beamwidth / 2;
 
-        // Giảm bước chia ở mô phỏng TA
         for (let i = startAngle; i <= endAngle; i += 15) points.push(getDestination(lat, lng, i, outerRadius));
         points.push(getDestination(lat, lng, endAngle, outerRadius));
 
@@ -516,12 +514,12 @@
         polygon.bindPopup(`
             <div style="font-family:Arial; min-width:200px;">
                 <h4 style="margin:0 0 5px 0; color:${colors.fill}; border-bottom:2px solid ${colors.fill}; padding-bottom:5px; font-size:14px;">📍 Mật Độ Timing Advance</h4>
-                <div style="font-size:12px; color:#2c3e50; line-height:1.6;">
+                <div style="font-size:12px; color:var(--text-main); line-height:1.6;">
                     <b>Cell:</b> <span style="color:#2980b9; font-weight:bold;">${cellCode}</span><br>
                     <b>Chỉ số TA Index:</b> <b>${taIndex}</b><br>
                     <b>Bán kính vùng:</b> ${innerRadius.toFixed(0)}m - ${outerRadius.toFixed(0)}m<br>
-                    <div style="background:#f4f6f8; padding:6px; margin-top:6px; border-radius:4px; text-align:center;">
-                        <span style="display:block; font-size:11px; color:#7f8c8d;">Số lượng người dùng (UE)</span>
+                    <div style="background:var(--bg-body); padding:6px; margin-top:6px; border-radius:4px; text-align:center;">
+                        <span style="display:block; font-size:11px; color:var(--text-muted);">Số lượng người dùng (UE)</span>
                         <span style="color:${colors.fill}; font-size:18px; font-weight:bold;">${ueCount}</span>
                     </div>
                 </div>
@@ -536,14 +534,12 @@
         legendControl.onAdd = function(map) {
             let div = L.DomUtil.create('div', 'info legend');
             div.innerHTML = `
-                <h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">Biểu đồ Mật độ TA (UE)</h4>
+                <h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; font-weight: bold; border-bottom: 2px solid var(--primary); padding-bottom: 5px;">Biểu đồ Mật độ TA (UE)</h4>
                 <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#e74c3c; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Rất cao (80 - 100%)</span></div>
                 <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#e67e22; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Cao (60 - 80%)</span></div>
                 <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#f1c40f; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Trung bình (40 - 60%)</span></div>
                 <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#2ecc71; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Thấp (20 - 40%)</span></div>
                 <div style="display:flex; align-items:center;"><i style="background:#3498db; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Rất thấp (0 - 20%)</span></div>
-                <hr style="border:0; border-top:1px dashed #ccc; margin:10px 0;">
-                <div style="font-size:10px; color:#7f8c8d; line-height: 1.4;">Cell không có dữ liệu sẽ hiện màu xám.</div>
             `;
             return div;
         };
@@ -555,7 +551,7 @@
         const btn = document.getElementById('btnTAMode');
 
         if (network !== '4g') {
-            alert('Tính năng phân tích TA hiện tại chỉ hỗ trợ mô phỏng trên mạng 4G!');
+            showToast('Tính năng phân tích TA hiện tại chỉ hỗ trợ mô phỏng trên mạng 4G!', true);
             return;
         }
 
@@ -565,8 +561,6 @@
             btn.innerHTML = '🎯 Tắt Mô phỏng TA';
             btn.style.background = '#8e44ad';
             let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
-            
-            // Cho browser nghỉ 1 nhịp để render giao diện nút bấm trước khi khóa luồng tính toán
             setTimeout(() => { renderTAMap(scale); }, 50);
         } else {
             btn.innerHTML = '📶 Mô phỏng TA';
@@ -589,14 +583,11 @@
 
             document.getElementById('loadingText').innerText = "Đang vẽ bản đồ nhiệt đa sắc...";
             
-            // [TỐI ƯU 2.2]: XÂY DỰNG HASHMAP (TỪ ĐIỂN O(1)) THAY VÌ ARRAY.FIND O(N)
             const taLookupMap = {};
             taDataCache.forEach(t => {
-                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
+                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t['Cell Code'] || t['Cell_Code'] || '').trim();
                 let core = extractCoreName(rawTaCell);
-                // Ưu tiên lưu mã gốc (VD: THA001) để lấy ra cực nhanh
                 if (core) taLookupMap[core] = t;
-                // Dự phòng lưu mã nguyên bản
                 taLookupMap[rawTaCell.toLowerCase()] = t;
             });
 
@@ -606,7 +597,6 @@
             const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
 
             globalPolygons.forEach(cellItem => {
-                // TRA CỨU SIÊU TỐC TỪ BỘ TỪ ĐIỂN HASHMAP
                 let taRecord = taLookupMap[cellItem.fastCoreCode] || taLookupMap[cellItem.cellStr];
 
                 if (taRecord) {
@@ -641,14 +631,11 @@
             addTALegend();
             loading.style.display = 'none';
         } catch (e) {
-            console.error(e); alert('Lỗi truy xuất hệ thống khi tải dữ liệu TA!');
+            console.error(e); showToast('Lỗi truy xuất hệ thống khi tải dữ liệu TA!', true);
             loading.style.display = 'none';
         }
     }
 
-    // ====================================================
-    // KHỞI TẠO BẢN ĐỒ CƠ BẢN
-    // ====================================================
     async function loadAllMapData() {
         loadMapData(); 
         loadCshtData(); 
@@ -684,12 +671,12 @@
 
             if (data.length === 0) {
                 loading.style.display = 'none';
-                return alert('Không có dữ liệu tọa độ trạm RF cho mạng này!');
+                showToast('Không có dữ liệu tọa độ trạm RF cho mạng này!', true);
+                return;
             }
 
             document.getElementById('loadingText').innerText = "Đang xử lý hình học đa giác...";
 
-            // Tách luồng vẽ đồ thị để Browser không bị "Đơ"
             setTimeout(() => {
                 data.forEach(item => {
                     if(item.lat && item.lng) {
@@ -697,7 +684,6 @@
                         if (network === '3g') baseRadius = 300; 
                         if (network === '5g') baseRadius = 150; 
 
-                        // [TỐI ƯU 4]: TÍNH TOÁN SẴN MỌI CHUỖI TÊN ĐỂ LƯU VÀO CACHE (Tránh lặp lại khi bật TA)
                         let rfCellName = ''; let rfCellCode = '';
                         if (item.rfData) {
                             let nameItem = item.rfData.find(x => x.key.toLowerCase() === 'cell_name' || x.key.toLowerCase() === 'site_name');
@@ -708,7 +694,6 @@
                         
                         let cellStr = String(item.cell).toLowerCase();
                         let displayCellName = item.cell || rfCellName || "Unknown";
-                        // Mã gốc để làm Key trong HashMap (Ví dụ: 4G-THA001 -> THA001)
                         let fastCoreCode = extractCoreName(rfCellCode || item.cell);
 
                         const sector = createSector(item.lat, item.lng, item.azimuth, item.cell, network, item.rfData, baseRadius, scale);
@@ -721,7 +706,7 @@
                             baseRadius: baseRadius, baseColor: sector.options.color,
                             rawData: item,
                             displayCellName: displayCellName,
-                            fastCoreCode: fastCoreCode // Lưu biến nhớ để Hàm TA truy xuất siêu tốc
+                            fastCoreCode: fastCoreCode 
                         });
                     }
                 });
@@ -735,13 +720,10 @@
         } catch (error) {
             console.error(error);
             loading.style.display = 'none';
-            alert('Lỗi truy xuất dữ liệu từ máy chủ!');
+            showToast('Lỗi truy xuất dữ liệu từ máy chủ!', true);
         }
     }
 
-    // ====================================================
-    // TÌM KIẾM ĐỒNG BỘ: TÌM KIẾM RF VÀ CSHT CÙNG LÚC
-    // ====================================================
     function searchMap() {
         let keyword = document.getElementById('mapSearchInput').value.trim().toLowerCase();
         
@@ -816,13 +798,10 @@
             if (matchedBounds.length === 1) map.setView(matchedBounds[0], 16);
             else map.fitBounds(matchedBounds, { padding: [50, 50], maxZoom: 16 });
         } else {
-            alert(`Không tìm thấy Cell/Site hoặc CSHT nào chứa từ khóa "${keyword}".`);
+            showToast(`Không tìm thấy Cell/Site hoặc CSHT nào chứa từ khóa "${keyword}".`, true);
         }
     }
 
-    // ====================================================
-    // ĐỌC VÀ VẼ LOG FILE ITS (MULTI FILES)
-    // ====================================================
     function getColor4G(level) {
         if (level >= -80) return '#27ae60'; if (level >= -90) return '#2980b9'; 
         if (level >= -100) return '#f1c40f'; if (level >= -110) return '#e67e22'; return '#c0392b'; 
@@ -837,7 +816,7 @@
         legendControl.onAdd = function (map) {
             let div = L.DomUtil.create('div', 'info legend'); let labels = [];
             let title = is4G ? 'Mức thu (RSRP)' : 'Mức thu (RSCP)';
-            div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">${title}</h4>`;
+            div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; font-weight: bold; border-bottom: 2px solid var(--primary); padding-bottom: 5px;">${title}</h4>`;
             
             const ranges4G = [ 
                 { text: 'RSRP >= -80', color: '#27ae60' }, 
@@ -857,7 +836,7 @@
             const ranges = is4G ? ranges4G : ranges3G;
 
             ranges.forEach(r => {
-                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px;"></i> <span style="font-size: 12px; font-weight: bold; color: #34495e;">${r.text}</span></div>`);
+                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px;"></i> <span style="font-size: 12px; font-weight: bold; color: var(--text-main);">${r.text}</span></div>`);
             });
             div.innerHTML += labels.join(''); return div;
         };
