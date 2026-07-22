@@ -1327,6 +1327,9 @@ exports.getPoiData = async (req, res) => {
     }
 };
 
+// =========================================================================
+// THUẬT TOÁN TÁCH MÃ LÕI BẢO VỆ CHUỖI TÌM KIẾM (CORE CODE EXTRACTOR)
+// =========================================================================
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1349,10 +1352,30 @@ exports.getKpiData = async (req, res) => {
             const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
             if (rawKeywords.length === 0) return res.json([]);
             
+            let expandedKeywords = [...rawKeywords];
+
+            // [MỚI] Xử lý đặc thù cho mạng 3G: Bảng KPI 3G không có cột Site, 
+            // nên phải tra cứu ngược từ bảng RF 3G để lấy danh sách Cell_code tương ứng với Site_code
+            if (network === '3g') {
+                let siteConds = rawKeywords.map(() => 'Site_code LIKE ?').join(' OR ');
+                let siteParams = rawKeywords.map(k => `%${k}%`);
+                try {
+                    const [rfCells] = await db.query(`SELECT Cell_code FROM rf_3g WHERE ${siteConds}`, siteParams);
+                    rfCells.forEach(r => {
+                        if (r.Cell_code) expandedKeywords.push(r.Cell_code);
+                    });
+                } catch (e) {
+                    console.error("Lỗi tra cứu rf_3g để lấy Cell_code:", e);
+                }
+            }
+
             let conditions = [];
             let params = [];
 
-            rawKeywords.forEach(k => {
+            // Loại bỏ các keyword trùng lặp sau khi mở rộng từ RF
+            const uniqueKeywords = [...new Set(expandedKeywords)];
+
+            uniqueKeywords.forEach(k => {
                 let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
 
                 let cond = `(k.${cellCol} LIKE ?`;
