@@ -798,45 +798,62 @@
             if (matchedBounds.length === 1) map.setView(matchedBounds[0], 16);
             else map.fitBounds(matchedBounds, { padding: [50, 50], maxZoom: 16 });
         } else {
-            showToast(`Không tìm thấy Cell/Site hoặc CSHT nào chứa từ khóa "${keyword}".`, true);
+            alert(`Không tìm thấy Cell/Site hoặc CSHT nào chứa từ khóa "${keyword}".`);
         }
     }
 
+    // ====================================================
+    // ĐỌC VÀ VẼ LOG FILE ITS (MULTI FILES)
+    // ====================================================
+    // SỬA LỖI MÀU SẮC & NGƯỠNG ĐO THEO HÌNH ẢNH YÊU CẦU
     function getColor4G(level) {
-        if (level >= -80) return '#27ae60'; if (level >= -90) return '#2980b9'; 
-        if (level >= -100) return '#f1c40f'; if (level >= -110) return '#e67e22'; return '#c0392b'; 
+        if (level >= -65) return '#0000FF'; // Rất tốt: Blue
+        if (level >= -85) return '#008000'; // Tốt: Dark Green
+        if (level >= -95) return '#00FF00'; // Trung bình: Lime (Sáng)
+        if (level >= -105) return '#FFFF00'; // Kém: Yellow
+        if (level >= -110) return '#FF0000'; // Rất kém: Red
+        return '#000000'; // Điểm đen: Black
     }
+    
     function getColor3G(level) {
-        if (level >= -75) return '#27ae60'; if (level >= -85) return '#2980b9'; 
-        if (level >= -95) return '#f1c40f'; if (level >= -105) return '#e67e22'; return '#c0392b'; 
+        if (level >= -65) return '#0000FF'; // Rất tốt: Blue
+        if (level >= -75) return '#008000'; // Tốt: Dark Green
+        if (level >= -85) return '#00FF00'; // Trung bình: Lime (Sáng)
+        if (level >= -95) return '#FFFF00'; // Kém: Yellow
+        if (level >= -105) return '#FF0000'; // Rất kém: Red
+        return '#000000'; // Điểm đen: Black
     }
+
     function addLegend(is3G, is4G) {
         if (legendControl) map.removeControl(legendControl);
         legendControl = L.control({position: 'bottomright'});
         legendControl.onAdd = function (map) {
             let div = L.DomUtil.create('div', 'info legend'); let labels = [];
-            let title = is4G ? 'Mức thu (RSRP)' : 'Mức thu (RSCP)';
-            div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; font-weight: bold; border-bottom: 2px solid var(--primary); padding-bottom: 5px;">${title}</h4>`;
+            let title = is4G ? 'Mức thu 4G (RSRP)' : 'Mức thu 3G (RSCP)';
+            div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">${title}</h4>`;
             
+            // Cập nhật mảng Legend chuẩn xác theo hình
             const ranges4G = [ 
-                { text: 'RSRP >= -80', color: '#27ae60' }, 
-                { text: '-90 <= RSRP < -80', color: '#2980b9' }, 
-                { text: '-100 <= RSRP < -90', color: '#f1c40f' }, 
-                { text: '-110 <= RSRP < -100', color: '#e67e22' }, 
-                { text: 'RSRP < -110', color: '#c0392b' } 
+                { text: 'Rất tốt [-65: 0)', color: '#0000FF' }, 
+                { text: 'Tốt [-85: -65)', color: '#008000' }, 
+                { text: 'Trung bình [-95: -85)', color: '#00FF00' }, 
+                { text: 'Kém [-105: -95)', color: '#FFFF00' }, 
+                { text: 'Rất kém [-110: -105)', color: '#FF0000' },
+                { text: 'Điểm đen [--: -110)', color: '#000000' }
             ];
             const ranges3G = [ 
-                { text: 'RSCP >= -75', color: '#27ae60' }, 
-                { text: '-85 <= RSCP < -75', color: '#2980b9' }, 
-                { text: '-95 <= RSCP < -85', color: '#f1c40f' }, 
-                { text: '-105 <= RSCP < -95', color: '#e67e22' }, 
-                { text: 'RSCP < -105', color: '#c0392b' } 
+                { text: 'Rất tốt [-65: 0)', color: '#0000FF' }, 
+                { text: 'Tốt [-75: -65)', color: '#008000' }, 
+                { text: 'Trung bình [-85: -75)', color: '#00FF00' }, 
+                { text: 'Kém [-95: -85)', color: '#FFFF00' }, 
+                { text: 'Rất kém [-105: -95)', color: '#FF0000' },
+                { text: 'Điểm đen [--: -105)', color: '#000000' }
             ];
             
             const ranges = is4G ? ranges4G : ranges3G;
 
             ranges.forEach(r => {
-                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px;"></i> <span style="font-size: 12px; font-weight: bold; color: var(--text-main);">${r.text}</span></div>`);
+                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2);"></i> <span style="font-size: 12px; font-weight: bold; color: #34495e;">${r.text}</span></div>`);
             });
             div.innerHTML += labels.join(''); return div;
         };
