@@ -748,7 +748,6 @@ exports.handleImportData = async (req, res) => {
                     if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
                         rowStr.includes('tên cell') || rowStr.includes('cell name') ||
                         rowStr.includes('site name') || rowStr.includes('cell_code') || 
-                        rowStr.includes('cell code') || rowStr.includes('enodeb name') || rowStr.includes('index0') ||
                         rowStr.includes('tuan') || rowStr.includes('tuần') || 
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
@@ -762,8 +761,9 @@ exports.handleImportData = async (req, res) => {
 
             const excelHeaders = rawData[headerRowIdx];
             
-         
-            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
+            // --- TÍNH NĂNG MỚI: TỰ ĐỘNG THÊM CỘT CÒN THIẾU VÀO DATABASE ---
+            // SỬA LỖI: Loại bỏ networkType === 'ta_query' khỏi danh sách Auto-Migration để ngăn chặn tạo cột rác
+            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
                     if (!h) continue;
@@ -961,15 +961,19 @@ exports.handleImportData = async (req, res) => {
                         else mappedCol = createSafeColumnName(exHeader);
                     }
                     else if (networkType === 'ta_query') {
-                        if (h === 'date' || h === 'ngày' || h.includes('thoi gian')) mappedCol = 'Date';
-                        else if (h.includes('enodeb name')) mappedCol = 'eNodeB_Name';
-                        else if (h.includes('fdd tdd')) mappedCol = 'Cell_FDD_TDD_Indication';
-                        else if (h.includes('cell code') || h.includes('cell_code') || h.includes('tên cell')) mappedCol = 'Cell_Code';
-                        else if (h.includes('localcell')) mappedCol = 'LocalCell_Id';
-                        else if (h.includes('function name')) mappedCol = 'eNodeB_Function_Name';
+                        // Nâng cấp bộ nhận diện TA siêu chuẩn xác, bất chấp khoảng trắng hay tiếng Việt
+                        if (h === 'date' || h === 'ngày' || h.includes('thoi gian') || h.includes('thời gian')) mappedCol = 'Date';
+                        else if (h.includes('enodeb name') || h === 'enodeb_name') mappedCol = 'eNodeB_Name';
+                        else if (h.includes('fdd tdd') || h.includes('fdd/tdd') || h.includes('indication')) mappedCol = 'Cell_FDD_TDD_Indication';
+                        else if (h.includes('cell code') || h.includes('cell_code') || h === 'cell name' || h.includes('tên cell')) mappedCol = 'Cell_Code';
+                        else if (h.includes('localcell') || h.includes('local cell')) mappedCol = 'LocalCell_Id';
+                        else if (h.includes('function name') || h.includes('function')) mappedCol = 'eNodeB_Function_Name';
                         else if (h.includes('integrity')) mappedCol = 'Integrity';
-                        else if (h.startsWith('index')) mappedCol = h.replace(/\s/g, ''); // Ép Index 0 thành Index0
-                        else mappedCol = createSafeColumnName(exHeader);
+                        else if (h.includes('index') || h.includes('chỉ số')) {
+                            // Rút trích số trực tiếp (VD: "Index 0" -> "0" -> Ghép thành "Index0")
+                            let numMatch = h.match(/\d+/);
+                            if (numMatch) mappedCol = 'Index' + numMatch[0];
+                        }
                     }
 
                     // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
@@ -1008,13 +1012,7 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            // BẢO VỆ CÁC CỘT CHỮ KHÔNG BỊ HÀM PARSEFLOAT XÓA TRẮNG
-            const stringColumns = [
-                'Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 
-                'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 
-                'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
-                'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
-            ];
+            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code'];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -1062,15 +1060,13 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
-            // TỰ ĐỘNG XÓA DỮ LIỆU CŨ CỦA NGÀY/THỜI GIAN VỪA IMPORT ĐỂ CHỐNG TRÙNG LẶP (HỖ TRỢ CẢ TA VÀ KPI)
-            if (insertData.length > 0 && (isKpiImported || networkType === 'ta_query')) {
-                const dateCol = isKpiImported ? 'Thoi_gian' : 'Date';
-                const uniqueDates = [...new Set(insertData.map(r => r[dateCol]).filter(Boolean))];
+            if (insertData.length > 0 && isKpiImported) {
+                const uniqueDates = [...new Set(insertData.map(r => r.Thoi_gian).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
                     try { 
-                        await db.query(`DELETE FROM ${networkType} WHERE \`${dateCol}\` IN (${placeholders})`, uniqueDates); 
-                        console.log(`🧹 Đã dọn sạch dữ liệu cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
+                        await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates); 
+                        console.log(`🧹 Đã dọn sạch dữ liệu KPI cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
                     } catch (e) {
                         console.error("Lỗi khi xóa đè dữ liệu cũ:", e);
                     }
@@ -1348,9 +1344,6 @@ exports.getPoiData = async (req, res) => {
     }
 };
 
-// =========================================================================
-// THUẬT TOÁN TÁCH MÃ LÕI BẢO VỆ CHUỖI TÌM KIẾM (CORE CODE EXTRACTOR)
-// =========================================================================
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1373,30 +1366,10 @@ exports.getKpiData = async (req, res) => {
             const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
             if (rawKeywords.length === 0) return res.json([]);
             
-            let expandedKeywords = [...rawKeywords];
-
-            // [MỚI] Xử lý đặc thù cho mạng 3G: Bảng KPI 3G không có cột Site, 
-            // nên phải tra cứu ngược từ bảng RF 3G để lấy danh sách Cell_code tương ứng với Site_code
-            if (network === '3g') {
-                let siteConds = rawKeywords.map(() => 'Site_code LIKE ?').join(' OR ');
-                let siteParams = rawKeywords.map(k => `%${k}%`);
-                try {
-                    const [rfCells] = await db.query(`SELECT Cell_code FROM rf_3g WHERE ${siteConds}`, siteParams);
-                    rfCells.forEach(r => {
-                        if (r.Cell_code) expandedKeywords.push(r.Cell_code);
-                    });
-                } catch (e) {
-                    console.error("Lỗi tra cứu rf_3g để lấy Cell_code:", e);
-                }
-            }
-
             let conditions = [];
             let params = [];
 
-            // Loại bỏ các keyword trùng lặp sau khi mở rộng từ RF
-            const uniqueKeywords = [...new Set(expandedKeywords)];
-
-            uniqueKeywords.forEach(k => {
+            rawKeywords.forEach(k => {
                 let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
 
                 let cond = `(k.${cellCol} LIKE ?`;
