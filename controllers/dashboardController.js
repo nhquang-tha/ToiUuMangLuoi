@@ -748,6 +748,7 @@ exports.handleImportData = async (req, res) => {
                     if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
                         rowStr.includes('tên cell') || rowStr.includes('cell name') ||
                         rowStr.includes('site name') || rowStr.includes('cell_code') || 
+                        rowStr.includes('cell code') || rowStr.includes('enodeb name') || rowStr.includes('index0') ||
                         rowStr.includes('tuan') || rowStr.includes('tuần') || 
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
@@ -761,7 +762,8 @@ exports.handleImportData = async (req, res) => {
 
             const excelHeaders = rawData[headerRowIdx];
             
-            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data') {
+         
+            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
                     if (!h) continue;
@@ -958,6 +960,17 @@ exports.handleImportData = async (req, res) => {
                         else if (h === 'tên viết tắt' || h.includes('viet tat') || h.includes('viết tắt')) mappedCol = 'ten_viet_tat';
                         else mappedCol = createSafeColumnName(exHeader);
                     }
+                    else if (networkType === 'ta_query') {
+                        if (h === 'date' || h === 'ngày' || h.includes('thoi gian')) mappedCol = 'Date';
+                        else if (h.includes('enodeb name')) mappedCol = 'eNodeB_Name';
+                        else if (h.includes('fdd tdd')) mappedCol = 'Cell_FDD_TDD_Indication';
+                        else if (h.includes('cell code') || h.includes('cell_code') || h.includes('tên cell')) mappedCol = 'Cell_Code';
+                        else if (h.includes('localcell')) mappedCol = 'LocalCell_Id';
+                        else if (h.includes('function name')) mappedCol = 'eNodeB_Function_Name';
+                        else if (h.includes('integrity')) mappedCol = 'Integrity';
+                        else if (h.startsWith('index')) mappedCol = h.replace(/\s/g, ''); // Ép Index 0 thành Index0
+                        else mappedCol = createSafeColumnName(exHeader);
+                    }
 
                     // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
                     let actualDbCol = null;
@@ -995,7 +1008,13 @@ exports.handleImportData = async (req, res) => {
             let lastValidDate = null; 
             const insertData = [];
             
-            const stringColumns = ['Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code'];
+            // BẢO VỆ CÁC CỘT CHỮ KHÔNG BỊ HÀM PARSEFLOAT XÓA TRẮNG
+            const stringColumns = [
+                'Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 
+                'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 
+                'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
+                'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
+            ];
 
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -1043,13 +1062,15 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
-            if (insertData.length > 0 && isKpiImported) {
-                const uniqueDates = [...new Set(insertData.map(r => r.Thoi_gian).filter(Boolean))];
+            // TỰ ĐỘNG XÓA DỮ LIỆU CŨ CỦA NGÀY/THỜI GIAN VỪA IMPORT ĐỂ CHỐNG TRÙNG LẶP (HỖ TRỢ CẢ TA VÀ KPI)
+            if (insertData.length > 0 && (isKpiImported || networkType === 'ta_query')) {
+                const dateCol = isKpiImported ? 'Thoi_gian' : 'Date';
+                const uniqueDates = [...new Set(insertData.map(r => r[dateCol]).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
                     try { 
-                        await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, uniqueDates); 
-                        console.log(`🧹 Đã dọn sạch dữ liệu KPI cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
+                        await db.query(`DELETE FROM ${networkType} WHERE \`${dateCol}\` IN (${placeholders})`, uniqueDates); 
+                        console.log(`🧹 Đã dọn sạch dữ liệu cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
                     } catch (e) {
                         console.error("Lỗi khi xóa đè dữ liệu cũ:", e);
                     }
