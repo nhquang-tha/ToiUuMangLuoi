@@ -971,12 +971,12 @@ exports.handleImportData = async (req, res) => {
                     // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
                     let actualDbCol = null;
                     
-                    // XỬ LÝ ĐẶC BIỆT CHO BẢNG TA_QUERY (BẮT CỘT INDEX)
+                    // XỬ LÝ ĐẶC BIỆT CHO BẢNG TA_QUERY (BẮT CỘT INDEX VÀ CÁC CỘT ĐẶC THÙ)
                     if (networkType === 'ta_query') {
                         if (h === 'date' || h === 'ngày' || h.includes('thoi gian')) actualDbCol = 'Date';
                         else if (h.includes('enodeb name') || h.includes('enodeb_name')) actualDbCol = 'eNodeB_Name';
                         else if (h.includes('fdd tdd') || h.includes('fdd_tdd')) actualDbCol = 'Cell_FDD_TDD_Indication';
-                        else if (h.includes('cell code') || h.includes('cell_code') || h === 'cell') actualDbCol = 'Cell_Code';
+                        else if (h.includes('cell code') || h.includes('cell_code') || h.includes('cell name') || h.includes('tên cell') || h === 'cell') actualDbCol = 'Cell_Code';
                         else if (h.includes('localcell') || h.includes('local cell')) actualDbCol = 'LocalCell_Id';
                         else if (h.includes('function name') || h.includes('function_name')) actualDbCol = 'eNodeB_Function_Name';
                         else if (h.includes('integrity')) actualDbCol = 'Integrity';
