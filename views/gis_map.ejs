@@ -824,15 +824,21 @@
         return '#000000'; // Điểm đen: Black
     }
 
-    function addLegend(is3G, is4G) {
+    // BỔ SUNG THAM SỐ STATS ĐỂ HIỂN THỊ THỐNG KÊ SỐ MẪU ĐO
+    function addLegend(is3G, is4G, stats = null) {
         if (legendControl) map.removeControl(legendControl);
         legendControl = L.control({position: 'bottomright'});
         legendControl.onAdd = function (map) {
             let div = L.DomUtil.create('div', 'info legend'); let labels = [];
             let title = is4G ? 'Mức thu 4G (RSRP)' : 'Mức thu 3G (RSCP)';
+            
+            // Nếu có dữ liệu thống kê, in thêm tổng số mẫu đo lên tiêu đề
+            if (stats && stats.total > 0) {
+                title += `<br><span style="font-size: 11px; font-weight: normal; color: #7f8c8d;">Tổng số: <b>${stats.total.toLocaleString('vi-VN')}</b> mẫu đo</span>`;
+            }
+            
             div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">${title}</h4>`;
             
-            // Cập nhật mảng Legend chuẩn xác theo hình
             const ranges4G = [ 
                 { text: 'Rất tốt [-65: 0)', color: '#0000FF' }, 
                 { text: 'Tốt [-85: -65)', color: '#008000' }, 
@@ -850,10 +856,35 @@
                 { text: 'Điểm đen [--: -105)', color: '#000000' }
             ];
             
+            // Gắn số liệu vào từng hạng mức
+            if (stats) {
+                ranges4G[0].count = stats.cat1; ranges3G[0].count = stats.cat1;
+                ranges4G[1].count = stats.cat2; ranges3G[1].count = stats.cat2;
+                ranges4G[2].count = stats.cat3; ranges3G[2].count = stats.cat3;
+                ranges4G[3].count = stats.cat4; ranges3G[3].count = stats.cat4;
+                ranges4G[4].count = stats.cat5; ranges3G[4].count = stats.cat5;
+                ranges4G[5].count = stats.cat6; ranges3G[5].count = stats.cat6;
+            }
+            
             const ranges = is4G ? ranges4G : ranges3G;
 
+            // Đặt min-width rộng hơn để chứa các số liệu không bị xuống dòng
+            div.style.minWidth = "260px";
+
             ranges.forEach(r => {
-                labels.push(`<div style="display: flex; align-items: center; margin-bottom: 5px;"><i style="background:${r.color}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2);"></i> <span style="font-size: 12px; font-weight: bold; color: #34495e;">${r.text}</span></div>`);
+                let countHtml = '';
+                if (r.count !== undefined && stats.total > 0) {
+                    let pct = ((r.count / stats.total) * 100).toFixed(1);
+                    countHtml = `<span style="margin-left: auto; font-size: 11px; color: #34495e; font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
+                }
+                
+                labels.push(`
+                    <div style="display: flex; align-items: center; margin-bottom: 5px; width: 100%;">
+                        <i style="background:${r.color}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></i> 
+                        <span style="font-size: 12px; font-weight: bold; color: #34495e; white-space: nowrap;">${r.text}</span>
+                        ${countHtml}
+                    </div>
+                `);
             });
             div.innerHTML += labels.join(''); return div;
         };
@@ -866,13 +897,16 @@
 
         itsLogLayer.clearLayers(); 
         globalLogLines = []; 
-        document.getElementById('loadingText').innerText = "Đang vẽ dữ liệu đường đo Drive Test...";
+        document.getElementById('loadingText').innerText = "Đang vẽ dữ liệu và đếm mẫu đo Drive Test...";
         document.getElementById('mapLoading').style.display = 'block';
 
         let is3G = false, is4G = false; 
         let allLogBounds = [];
         let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
         let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
+
+        // BỘ ĐẾM SỐ LƯỢNG MẪU ĐO
+        let logStats = { total: 0, cat1: 0, cat2: 0, cat3: 0, cat4: 0, cat5: 0, cat6: 0 };
 
         const readFile = (file) => {
             return new Promise((resolve) => {
@@ -895,12 +929,41 @@
                         if (isNaN(lat) || isNaN(lng)) continue;
 
                         const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; const level = parseFloat(cols[idxLevel]);
+                        if (isNaN(level)) continue; // Bỏ qua nếu dòng bị lỗi mức thu
+
                         const node = cols[idxNode] ? cols[idxNode].trim() : ''; const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
                         const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
 
                         let color = '#95a5a6'; let servingCellObj = null;
-                        if (tech.includes('3G')) { is3G = true; color = getColor3G(level); servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId); } 
-                        else if (tech.includes('4G')) { is4G = true; color = getColor4G(level); servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId); }
+                        
+                        if (tech.includes('3G')) { 
+                            is3G = true; 
+                            color = getColor3G(level); 
+                            servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId); 
+                            
+                            // Phân loại đếm mẫu cho 3G (RSCP)
+                            logStats.total++;
+                            if (level >= -65) logStats.cat1++;
+                            else if (level >= -75) logStats.cat2++;
+                            else if (level >= -85) logStats.cat3++;
+                            else if (level >= -95) logStats.cat4++;
+                            else if (level >= -105) logStats.cat5++;
+                            else logStats.cat6++;
+                        } 
+                        else if (tech.includes('4G')) { 
+                            is4G = true; 
+                            color = getColor4G(level); 
+                            servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId); 
+                            
+                            // Phân loại đếm mẫu cho 4G (RSRP)
+                            logStats.total++;
+                            if (level >= -65) logStats.cat1++;
+                            else if (level >= -85) logStats.cat2++;
+                            else if (level >= -95) logStats.cat3++;
+                            else if (level >= -105) logStats.cat4++;
+                            else if (level >= -110) logStats.cat5++;
+                            else logStats.cat6++;
+                        }
 
                         const marker = L.circleMarker([lat, lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
                         marker.bindPopup(`<b>Tech:</b> ${tech}<br><b>Level:</b> ${level} dBm<br><b>Serving Cell:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
@@ -925,7 +988,10 @@
         
         await Promise.all(readPromises);
 
-        if (is4G) addLegend(false, true); else if (is3G) addLegend(true, false);
+        // Gọi hàm hiển thị Legend VÀ truyền thêm tham số logStats
+        if (is4G) addLegend(false, true, logStats); 
+        else if (is3G) addLegend(true, false, logStats);
+        
         if (allLogBounds.length > 0) map.fitBounds(allLogBounds);
         
         document.getElementById('mapLoading').style.display = 'none'; 
