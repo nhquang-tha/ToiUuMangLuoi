@@ -967,41 +967,41 @@ exports.handleImportData = async (req, res) => {
                         else if (h === 'tên viết tắt' || h.includes('viet tat') || h.includes('viết tắt')) mappedCol = 'ten_viet_tat';
                         else mappedCol = createSafeColumnName(exHeader);
                     }
-                    else if (networkType === 'ta_query') {
-                        if (h === 'date' || h === 'ngày' || h.includes('thoi gian')) mappedCol = 'Date';
-                        else if (h.includes('enodeb name')) mappedCol = 'eNodeB_Name';
-                        else if (h.includes('fdd tdd')) mappedCol = 'Cell_FDD_TDD_Indication';
-                        else if (h.includes('cell code') || h.includes('cell_code') || h.includes('tên cell')) mappedCol = 'Cell_Code';
-                        else if (h.includes('localcell')) mappedCol = 'LocalCell_Id';
-                        else if (h.includes('function name')) mappedCol = 'eNodeB_Function_Name';
-                        else if (h.includes('integrity')) mappedCol = 'Integrity';
-                        else if (h.startsWith('index')) mappedCol = h.replace(/\s/g, ''); // Ép Index 0 thành Index0
-                        else mappedCol = createSafeColumnName(exHeader);
-                    }
 
                     // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
                     let actualDbCol = null;
                     
-                    // [BƯỚC 1]: Mapping theo từ khóa hardcode
-                    if (mappedCol) {
-                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
-                        if (dbMatch) actualDbCol = dbMatch.original;
-                    }
-                    
-                    // [BƯỚC 2]: Mapping theo Normalize
-                    if (!actualDbCol) {
-                        const normEx = normalizeStr(exHeader);
-                        if (normEx) {
-                            const match = dbCols.find(dbC => dbC.norm === normEx);
-                            if (match) actualDbCol = match.original;
+                    // XỬ LÝ ĐẶC BIỆT CHO BẢNG TA_QUERY (BẮT CỘT INDEX)
+                    if (networkType === 'ta_query') {
+                        if (h === 'date' || h === 'ngày' || h.includes('thoi gian')) actualDbCol = 'Date';
+                        else if (h.includes('enodeb name') || h.includes('enodeb_name')) actualDbCol = 'eNodeB_Name';
+                        else if (h.includes('fdd tdd') || h.includes('fdd_tdd')) actualDbCol = 'Cell_FDD_TDD_Indication';
+                        else if (h.includes('cell code') || h.includes('cell_code') || h === 'cell') actualDbCol = 'Cell_Code';
+                        else if (h.includes('localcell') || h.includes('local cell')) actualDbCol = 'LocalCell_Id';
+                        else if (h.includes('function name') || h.includes('function_name')) actualDbCol = 'eNodeB_Function_Name';
+                        else if (h.includes('integrity')) actualDbCol = 'Integrity';
+                        else if (h.includes('index')) {
+                            let numMatch = h.match(/\d+/);
+                            if (numMatch) actualDbCol = 'Index' + numMatch[0]; // Gán cứng luôn tên cột chuẩn Index0 -> Index11
                         }
-                    }
-                    
-                    // [BƯỚC 3]: Mapping vét máng (So sánh chính xác 100% định dạng Text)
-                    if (!actualDbCol) {
-                        let safeName = createSafeColumnName(exHeader);
-                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
-                        if (exactMatch) actualDbCol = exactMatch.original;
+                    } else {
+                        // LOGIC BÌNH THƯỜNG CHO CÁC BẢNG KHÁC
+                        if (mappedCol) {
+                            let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                            if (dbMatch) actualDbCol = dbMatch.original;
+                        }
+                        if (!actualDbCol) {
+                            const normEx = normalizeStr(exHeader);
+                            if (normEx) {
+                                const match = dbCols.find(dbC => dbC.norm === normEx);
+                                if (match) actualDbCol = match.original;
+                            }
+                        }
+                        if (!actualDbCol) {
+                            let safeName = createSafeColumnName(exHeader);
+                            let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
+                            if (exactMatch) actualDbCol = exactMatch.original;
+                        }
                     }
 
                     if (actualDbCol) colMapping.push({ excelIdx: idx, dbCol: actualDbCol });
