@@ -66,7 +66,7 @@
     .menu-item a:hover i { color: var(--primary); opacity: 1;}
     
     .menu-item a.active { 
-        background: var(--cta-gradient); /* Áp dụng Gradient cho Menu Active */
+        background: var(--cta-gradient);
         color: #ffffff !important; 
         font-weight: 600; 
         box-shadow: var(--cta-shadow);
@@ -94,7 +94,6 @@
     .user-role { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;}
     .sidebar.collapsed .user-info { display: none; }
 
-    /* NÚT TOGGLE DARK MODE */
     .theme-toggle-btn {
         background: transparent; border: none; color: var(--text-muted);
         cursor: pointer; padding: 6px; border-radius: 6px; transition: 0.3s;
@@ -103,9 +102,6 @@
     .theme-toggle-btn:hover { background: var(--bg-surface); color: var(--primary); }
     .sidebar.collapsed .theme-toggle-btn { display: none; }
 
-    /* ==========================================
-       GIAO DIỆN CHUYÊN BIỆT CHO MOBILE
-       ========================================== */
     .mobile-overlay {
         display: none; position: fixed; inset: 0; 
         background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(3px); 
@@ -173,7 +169,7 @@
             <% } %>
         <% } %>
 
-        <% if (canSee('worst_cells') || canSee('congestion_3g') || canSee('traffic_down')) { %>
+        <% if (canSee('worst_cells') || canSee('congestion_3g') || canSee('traffic_down') || canSee('cross_sector')) { %>
             <li class="menu-category">GIÁM SÁT & CẢNH BÁO</li>
             <% if (canSee('worst_cells')) { %>
             <li class="menu-item"><a href="/worst-cells" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Worst Cells' ? 'active' : '' %>"><i class="ph ph-warning-circle" style="color: var(--danger);"></i> <span class="menu-text">Worst Cells 4G</span></a></li>
@@ -184,6 +180,8 @@
             <% if (canSee('traffic_down')) { %>
             <li class="menu-item"><a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>"><i class="ph ph-trend-down" style="color: #8b5cf6;"></i> <span class="menu-text">Sụt giảm lưu lượng</span></a></li>
             <% } %>
+            
+            <li class="menu-item"><a href="/cross-sector" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Cross Sector' ? 'active' : '' %>"><i class="ph ph-arrows-split" style="color: #e67e22;"></i> <span class="menu-text">Chẩn đoán Cross Sector</span></a></li>
         <% } %>
 
         <% if (canSee('kpi_analytics') || canSee('qoe_qos') || canSee('poi_report') || canSee('optimizing_qoe_qos') || canSee('bad_cells') || canSee('downtilt_coverage')) { %>
@@ -229,7 +227,6 @@
         <li class="menu-item"><a href="/logout" class="danger-link"><i class="ph ph-sign-out"></i> <span class="menu-text">Đăng xuất</span></a></li>
     </ul>
 
-    <!-- KHU VỰC AVATAR & NÚT THEME -->
     <div class="user-profile">
         <div class="user-left">
             <div class="avatar"><%= currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U' %></div>
@@ -241,7 +238,6 @@
             </div>
         </div>
         
-        <!-- NÚT CHUYỂN DARK MODE -->
         <button class="theme-toggle-btn" id="themeToggleBtn" title="Chuyển chế độ Sáng/Tối">
             <i class="ph ph-moon" style="font-size: 20px;"></i>
         </button>
@@ -257,13 +253,11 @@
         const themeBtn = document.getElementById('themeToggleBtn');
         const themeIcon = themeBtn.querySelector('i');
 
-        // --- XỬ LÝ THEME (DARK/LIGHT MODE) ---
         function updateThemeIcon(theme) {
             themeIcon.className = theme === 'dark' ? 'ph-fill ph-sun' : 'ph ph-moon';
             themeIcon.style.color = theme === 'dark' ? '#fbbf24' : 'var(--text-muted)';
         }
         
-        // Gắn sự kiện click đổi Theme
         themeBtn.addEventListener('click', () => {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -272,10 +266,8 @@
             updateThemeIcon(newTheme);
         });
         
-        // Khởi tạo icon ban đầu
         updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
 
-        // --- XỬ LÝ ĐIỀU KHIỂN SIDEBAR ---
         if (mobileBtn) {
             mobileBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
