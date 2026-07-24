@@ -310,7 +310,6 @@ async function syncTrafficDown() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Traffic Down...");
         
-        // 1. Kiểm tra cấu trúc bảng traffic_down (Tránh lỗi cột `network` nếu thiếu)
         try {
             await db.query("SELECT network FROM traffic_down LIMIT 1");
         } catch (e) {
@@ -333,63 +332,79 @@ async function syncTrafficDown() {
 
         await db.query('TRUNCATE TABLE traffic_down');
         
-        const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
-        if (datesRaw.length === 0) {
-            console.log("⚠️ Không có dữ liệu kpi_4g để tính Traffic Down.");
+        const [dates3gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
+        const [dates4gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
+        const [dates5gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
+
+        const getSortedDates = (rawDates) => {
+            if(!rawDates || rawDates.length === 0) return [];
+            return rawDates.map(d => d.Thoi_gian).sort((a, b) => {
+                const pA = a.split('/'); const pB = b.split('/');
+                return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
+            });
+        };
+
+        const dates3g = getSortedDates(dates3gRaw).slice(0, 15);
+        const dates4g = getSortedDates(dates4gRaw).slice(0, 15);
+        const dates5g = getSortedDates(dates5gRaw).slice(0, 15);
+
+        if (dates3g.length === 0 && dates4g.length === 0 && dates5g.length === 0) {
+            console.log("⚠️ Không có dữ liệu KPI nào để tính Traffic Down.");
             return;
         }
 
-        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
-            const pA = a.split('/'); const pB = b.split('/');
-            return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
-        });
-
-        // Chỉ lấy tối đa 15 ngày để phân tích. Nếu ít hơn vẫn chạy, hàm bên dưới sẽ xử lý mềm dẻo.
-        const targetDates = dates.slice(0, 15); 
-        const t0 = targetDates[0];
-        const placeholders = targetDates.map(() => '?').join(',');
-
-        // THÊM BẪY LỖI KHI QUERY DB (Trường hợp bảng rỗng)
         let data3g = [], data4g = [], data5g = [];
-        try { [data3g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, TRAFFIC as traffic FROM kpi_3g WHERE Thoi_gian IN (${placeholders})`, targetDates); } catch(e) {}
-        try { [data4g] = await db.query(`SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`, targetDates); } catch(e) {}
-        try { [data5g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_5g WHERE Thoi_gian IN (${placeholders})`, targetDates); } catch(e) {}
+        
+        if (dates3g.length > 0) {
+            const p3g = dates3g.map(() => '?').join(',');
+            try { [data3g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, TRAFFIC as traffic FROM kpi_3g WHERE Thoi_gian IN (${p3g})`, dates3g); } catch(e) {}
+        }
+        if (dates4g.length > 0) {
+            const p4g = dates4g.map(() => '?').join(',');
+            try { [data4g] = await db.query(`SELECT Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_4g WHERE Thoi_gian IN (${p4g})`, dates4g); } catch(e) {}
+        }
+        if (dates5g.length > 0) {
+            const p5g = dates5g.map(() => '?').join(',');
+            try { [data5g] = await db.query(`SELECT Ten_CELL as Cell_name, Thoi_gian, Total_Data_Traffic_Volume_GB as traffic FROM kpi_5g WHERE Thoi_gian IN (${p5g})`, dates5g); } catch(e) {}
+        }
 
-        const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g');
-        const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g');
+        const [poi4g] = await db.query('SELECT Cell_Code, POI FROM poi_4g').catch(()=>[[]]);
+        const [poi5g] = await db.query('SELECT Cell_Code, POI FROM poi_5g').catch(()=>[[]]);
         const cellToPoi = {};
-        poi4g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
-        poi5g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
+        if(poi4g) poi4g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
+        if(poi5g) poi5g.forEach(r => cellToPoi[r.Cell_Code] = r.POI);
 
         let zeroTrafficCells = [];
         let droppedTrafficCells = [];
+        let droppedTrafficPOIs = [];
         let poiTrafficMap = {}; 
 
-        const analyzeData = (dataArray, network) => {
+        const analyzeData = (dataArray, network, targetDates) => {
+            if (targetDates.length === 0) return;
+            const t0 = targetDates[0];
             const cellMap = {};
+            
             dataArray.forEach(row => {
-                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = { has_t0: false };
+                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = { has_data: false };
                 cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
-                
-                if (row.Thoi_gian === t0) {
-                    cellMap[row.Cell_name].has_t0 = true;
-                }
+                cellMap[row.Cell_name].has_data = true;
                 
                 if (network === '4g' || network === '5g') {
                     let poi = cellToPoi[row.Cell_name];
                     if (poi) {
-                        if (!poiTrafficMap[poi]) poiTrafficMap[poi] = { has_t0: false };
-                        if (!poiTrafficMap[poi][row.Thoi_gian]) poiTrafficMap[poi][row.Thoi_gian] = 0;
+                        if (!poiTrafficMap[poi]) poiTrafficMap[poi] = { has_data: false };
+                        if (poiTrafficMap[poi][row.Thoi_gian] === undefined) poiTrafficMap[poi][row.Thoi_gian] = 0;
                         poiTrafficMap[poi][row.Thoi_gian] += parseFloat(row.traffic) || 0;
-                        if (row.Thoi_gian === t0) poiTrafficMap[poi].has_t0 = true;
+                        poiTrafficMap[poi].has_data = true;
                     }
                 }
             });
 
             for (let cell in cellMap) {
                 const c = cellMap[cell];
+                if (!c.has_data) continue;
                 
-                const v0 = c[t0] || 0; 
+                const v0 = c[t0] !== undefined ? c[t0] : 0; 
                 const v1 = targetDates[1] ? (c[targetDates[1]] || 0) : 0;
                 const v2 = targetDates[2] ? (c[targetDates[2]] || 0) : 0;
                 const v3 = targetDates[3] ? (c[targetDates[3]] || 0) : 0;
@@ -397,91 +412,89 @@ async function syncTrafficDown() {
                 const v5 = targetDates[5] ? (c[targetDates[5]] || 0) : 0;
                 const v6 = targetDates[6] ? (c[targetDates[6]] || 0) : 0;
                 
-                // MỀM DẺO: Tính trung bình các kỳ có sẵn
-                let avgPast1 = 0, countPast1 = 0;
-                for(let i=1; i<=7; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { avgPast1 += c[targetDates[i]]; countPast1++; }
-                avgPast1 = countPast1 > 0 ? avgPast1/countPast1 : 0;
+                let sumPast1 = 0, countPast1 = 0;
+                if (targetDates[1] && c[targetDates[1]] !== undefined) { sumPast1 = c[targetDates[1]]; countPast1 = 1; }
+                let avgPast1 = countPast1 > 0 ? sumPast1/countPast1 : 0;
 
-                let avgPast3 = 0, countPast3 = 0;
-                for(let i=3; i<=9; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { avgPast3 += c[targetDates[i]]; countPast3++; }
-                avgPast3 = countPast3 > 0 ? avgPast3/countPast3 : 0;
+                let sumPast3 = 0, countPast3 = 0;
+                for(let i=3; i<=5; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast3 += c[targetDates[i]]; countPast3++; }
+                let avgPast3 = countPast3 > 0 ? sumPast3/countPast3 : 0;
 
-                let avgPast7 = 0, countPast7 = 0;
-                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { avgPast7 += c[targetDates[i]]; countPast7++; }
-                avgPast7 = countPast7 > 0 ? avgPast7/countPast7 : 0;
+                let sumPast7 = 0, countPast7 = 0;
+                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast7 += c[targetDates[i]]; countPast7++; }
+                let avgPast7 = countPast7 > 0 ? sumPast7/countPast7 : 0;
 
                 // LỌC ZERO CELL
                 if (targetDates.length >= 8 && v0===0 && v1===0 && v2===0 && v3===0 && v4===0 && v5===0 && v6===0 && avgPast7 > 0) {
-                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast7 });
+                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast7, date_t0: t0, date_t7: targetDates[7] });
                 }
                 else if (targetDates.length >= 4 && v0===0 && v1===0 && v2===0 && avgPast3 > 0) {
-                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast3 });
+                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast3, date_t0: t0, date_t7: targetDates[3] });
                 }
-                else if (v0 === 0 && avgPast1 > 0) {
-                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1 });
+                else if (targetDates.length >= 2 && v0 === 0 && avgPast1 > 0) {
+                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1, date_t0: t0, date_t7: targetDates[1] });
                 }
 
-                // LỌC DROPPED CELL (Mạng 4G/5G) - Cần ít nhất 8 ngày để đối chiếu với t7
-                // Bỏ qua nếu trạm không có trong t0 (sập toàn bộ) vì đã được lọc ở trên
-                if (!c.has_t0) continue; 
-                
+                // LỌC DROPPED CELL 
                 if ((network === '4g' || network === '5g') && targetDates.length >= 8) {
-                    const v7 = c[targetDates[7]] || 0; 
+                    const v7 = c[targetDates[7]] !== undefined ? c[targetDates[7]] : 0; 
                     
-                    // So sánh 3 ngày nếu có đủ data, nếu không thì chỉ so sánh 1 ngày
                     if (targetDates.length >= 10) {
-                        const v8 = c[targetDates[8]] || 0; const v9 = c[targetDates[9]] || 0;
+                        const v8 = c[targetDates[8]] !== undefined ? c[targetDates[8]] : 0; 
+                        const v9 = c[targetDates[9]] !== undefined ? c[targetDates[9]] : 0;
                         if (v0 < 0.7 * v7 && v7 > 5 && v1 < v8 && v2 < v9) {
-                            droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
+                            droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
                         }
                     } else {
-                        // Nếu database mới có 8,9 ngày, chỉ đối chiếu t0 < 0.7*t7
                         if (v0 < 0.7 * v7 && v7 > 5) {
-                            droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
-                        }
-                    }
-                }
-            }
-
-            // LỌC DROPPED POI 
-            for (let poi in poiTrafficMap) {
-                const p = poiTrafficMap[poi];
-                
-                if (!p.has_t0) continue;
-
-                if (targetDates.length >= 8) {
-                    const v0 = p[t0] || 0; 
-                    const v7 = p[targetDates[7]] || 0; 
-
-                    if (targetDates.length >= 10) {
-                        const v1 = p[targetDates[1]] || 0; const v2 = p[targetDates[2]] || 0;
-                        const v8 = p[targetDates[8]] || 0; const v9 = p[targetDates[9]] || 0;
-                        if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
-                            droppedTrafficPOIs.push({ POI: poi, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
-                        }
-                    } else {
-                        if (v7 > 0 && v0 < 0.7 * v7) {
-                            droppedTrafficPOIs.push({ POI: poi, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100) });
+                            droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
                         }
                     }
                 }
             }
         };
 
-        analyzeData(data3g, '3g');
-        analyzeData(data4g, '4g');
-        analyzeData(data5g, '5g');
+        analyzeData(data3g, '3g', dates3g);
+        analyzeData(data4g, '4g', dates4g);
+        analyzeData(data5g, '5g', dates5g);
+
+        // LỌC DROPPED POI 
+        const masterDates4g5g = dates4g.length > dates5g.length ? dates4g : dates5g;
+        if (masterDates4g5g.length > 0) {
+            const t0_poi = masterDates4g5g[0];
+            for (let poi in poiTrafficMap) {
+                const p = poiTrafficMap[poi];
+                if (!p.has_data) continue;
+                
+                if (masterDates4g5g.length >= 8) {
+                    const v0 = p[t0_poi] !== undefined ? p[t0_poi] : 0; 
+                    const v7 = p[masterDates4g5g[7]] !== undefined ? p[masterDates4g5g[7]] : 0; 
+
+                    if (masterDates4g5g.length >= 10) {
+                        const v1 = p[masterDates4g5g[1]] !== undefined ? p[masterDates4g5g[1]] : 0; 
+                        const v2 = p[masterDates4g5g[2]] !== undefined ? p[masterDates4g5g[2]] : 0;
+                        const v8 = p[masterDates4g5g[8]] !== undefined ? p[masterDates4g5g[8]] : 0; 
+                        const v9 = p[masterDates4g5g[9]] !== undefined ? p[masterDates4g5g[9]] : 0;
+                        if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
+                            droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
+                        }
+                    } else {
+                        if (v7 > 0 && v0 < 0.7 * v7) {
+                            droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
+                        }
+                    }
+                }
+            }
+        }
         
         let insertData = [];
-        const safeT7 = targetDates.length >= 8 ? targetDates[7] : 'N/A';
 
-        zeroTrafficCells.forEach(r => insertData.push([t0, safeT7, r.category, r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.avgPast), 0]));
-        droppedTrafficCells.forEach(r => insertData.push([t0, safeT7, 'dropped_cell', r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.t7), getSafeFloat(r.ratio)]));
-        droppedTrafficPOIs.forEach(r => insertData.push([t0, safeT7, 'dropped_poi', r.network, r.POI, getSafeFloat(r.t0), getSafeFloat(r.t7), getSafeFloat(r.ratio)]));
+        zeroTrafficCells.forEach(r => insertData.push([r.date_t0, r.date_t7, r.category, r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.avgPast), 0]));
+        droppedTrafficCells.forEach(r => insertData.push([r.date_t0, r.date_t7, 'dropped_cell', r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.t7), getSafeFloat(r.ratio)]));
+        droppedTrafficPOIs.forEach(r => insertData.push([r.date_t0, r.date_t7, 'dropped_poi', r.network, r.POI, getSafeFloat(r.t0), getSafeFloat(r.t7), getSafeFloat(r.ratio)]));
 
         if (insertData.length > 0) {
             const chunkSize = 500;
-            // SỬA CÚ PHÁP ĐẢM BẢO CHÈN ĐÚNG TRƯỜNG DỮ LIỆU VÀO ĐÚNG CỘT
             const sqlInsert = `INSERT INTO traffic_down (latest_date, last_week_date, category, network, name, val_t0, val_compare, ratio) VALUES ?`;
             for (let i = 0; i < insertData.length; i += chunkSize) {
                 await db.query(sqlInsert, [insertData.slice(i, i + chunkSize)]);
