@@ -181,7 +181,9 @@
             <li class="menu-item"><a href="/traffic-down" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Traffic Down' ? 'active' : '' %>"><i class="ph ph-trend-down" style="color: #8b5cf6;"></i> <span class="menu-text">Sụt giảm lưu lượng</span></a></li>
             <% } %>
             
+            <% if (canSee('cross_sector')) { %>
             <li class="menu-item"><a href="/cross-sector" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Cross Sector' ? 'active' : '' %>"><i class="ph ph-arrows-split" style="color: #e67e22;"></i> <span class="menu-text">Chẩn đoán Cross Sector</span></a></li>
+            <% } %>
         <% } %>
 
         <% if (canSee('kpi_analytics') || canSee('qoe_qos') || canSee('poi_report') || canSee('optimizing_qoe_qos') || canSee('bad_cells') || canSee('downtilt_coverage')) { %>
