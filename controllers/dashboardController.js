@@ -197,9 +197,11 @@ async function syncWorstCells() {
             const targetDates = uniqueDates.slice(0, days);
             if (targetDates.length === 0) continue;
             const placeholders = targetDates.map(() => '?').join(',');
+            const t0_date = targetDates[0]; // Bắt chính xác ngày mới nhất của mảng này
             
+            // Xóa MAX(Thoi_gian) vì nó sắp xếp sai (30/06 > 23/07 theo chuẩn string)
             const query = `
-                SELECT Cell_name, MAX(Thoi_gian) as Latest_Date,
+                SELECT Cell_name, 
                     AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
                     AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, AVG(CQI_4G) as CQI_4G, AVG(Service_Drop_all) as Service_Drop_all,
                     COUNT(Thoi_gian) as So_Ngay_Vi_Pham,
@@ -209,7 +211,7 @@ async function syncWorstCells() {
                 AND (User_DL_Avg_Throughput_Kbps < 7000 OR RB_Util_Rate_DL > 20 OR CQI_4G < 93 OR Service_Drop_all > 0.3)
                 GROUP BY Cell_name HAVING So_Ngay_Vi_Pham >= ? AND is_in_t0 > 0
             `;
-            const [rows] = await db.query(query, [targetDates[0], ...targetDates, days]);
+            const [rows] = await db.query(query, [t0_date, ...targetDates, days]);
             
             let insertData = [];
             rows.forEach(r => {
@@ -219,8 +221,9 @@ async function syncWorstCells() {
                 if (r.CQI_4G < 93) vios.push('CQI Thấp');
                 if (r.Service_Drop_all > 0.3) vios.push('Drop Rate Cao');
                 
+                // Gán cứng t0_date vào vị trí Latest_Date thay vì lấy r.Latest_Date bị sai
                 insertData.push([
-                    r.Latest_Date || null, 
+                    t0_date, 
                     days, 
                     r.Cell_name || null, 
                     getSafeFloat(r.User_DL_Avg_Throughput_Kbps), 
