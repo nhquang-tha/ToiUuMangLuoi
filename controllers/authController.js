@@ -71,7 +71,7 @@ exports.login = async (req, res) => {
                     try { perms = JSON.parse(user.permissions); } catch(e) {}
                 } else if (cleanRole === 'admin') {
                     // Cấp full quyền mặc định cho admin nếu chưa tick
-                    perms = ['dashboard', 'gis_map', 'worst_cells', 'congestion_3g', 'traffic_down', 'kpi_analytics', 'qoe_qos', 'poi_report', 'optimizing_qoe_qos', 'bad_cells', 'downtilt_coverage', 'rf_database', 'scrip', 'import_data', 'user_manager'];
+                    perms = ['dashboard', 'gis_map', 'worst_cells', 'congestion_3g', 'traffic_down', 'cross_sector', 'kpi_analytics', 'qoe_qos', 'poi_report', 'optimizing_qoe_qos', 'bad_cells', 'downtilt_coverage', 'rf_database', 'scrip', 'import_data', 'user_manager'];
                 }
 
                 // Khởi tạo Phiên đăng nhập (Session)
