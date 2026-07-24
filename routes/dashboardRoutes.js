@@ -25,7 +25,8 @@ const pages = [
     { path: '/congestion-3g', name: 'Congestion 3G' },
     { path: '/traffic-down', name: 'Traffic Down' },
     { path: '/downtilt-coverage', name: 'Downtilt Coverage' },
-    { path: '/bad-cells', name: 'Bad Cells' } // Thêm trang Bad Cells vào mảng
+    { path: '/bad-cells', name: 'Bad Cells' },
+    { path: '/cross-sector', name: 'Cross Sector' }
 ];
 
 pages.forEach(page => {
@@ -74,9 +75,11 @@ router.get('/api/worst-cells-data', isAuthenticated, dashboardController.getWors
 router.get('/api/congestion-3g-data', isAuthenticated, dashboardController.getCongestion3gData);
 router.get('/api/traffic-down-data', isAuthenticated, dashboardController.getTrafficDownData);
 
-// Khai báo API riêng cho Bad Cells
 router.get('/api/bad-cells-data', isAuthenticated, dashboardController.getBadCellsData);
 router.post('/api/bad-cells-update', isAuthenticated, dashboardController.updateBadCellStatus);
+
+// Cấp API cho tính năng phân tích đấu chéo cáp
+router.get('/api/cross-sector-data', isAuthenticated, dashboardController.getCrossSectorData);
 
 router.get('/api/poi-list', isAuthenticated, dashboardController.getPoiList);
 router.get('/api/export-all-poi', isAuthenticated, dashboardController.getAllPoiExportData);
@@ -84,14 +87,10 @@ router.get('/api/poi-data', isAuthenticated, dashboardController.getPoiData);
 
 router.get('/api/kpi-data', isAuthenticated, dashboardController.getKpiData);
 
-// [SỬA LỖI CRASH Ở ĐÂY]: Trỏ các API QoE/QoS về đúng dashboardController thay vì kpiController
 router.get('/api/qoe-qos-data', isAuthenticated, dashboardController.getQoeQosData);
 router.get('/api/qoe-qos-list-all', isAuthenticated, dashboardController.getQoeQosListAll);
 router.post('/api/save-cell-note', isAuthenticated, dashboardController.saveCellNote);
 
-// ==========================================
-// 7. QUẢN LÝ HỆ THỐNG & USER
-// ==========================================
 router.get('/system/profile', isAuthenticated, userController.getProfilePage);
 router.post('/system/profile/change-password', isAuthenticated, userController.changePassword);
 router.get('/system/users', isAuthenticated, isAdmin, userController.getUserManagerPage);
