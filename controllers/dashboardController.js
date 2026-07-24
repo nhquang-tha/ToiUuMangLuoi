@@ -1513,6 +1513,7 @@ exports.resetImportedData = async (req, res) => {
 // =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
 // Dựa trên 3 yếu tố: Traffic Swap, CQI Drop, HO Failure (Proxy qua Drop/Latency)
+// Đã nâng cấp: Lọc loại trừ khác công nghệ vật lý (L1800 vs L900)
 // =========================================================================
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
@@ -1533,14 +1534,14 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI (Đã bổ sung bộ lọc chặn MBF_TH)
+        // 2. Lấy dữ liệu KPI (Bổ sung thêm cột CellType / Loai_NE để lọc công nghệ)
         let querySql = '';
         if (network === '4g') {
-            querySql = `SELECT Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate 
+            querySql = `SELECT Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate, CellType as cell_type 
                         FROM kpi_4g 
                         WHERE Thoi_gian IN (${placeholders}) AND Cell_name NOT LIKE 'MBF_TH%'`;
         } else {
-            querySql = `SELECT Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput 
+            querySql = `SELECT Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput, Loai_NE as cell_type 
                         FROM kpi_5g 
                         WHERE Thoi_gian IN (${placeholders}) AND Ten_CELL NOT LIKE 'MBF_TH%'`;
         }
@@ -1555,7 +1556,7 @@ exports.getCrossSectorData = async (req, res) => {
             const coreCode = cell.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
             
             if (!siteMap[coreCode]) siteMap[coreCode] = {};
-            if (!siteMap[coreCode][cell]) siteMap[coreCode][cell] = { has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 };
+            if (!siteMap[coreCode][cell]) siteMap[coreCode][cell] = { has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0, cell_type: row.cell_type || '' };
             
             if (row.date === t0) {
                 siteMap[coreCode][cell].t0_traffic = parseFloat(row.traffic) || 0;
@@ -1564,6 +1565,7 @@ exports.getCrossSectorData = async (req, res) => {
                 siteMap[coreCode][cell].t0_thput = parseFloat(row.thput) || 0;
                 siteMap[coreCode][cell].t0_drop = parseFloat(row.drop_rate) || 0;
                 siteMap[coreCode][cell].has_t0 = true;
+                if(row.cell_type) siteMap[coreCode][cell].cell_type = row.cell_type; // Cập nhật lại type nếu có
             } else {
                 siteMap[coreCode][cell].past_traffic += parseFloat(row.traffic) || 0;
                 siteMap[coreCode][cell].past_cqi += parseFloat(row.cqi) || 0;
@@ -1592,7 +1594,7 @@ exports.getCrossSectorData = async (req, res) => {
                     const deltaCqi = c.t0_cqi - avgCqi; // Điểm CQI tụt tuyệt đối
                     
                     cellStats.push({ 
-                        cell: cellName, avgTraffic, t0_traffic: c.t0_traffic, deltaTraffic,
+                        cell: cellName, cell_type: c.cell_type, avgTraffic, t0_traffic: c.t0_traffic, deltaTraffic,
                         t0_prb: c.t0_prb, t0_thput: c.t0_thput, t0_drop: c.t0_drop,
                         avgCqi, t0_cqi: c.t0_cqi, deltaCqi
                     });
@@ -1606,9 +1608,40 @@ exports.getCrossSectorData = async (req, res) => {
                 let spikeCells = cellStats.filter(c => c.deltaTraffic >= 30);  // Tăng > 30%
 
                 if (dropCells.length > 0 && spikeCells.length > 0) {
-                    // CÓ HIỆN TƯỢNG TRAFFIC SWAP! Đánh giá thêm CQI và Drop Rate
                     dropCells.forEach(dCell => {
                         spikeCells.forEach(sCell => {
+
+                            // =======================================================
+                            // LỚP BẢO VỆ MỚI: BẮT BUỘC PHẢI CÙNG CÔNG NGHỆ VẬT LÝ
+                            // =======================================================
+                            let extractBand = (typeStr) => {
+                                let s = String(typeStr).toUpperCase();
+                                if (s.includes('1800')) return 'L1800';
+                                if (s.includes('900')) return 'L900';
+                                if (s.includes('2100')) return 'L2100';
+                                if (s.includes('2600')) return 'L2600';
+                                return s;
+                            };
+
+                            let bandD = extractBand(dCell.cell_type);
+                            let bandS = extractBand(sCell.cell_type);
+
+                            // Kiểm tra Lớp 1: Khác định dạng công nghệ CSDL (VD: L1800 vs L900) -> Dừng ngay
+                            if (bandD && bandS && bandD !== bandS) {
+                                return; 
+                            } 
+                            // Kiểm tra Lớp 2: Nếu CSDL bị Null, bắt mạch quy luật tên đuôi của VNPT (VD: M11 vs M41)
+                            else if (!bandD || !bandS) {
+                                // Tìm con số đứng trước số cuối cùng. VD: M11 lấy '1' (Băng 1), M41 lấy '4' (Băng 4)
+                                let matchD = dCell.cell.match(/[A-Za-z](\d)\d$/);
+                                let matchS = sCell.cell.match(/[A-Za-z](\d)\d$/);
+                                
+                                if (matchD && matchS && matchD[1] !== matchS[1]) {
+                                    return; // Tên đuôi khác băng tần vật lý -> Không thể đấu chéo -> Dừng
+                                }
+                            }
+
+                            // CÓ HIỆN TƯỢNG TRAFFIC SWAP HỢP LỆ! Đánh giá thêm CQI và Drop Rate
                             let score = 50; // Khởi điểm 50% vì có Traffic Swap
                             let reasons = ["Nghịch đảo lưu lượng (Traffic Swap)"];
 
@@ -1651,6 +1684,7 @@ exports.getCrossSectorData = async (req, res) => {
         const uniqueList = [];
         const seen = new Set();
         suspiciousSites.sort((a, b) => b.score - a.score).forEach(item => {
+            // Khóa chéo duy nhất (A_B hoặc B_A) để chống lặp
             let key = item.sector_down.name + "_" + item.sector_up.name;
             if (!seen.has(key)) { seen.add(key); uniqueList.push(item); }
         });
