@@ -1533,12 +1533,16 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI
+        // 2. Lấy dữ liệu KPI (Đã bổ sung bộ lọc chặn MBF_TH)
         let querySql = '';
         if (network === '4g') {
-            querySql = `SELECT Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate FROM kpi_4g WHERE Thoi_gian IN (${placeholders})`;
+            querySql = `SELECT Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate 
+                        FROM kpi_4g 
+                        WHERE Thoi_gian IN (${placeholders}) AND Cell_name NOT LIKE 'MBF_TH%'`;
         } else {
-            querySql = `SELECT Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput FROM kpi_5g WHERE Thoi_gian IN (${placeholders})`;
+            querySql = `SELECT Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput 
+                        FROM kpi_5g 
+                        WHERE Thoi_gian IN (${placeholders}) AND Ten_CELL NOT LIKE 'MBF_TH%'`;
         }
 
         const [kpiData] = await db.query(querySql, targetDates);
