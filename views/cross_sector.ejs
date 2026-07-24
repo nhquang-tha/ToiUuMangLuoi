@@ -1,0 +1,212 @@
+<%- include('partials/head') %>
+<%
+    let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
+    let rawRole = activeUser && activeUser.role ? activeUser.role : '';
+    let normalizedRole = rawRole ? String(rawRole).trim().toLowerCase() : '';
+    let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
+%>
+<style>
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: var(--bg-body); }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+    
+    .filter-card { background: var(--bg-surface); padding: 20px; border-radius: 12px; box-shadow: var(--shadow-card); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #e67e22;}
+    
+    .info-box { background: rgba(230, 126, 34, 0.1); border-left: 4px solid #e67e22; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: var(--text-main); font-size: 13.5px; line-height: 1.6;}
+    
+    .table-wrapper { width: 100%; overflow-x: auto; background: var(--bg-surface); border-radius: 8px; box-shadow: var(--shadow-card); display: none; animation: fadeIn 0.5s ease; border: 1px solid var(--border-color);}
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
+    .data-table th, .data-table td { padding: 15px; text-align: left; }
+    .data-table th { background-color: var(--bg-body); color: var(--text-muted); font-weight: bold; position: sticky; top: 0; z-index: 10; text-transform: uppercase; font-size: 11px; border-bottom: 2px solid var(--border-color);}
+    .data-table td { border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+    
+    .score-badge { padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 12px; color: white; display: inline-block; text-align: center; min-width: 40px;}
+    .score-high { background: #c0392b; box-shadow: 0 2px 5px rgba(192, 57, 43, 0.4);}
+    .score-med { background: #e67e22; }
+    
+    .cell-box { background: var(--bg-body); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); }
+    .cell-name { font-weight: 800; color: var(--primary); font-size: 14px; margin-bottom: 5px; display: block;}
+    .stat-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+    .stat-label { color: var(--text-muted); }
+    .stat-val-down { color: #e74c3c; font-weight: bold; }
+    .stat-val-up { color: #27ae60; font-weight: bold; }
+
+    .btn-kpi { background: var(--primary); color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; border: none; cursor: pointer;}
+    .btn-kpi:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+<div class="layout">
+    <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
+    <main class="main-content">
+        <header class="topbar">
+            <h1>Chẩn Đoán Cross Sector (Đấu chéo cáp)</h1>
+        </header>
+        
+        <div class="content-body">
+            <div class="info-box">
+                <strong>💡 Cơ chế hoạt động của Thuật toán AI:</strong><br>
+                Thuật toán tự động theo dõi và so sánh độ lệch (Delta) của ngày hiện tại với Baseline 7 ngày trước đó trong <b>cùng 1 trạm</b>.<br>
+                - <b>Thuật toán A:</b> Phát hiện nghịch đảo lưu lượng (Sector 1 sụt giảm mạnh, Sector 2 tăng vọt tỷ lệ nghịch).<br>
+                - <b>Thuật toán B & C:</b> Kiểm tra sự bất thường của chất lượng vô tuyến (Sụt CQI đột ngột, Drop Rate/HO Failure tăng vọt).
+            </div>
+
+            <div class="filter-card">
+                <div style="flex: 1; min-width: 250px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:var(--text-main);">Chọn Mạng Phân Tích:</label>
+                    <select id="networkSelect" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; outline: none; cursor: pointer; font-size: 14px; background: var(--bg-body); color: var(--text-main);">
+                        <option value="4g" selected>Mạng 4G LTE</option>
+                        <option value="5g">Mạng 5G NR</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="fetchCrossSectorData()" class="btn-primary" style="background: #e67e22; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 14px; transition: 0.2s;">
+                        🔍 Bắt Đầu Quét Hệ Thống
+                    </button>
+                    <button onclick="exportToExcel()" id="btnExport" class="btn-success" style="background: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 45px; font-size: 14px; display: none;">
+                        📥 Xuất File Excel
+                    </button>
+                </div>
+            </div>
+
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: var(--bg-surface); border-radius: 8px; box-shadow: var(--shadow-card); margin-bottom: 15px;">
+                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang chạy thuật toán ánh xạ chéo nội trạm...
+            </div>
+            
+            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: rgba(231, 76, 60, 0.1); border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
+
+            <div class="table-wrapper" id="tableContainer">
+                <div style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); font-weight: bold; color: var(--text-main); font-size: 15px;">
+                    Phát hiện <span id="totalCount" style="color: #e74c3c; font-size: 18px;">0</span> cặp Sector có dấu hiệu đấu chéo 
+                    <span style="font-size: 12px; font-weight: normal; color: var(--text-muted); margin-left: 10px;">(Ngày quét: <span id="scanDate"></span>)</span>
+                </div>
+                <table class="data-table" id="crossTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 100px; text-align: center;">Mức Nghi Ngờ</th>
+                            <th>Mã Trạm (Site)</th>
+                            <th>Nạn Nhân (Sụt Lưu Lượng)</th>
+                            <th>Kẻ Hưởng Lợi (Tăng Lưu Lượng)</th>
+                            <th>Lý do chẩn đoán</th>
+                            <th style="text-align: center;">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<script>
+    window.crossSectorData = [];
+
+    async function fetchCrossSectorData() {
+        const net = document.getElementById('networkSelect').value;
+        
+        document.getElementById('loadingMsg').style.display = 'block';
+        document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('tableContainer').style.display = 'none';
+        document.getElementById('btnExport').style.display = 'none';
+        document.getElementById('tableBody').innerHTML = '';
+
+        try {
+            const response = await fetch(`/api/cross-sector-data?network=${net}`);
+            if (!response.ok) throw new Error('Lỗi máy chủ');
+            const result = await response.json();
+            
+            document.getElementById('loadingMsg').style.display = 'none';
+
+            if (result.error) {
+                document.getElementById('errorMsg').innerText = result.error;
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
+            }
+
+            if (result.data.length === 0) {
+                document.getElementById('errorMsg').innerText = `Tuyệt vời! Không phát hiện hiện tượng Cross Sector nào trong hệ thống mạng ${net.toUpperCase()}.`;
+                document.getElementById('errorMsg').style.color = '#27ae60';
+                document.getElementById('errorMsg').style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                document.getElementById('errorMsg').style.borderColor = '#bce8e0';
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
+            }
+
+            window.crossSectorData = result.data;
+            document.getElementById('totalCount').innerText = result.data.length;
+            document.getElementById('scanDate').innerText = result.latestDate;
+            
+            const tbody = document.getElementById('tableBody');
+            
+            result.data.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                
+                let badgeClass = row.score >= 100 ? 'score-high' : 'score-med';
+
+                tr.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td style="text-align: center;"><span class="score-badge ${badgeClass}">${row.score}%</span></td>
+                    <td style="font-weight: bold; color: var(--text-main); font-size: 14px;">${row.site}</td>
+                    <td>
+                        <div class="cell-box">
+                            <span class="cell-name">${row.sector_down.name}</span>
+                            <div class="stat-row"><span class="stat-label">Traffic Swap:</span> <span class="stat-val-down">${row.sector_down.traffic_change}</span></div>
+                            <div class="stat-row"><span class="stat-label">CQI Drop:</span> <span class="stat-val-down">${row.sector_down.cqi_change}</span></div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="cell-box">
+                            <span class="cell-name" style="color: #27ae60;">${row.sector_up.name}</span>
+                            <div class="stat-row"><span class="stat-label">Traffic Swap:</span> <span class="stat-val-up">${row.sector_up.traffic_change}</span></div>
+                            <div class="stat-row"><span class="stat-label">CQI Status:</span> <span class="stat-val-down">${row.sector_up.cqi_change}</span></div>
+                        </div>
+                    </td>
+                    <td style="white-space: normal; line-height: 1.5; font-size: 12px;">${row.reasons}</td>
+                    <td style="text-align:center;">
+                        <a href="/kpi-analytics?network=${net}&cell=${encodeURIComponent(row.sector_down.name + ',' + row.sector_up.name)}" target="_blank" class="btn-kpi">📈 Vẽ Biểu Đồ</a>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('tableContainer').style.display = 'block';
+            document.getElementById('btnExport').style.display = 'block';
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('errorMsg').innerText = 'Lỗi truy xuất hệ thống phân tích. Vui lòng thử lại sau.';
+            document.getElementById('errorMsg').style.display = 'block';
+        }
+    }
+
+    function exportToExcel() {
+        if (!window.crossSectorData || window.crossSectorData.length === 0) return;
+        
+        let exportData = window.crossSectorData.map((r, i) => ({
+            "STT": i + 1,
+            "Mức Nghi Ngờ (%)": r.score,
+            "Mã Trạm (Site)": r.site,
+            "Sector Sụt Giảm": r.sector_down.name,
+            "Traffic Drop": r.sector_down.traffic_change,
+            "CQI Drop": r.sector_down.cqi_change,
+            "Sector Tăng Vọt": r.sector_up.name,
+            "Traffic Spike": r.sector_up.traffic_change,
+            "CQI Up Status": r.sector_up.cqi_change,
+            "Lý do chẩn đoán": r.reasons
+        }));
+
+        let ws = XLSX.utils.json_to_sheet(exportData);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Cross_Sector");
+        XLSX.writeFile(wb, `Bao_Cao_Cross_Sector.xlsx`);
+    }
+</script>
+</body>
+</html>
