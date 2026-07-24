@@ -583,20 +583,25 @@
 
             document.getElementById('loadingText').innerText = "Đang vẽ bản đồ nhiệt đa sắc...";
             
+            // [TỐI ƯU 2.2]: XÂY DỰNG HASHMAP (TỪ ĐIỂN O(1)) THAY VÌ ARRAY.FIND O(N)
             const taLookupMap = {};
             taDataCache.forEach(t => {
-                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t['Cell Code'] || t['Cell_Code'] || '').trim();
+                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
                 let core = extractCoreName(rawTaCell);
+                // Ưu tiên lưu mã gốc (VD: THA001) để lấy ra cực nhanh
                 if (core) taLookupMap[core] = t;
+                // Dự phòng lưu mã nguyên bản
                 taLookupMap[rawTaCell.toLowerCase()] = t;
             });
 
             layerGroup.clearLayers(); 
             taLayer.clearLayers();
 
-            const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
+            // SỬA LỖI KHOẢNG CÁCH TA: Cập nhật chính xác ngưỡng chuẩn theo Index0 -> Index11
+            const taBaseDistances = [0, 156, 312, 624, 1092, 2028, 3588, 6708, 14508, 30108, 61308, 115908, 201708];
 
             globalPolygons.forEach(cellItem => {
+                // TRA CỨU SIÊU TỐC TỪ BỘ TỪ ĐIỂN HASHMAP
                 let taRecord = taLookupMap[cellItem.fastCoreCode] || taLookupMap[cellItem.cellStr];
 
                 if (taRecord) {
@@ -631,7 +636,7 @@
             addTALegend();
             loading.style.display = 'none';
         } catch (e) {
-            console.error(e); showToast('Lỗi truy xuất hệ thống khi tải dữ liệu TA!', true);
+            console.error(e); alert('Lỗi truy xuất hệ thống khi tải dữ liệu TA!');
             loading.style.display = 'none';
         }
     }
