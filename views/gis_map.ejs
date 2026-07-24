@@ -583,25 +583,21 @@
 
             document.getElementById('loadingText').innerText = "Đang vẽ bản đồ nhiệt đa sắc...";
             
-            // [TỐI ƯU 2.2]: XÂY DỰNG HASHMAP (TỪ ĐIỂN O(1)) THAY VÌ ARRAY.FIND O(N)
+            // XÂY DỰNG HASHMAP (TỪ ĐIỂN O(1))
             const taLookupMap = {};
             taDataCache.forEach(t => {
                 let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
                 let core = extractCoreName(rawTaCell);
-                // Ưu tiên lưu mã gốc (VD: THA001) để lấy ra cực nhanh
                 if (core) taLookupMap[core] = t;
-                // Dự phòng lưu mã nguyên bản
                 taLookupMap[rawTaCell.toLowerCase()] = t;
             });
 
             layerGroup.clearLayers(); 
             taLayer.clearLayers();
 
-            // SỬA LỖI KHOẢNG CÁCH TA: Cập nhật chính xác ngưỡng chuẩn theo Index0 -> Index11
             const taBaseDistances = [0, 156, 312, 624, 1092, 2028, 3588, 6708, 14508, 30108, 61308, 115908, 201708];
 
             globalPolygons.forEach(cellItem => {
-                // TRA CỨU SIÊU TỐC TỪ BỘ TỪ ĐIỂN HASHMAP
                 let taRecord = taLookupMap[cellItem.fastCoreCode] || taLookupMap[cellItem.cellStr];
 
                 if (taRecord) {
@@ -617,7 +613,11 @@
                             if (ueCount > 0) {
                                 let ratio = ueCount / maxUE; 
                                 let baseBw = 65; let bw = baseBw * (0.2 + 0.8 * ratio); 
-                                let innerR = taBaseDistances[i] * scale; let outerR = taBaseDistances[i+1] * scale;
+                                
+                                // BỎ HOÀN TOÀN BIẾN * scale ĐỂ KHÓA TỶ LỆ KÍCH THƯỚC VẬT LÝ 100% CHUẨN XÁC
+                                let innerR = taBaseDistances[i]; 
+                                let outerR = taBaseDistances[i+1]; 
+                                
                                 let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellItem.displayCellName, i, ueCount);
                                 segment.addTo(taLayer);
                                 cellItem.taSegments = cellItem.taSegments || [];
@@ -626,6 +626,7 @@
                         }
                     }
                 } else {
+                    // Trạm rỗng (Fallback) vẫn dùng biến scale để thu nhỏ theo thanh trượt cho đỡ rối mắt
                     let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.displayCellName, '4g', cellItem.rawData.rfData, 250, scale);
                     let styleObj = {fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3, weight: 1.5};
                     fallback.setStyle(styleObj); fallback.originalStyle = styleObj;
