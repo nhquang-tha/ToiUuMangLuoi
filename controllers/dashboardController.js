@@ -1671,4 +1671,3 @@ exports.getCrossSectorData = async (req, res) => {
         res.status(500).json({ error: "Lỗi truy xuất hệ thống." });
     }
 };
-Sau khi lưu lại, thuật toán của bạn đã trở nên cực kỳ thông minh. Thay vì quét tràn lan, nó sẽ "Bóp chết" các tín hiệu nhiễu và chỉ hiển thị ra những cặp Sector có cú bắt chéo hình chữ X hoàn hảo nhất trên biểu đồ!
