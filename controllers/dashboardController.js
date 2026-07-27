@@ -1515,11 +1515,11 @@ exports.resetImportedData = async (req, res) => {
 
 // =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
-// Đảm bảo 4 nguyên tắc thép:
+// Đảm bảo 4 nguyên tắc SIÊU KHẮT KHE:
 // 1. Không quét trạm MBF_TH
 // 2. Phải cùng chung 1 Site Code
-// 3. Phải cùng băng tần (L1800/L900/L2100)
-// 4. Bắt buộc hoán đổi lưu lượng (Traffic A_new ~ B_old VÀ B_new ~ A_old)
+// 3. CHỈ so sánh L900, L1800, NR3700, NR700 (Loại bỏ 2100/2600...)
+// 4. Siết chặt sai số tráo đổi lưu lượng chỉ còn 25% (Volume Swap <= 25%)
 // =========================================================================
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
@@ -1539,7 +1539,7 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI (Lấy thêm CellType để lọc Băng tần & Loại trừ MBF_TH)
+        // 2. Lấy dữ liệu KPI
         let querySql = '';
         if (network === '4g') {
             querySql = `
@@ -1577,7 +1577,7 @@ exports.getCrossSectorData = async (req, res) => {
             if (!siteMap[siteCode]) siteMap[siteCode] = {};
             if (!siteMap[siteCode][cell]) {
                 siteMap[siteCode][cell] = { 
-                    cell_type: row.cell_type, // Lưu lại Băng tần
+                    cell_type: row.cell_type, 
                     has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 
                 };
             }
@@ -1634,27 +1634,35 @@ exports.getCrossSectorData = async (req, res) => {
                         spikeCells.forEach(sCell => {
                             
                             // ==========================================
-                            // BỘ LỌC 1: KIỂM TRA BĂNG TẦN L900 / L1800 / L2100
+                            // BỘ LỌC 1: KIỂM TRA BĂNG TẦN L900/L1800/NR3700/NR700
                             // ==========================================
                             const getBand = (typeStr) => {
                                 if (!typeStr) return null;
                                 let s = String(typeStr).toUpperCase();
+                                // Chỉ chấp nhận 4 dải tần này
                                 if (s.includes('1800')) return '1800';
                                 if (s.includes('900')) return '900';
-                                if (s.includes('2100')) return '2100';
-                                if (s.includes('2600')) return '2600';
+                                if (s.includes('3700') || s.includes('3500')) return '3700'; 
+                                if (s.includes('700')) return '700';
+                                // Các băng tần khác -> Cắm nhãn loại trừ
+                                if (s.includes('2100') || s.includes('2600')) return 'INVALID';
                                 return null;
                             };
                             
                             let bandD = getBand(dCell.cell_type);
                             let bandS = getBand(sCell.cell_type);
+
+                            // Nếu phát hiện 2100 hoặc 2600 -> Lập tức Vứt bỏ
+                            if (bandD === 'INVALID' || bandS === 'INVALID') {
+                                return;
+                            }
                             
-                            // Nếu DB có dữ liệu băng tần mà thấy khác nhau -> Lập tức Vứt bỏ (L1800 không thể chéo L900)
+                            // Phải hoàn toàn cùng dải tần (L1800 chéo L1800, L900 chéo L900...)
                             if (bandD && bandS && bandD !== bandS) {
                                 return; 
                             }
                             
-                            // Nếu DB bị Null, tự bắt mạch dựa vào đuôi của Tên Cell (M11 vs M41)
+                            // Nếu DB bị Null, tự bắt mạch dựa vào đuôi của Tên Cell
                             if (!bandD || !bandS) {
                                 const matchD = dCell.cell.match(/[A-Za-z](\d)\d$/);
                                 const matchS = sCell.cell.match(/[A-Za-z](\d)\d$/);
@@ -1664,21 +1672,18 @@ exports.getCrossSectorData = async (req, res) => {
                             }
 
                             // ==========================================
-                            // BỘ LỌC 2: KIỂM TRA CHÉO LƯU LƯỢNG KÉP (VOLUME SWAP)
+                            // BỘ LỌC 2: SIẾT CHẶT ĐỘ KHỚP LƯU LƯỢNG XUỐNG 25%
                             // ==========================================
-                            // Sai số giữa Lưu lượng MỚI của A so với CŨ của B
                             let err_Dnew_Sold = Math.abs(dCell.t0_traffic - sCell.avgTraffic) / Math.max(sCell.avgTraffic, 1);
-                            // Sai số giữa Lưu lượng MỚI của B so với CŨ của A
                             let err_Snew_Dold = Math.abs(sCell.t0_traffic - dCell.avgTraffic) / Math.max(dCell.avgTraffic, 1);
                             
-                            // Cả 2 chiều đều phải có sai số <= 40% thì mới được coi là tráo đổi thực sự
-                            if (err_Dnew_Sold > 0.40 || err_Snew_Dold > 0.40) {
+                            // Nếu sai số > 25% -> Vứt bỏ (Chặn đứng các ca báo động giả)
+                            if (err_Dnew_Sold > 0.25 || err_Snew_Dold > 0.25) {
                                 return; 
                             }
 
-                            // Vượt qua 2 bộ lọc khắt khe -> Chấm điểm
                             let score = 50; 
-                            let reasons = ["Nghịch đảo và Tráo đổi lưu lượng hoàn hảo"];
+                            let reasons = ["Tráo đổi lưu lượng (Độ khớp Volume cực cao <= 25%)"];
 
                             // Chẩn đoán phụ: Suy giảm CQI
                             if (dCell.deltaCqi < -3 || sCell.deltaCqi < -3) {
@@ -1689,7 +1694,7 @@ exports.getCrossSectorData = async (req, res) => {
                             // Chẩn đoán phụ: Lỗi Handover (Rớt dịch vụ)
                             if (network === '4g' && (dCell.t0_drop > 0.5 || sCell.t0_drop > 0.5)) {
                                 score += 25;
-                                reasons.push("Tỷ lệ rớt dịch vụ (HO Failure Proxy) tăng vọt");
+                                reasons.push("Tỷ lệ rớt dịch vụ (HO Proxy) tăng vọt");
                             }
 
                             if (score >= 50) { 
