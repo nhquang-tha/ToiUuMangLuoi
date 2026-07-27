@@ -1515,8 +1515,11 @@ exports.resetImportedData = async (req, res) => {
 
 // =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
-// Dựa trên 3 yếu tố: Traffic Swap, CQI Drop, HO Failure (Proxy qua Drop/Latency)
-// Đảm bảo tuyệt đối điều kiện vật lý: Cùng Site Code và Cùng Băng Tần
+// Đảm bảo 4 nguyên tắc thép:
+// 1. Không quét trạm MBF_TH
+// 2. Phải cùng chung 1 Site Code
+// 3. Phải cùng băng tần (L1800/L900/L2100)
+// 4. Bắt buộc hoán đổi lưu lượng (Traffic A_new ~ B_old VÀ B_new ~ A_old)
 // =========================================================================
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
@@ -1536,24 +1539,35 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI (Bổ sung việc gọi trực tiếp cột Site từ Database)
+        // 2. Lấy dữ liệu KPI (Lấy thêm CellType để lọc Băng tần & Loại trừ MBF_TH)
         let querySql = '';
         if (network === '4g') {
-            querySql = `SELECT Site_name as site, Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate FROM kpi_4g WHERE Thoi_gian IN (${placeholders}) AND Cell_name NOT LIKE 'MBF_TH%'`;
+            querySql = `
+                SELECT Site_name as site, CellType as cell_type, Cell_name as cell, Thoi_gian as date, 
+                       Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, 
+                       User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate 
+                FROM kpi_4g 
+                WHERE Thoi_gian IN (${placeholders}) 
+                AND Cell_name NOT LIKE 'MBF_TH%'
+            `;
         } else {
-            querySql = `SELECT Ten_GNODEB as site, Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput FROM kpi_5g WHERE Thoi_gian IN (${placeholders}) AND Ten_CELL NOT LIKE 'MBF_TH%'`;
+            querySql = `
+                SELECT Ten_GNODEB as site, Loai_NE as cell_type, Ten_CELL as cell, Thoi_gian as date, 
+                       Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput 
+                FROM kpi_5g 
+                WHERE Thoi_gian IN (${placeholders}) 
+                AND Ten_CELL NOT LIKE 'MBF_TH%'
+            `;
         }
 
         const [kpiData] = await db.query(querySql, targetDates);
 
-        // 3. Gom nhóm theo Site CHÍNH XÁC TỪ DATABASE
+        // 3. Gom nhóm chính xác theo Site_Code
         const siteMap = {};
         kpiData.forEach(row => {
             const cell = row.cell;
             if (!cell) return;
             
-            // Ưu tiên dùng Site Code từ DB để nhóm chính xác 100%. 
-            // Nếu trạm nào bị null Site thì mới dùng Regex cắt 6 ký tự dự phòng.
             let siteCode = row.site;
             if (!siteCode) {
                 siteCode = cell.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
@@ -1561,7 +1575,12 @@ exports.getCrossSectorData = async (req, res) => {
             siteCode = String(siteCode).trim();
             
             if (!siteMap[siteCode]) siteMap[siteCode] = {};
-            if (!siteMap[siteCode][cell]) siteMap[siteCode][cell] = { has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 };
+            if (!siteMap[siteCode][cell]) {
+                siteMap[siteCode][cell] = { 
+                    cell_type: row.cell_type, // Lưu lại Băng tần
+                    has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 
+                };
+            }
             
             if (row.date === t0) {
                 siteMap[siteCode][cell].t0_traffic = parseFloat(row.traffic) || 0;
@@ -1579,7 +1598,7 @@ exports.getCrossSectorData = async (req, res) => {
 
         const suspiciousSites = [];
 
-        // 4. Thuật toán Sàng lọc (Quy tắc chéo Volume + Logic Băng tần)
+        // 4. Thuật toán Đối soát
         for (let site in siteMap) {
             const cells = siteMap[site];
             let cellStats = [];
@@ -1592,12 +1611,14 @@ exports.getCrossSectorData = async (req, res) => {
                 const avgTraffic = c.past_traffic / c.count_past;
                 const avgCqi = c.past_cqi / c.count_past;
                 
+                // Cắt nhiễu: Phải có Volume thực tế lớn hơn 5GB
                 if (avgTraffic > 5 || c.t0_traffic > 5) {
                     const deltaTraffic = ((c.t0_traffic - avgTraffic) / avgTraffic) * 100;
                     const deltaCqi = c.t0_cqi - avgCqi; 
                     
                     cellStats.push({ 
-                        cell: cellName, avgTraffic, t0_traffic: c.t0_traffic, deltaTraffic,
+                        cell: cellName, cell_type: c.cell_type,
+                        avgTraffic, t0_traffic: c.t0_traffic, deltaTraffic,
                         t0_prb: c.t0_prb, t0_thput: c.t0_thput, t0_drop: c.t0_drop,
                         avgCqi, t0_cqi: c.t0_cqi, deltaCqi
                     });
@@ -1611,39 +1632,69 @@ exports.getCrossSectorData = async (req, res) => {
                 if (dropCells.length > 0 && spikeCells.length > 0) {
                     dropCells.forEach(dCell => {
                         spikeCells.forEach(sCell => {
-                            // BỘ LỌC 1: BẢO VỆ VẬT LÝ (KHÔNG CHO PHÉP CHÉO KHÁC BĂNG TẦN)
-                            const matchD = dCell.cell.match(/[A-Za-z](\d)\d$/);
-                            const matchS = sCell.cell.match(/[A-Za-z](\d)\d$/);
-                            if (matchD && matchS && matchD[1] !== matchS[1]) {
-                                return; // Khác băng tần -> Thoát ngay lập tức
+                            
+                            // ==========================================
+                            // BỘ LỌC 1: KIỂM TRA BĂNG TẦN L900 / L1800 / L2100
+                            // ==========================================
+                            const getBand = (typeStr) => {
+                                if (!typeStr) return null;
+                                let s = String(typeStr).toUpperCase();
+                                if (s.includes('1800')) return '1800';
+                                if (s.includes('900')) return '900';
+                                if (s.includes('2100')) return '2100';
+                                if (s.includes('2600')) return '2600';
+                                return null;
+                            };
+                            
+                            let bandD = getBand(dCell.cell_type);
+                            let bandS = getBand(sCell.cell_type);
+                            
+                            // Nếu DB có dữ liệu băng tần mà thấy khác nhau -> Lập tức Vứt bỏ (L1800 không thể chéo L900)
+                            if (bandD && bandS && bandD !== bandS) {
+                                return; 
+                            }
+                            
+                            // Nếu DB bị Null, tự bắt mạch dựa vào đuôi của Tên Cell (M11 vs M41)
+                            if (!bandD || !bandS) {
+                                const matchD = dCell.cell.match(/[A-Za-z](\d)\d$/);
+                                const matchS = sCell.cell.match(/[A-Za-z](\d)\d$/);
+                                if (matchD && matchS && matchD[1] !== matchS[1]) {
+                                    return; // Khác dải số đuôi -> Vứt bỏ
+                                }
                             }
 
-                            // BỘ LỌC 2: KIỂM TRA ĐỘ KHỚP LƯU LƯỢNG (TRAFFIC VOLUME MATCH)
+                            // ==========================================
+                            // BỘ LỌC 2: KIỂM TRA CHÉO LƯU LƯỢNG KÉP (VOLUME SWAP)
+                            // ==========================================
+                            // Sai số giữa Lưu lượng MỚI của A so với CŨ của B
                             let err_Dnew_Sold = Math.abs(dCell.t0_traffic - sCell.avgTraffic) / Math.max(sCell.avgTraffic, 1);
+                            // Sai số giữa Lưu lượng MỚI của B so với CŨ của A
                             let err_Snew_Dold = Math.abs(sCell.t0_traffic - dCell.avgTraffic) / Math.max(dCell.avgTraffic, 1);
                             
-                            // Cho phép sai số 45% (Vì lưu lượng mạng lưới biến động hàng ngày)
-                            if (err_Dnew_Sold > 0.45 || err_Snew_Dold > 0.45) {
-                                return; // Không khớp độ lớn -> Không phải là chéo cáp -> Thoát
+                            // Cả 2 chiều đều phải có sai số <= 40% thì mới được coi là tráo đổi thực sự
+                            if (err_Dnew_Sold > 0.40 || err_Snew_Dold > 0.40) {
+                                return; 
                             }
 
+                            // Vượt qua 2 bộ lọc khắt khe -> Chấm điểm
                             let score = 50; 
-                            let reasons = ["Tráo đổi lưu lượng (Độ khớp Volume cao)"];
+                            let reasons = ["Nghịch đảo và Tráo đổi lưu lượng hoàn hảo"];
 
+                            // Chẩn đoán phụ: Suy giảm CQI
                             if (dCell.deltaCqi < -3 || sCell.deltaCqi < -3) {
                                 score += 25;
                                 reasons.push("Sụt giảm CQI đột ngột");
                             }
 
+                            // Chẩn đoán phụ: Lỗi Handover (Rớt dịch vụ)
                             if (network === '4g' && (dCell.t0_drop > 0.5 || sCell.t0_drop > 0.5)) {
                                 score += 25;
-                                reasons.push("Tỷ lệ rớt dịch vụ (Drop Rate) tăng vọt");
+                                reasons.push("Tỷ lệ rớt dịch vụ (HO Failure Proxy) tăng vọt");
                             }
 
-                            // Đã qua được 2 lớp lọc khắt khe thì 50 điểm là đủ tin cậy để đưa lên bảng
                             if (score >= 50) { 
                                 suspiciousSites.push({
-                                    site: site, // Hiển thị đúng Site Code từ Database
+                                    site: site, 
                                     score: score,
                                     reasons: reasons.join(' + '),
                                     sector_down: {
@@ -1664,10 +1715,14 @@ exports.getCrossSectorData = async (req, res) => {
             }
         }
 
+        // Lọc bỏ trùng lặp nếu A_B và B_A bị tính 2 lần
         const uniqueList = [];
         const seen = new Set();
         suspiciousSites.sort((a, b) => b.score - a.score).forEach(item => {
-            let key = item.sector_down.name + "_" + item.sector_up.name;
+            // Sắp xếp tên alphabet để khóa duy nhất (X_Y hoặc Y_X đều ra X_Y)
+            let names = [item.sector_down.name, item.sector_up.name].sort();
+            let key = names[0] + "_" + names[1];
+            
             if (!seen.has(key)) { seen.add(key); uniqueList.push(item); }
         });
 
