@@ -1,3 +1,4 @@
+
 <%- include('partials/head') %>
 <%
     let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
@@ -11,17 +12,31 @@
     
     .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #f39c12;}
     
-    .table-wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: none; animation: fadeIn 0.5s ease;}
-    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
-    .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
-    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; position: sticky; top: 0; z-index: 10;}
-    .data-table tbody tr:hover { background-color: #fcf3cf; }
+    /* CẤU HÌNH THANH CUỘN VÀ BẢNG */
+    .table-container { background: #fff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: none; animation: fadeIn 0.5s ease; overflow: hidden; border: 1px solid #ecf0f1; }
+    .table-wrapper { width: 100%; max-height: 60vh; overflow-y: auto; overflow-x: auto; }
+    
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
+    .data-table th, .data-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    
+    /* TIÊU ĐỀ CỐ ĐỊNH */
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1);}
+    .data-table tbody tr:hover td { background-color: #fcf3cf; }
     
     .bad-cell { color: #d35400; font-weight: bold; }
     .violation-badge { background: #fef5e7; color: #d35400; padding: 4px 8px; border-radius: 4px; border: 1px solid #fad7a1; font-size: 11px;}
 
     .btn-kpi { background: #3498db; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-size: 11px; font-weight: bold; display: inline-block; transition: 0.2s; border: 1px solid #2980b9; }
-    .btn-kpi:hover { background: #2980b9; transform: scale(1.05); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    .btn-kpi:hover { background: #2980b9; transform: scale(1.05); }
+
+    /* CẤU HÌNH PHÂN TRANG (PAGINATION) */
+    .pagination-bar { padding: 12px 20px; background: #fff; border-top: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .page-info select { padding: 6px 10px; border-radius: 6px; border: 1px solid #bdc3c7; outline: none; cursor: pointer; font-weight: bold; color: #2c3e50;}
+    .page-controls { display: flex; gap: 5px; }
+    .btn-page { background: #f8f9fa; border: 1px solid #bdc3c7; padding: 6px 12px; border-radius: 6px; cursor: pointer; color: #34495e; font-weight: bold; transition: 0.2s;}
+    .btn-page:hover:not(:disabled) { background: #f39c12; color: white; border-color: #f39c12; }
+    .btn-page.active { background: #f39c12; color: white; border-color: #f39c12; }
+    .btn-page:disabled { opacity: 0.5; cursor: not-allowed; }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -40,7 +55,8 @@
                 <div style="flex: 1; min-width: 250px;">
                     <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Khoảng thời gian liên tiếp:</label>
                     <select id="daysSelect" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; cursor: pointer; font-size: 14px; border-left: 4px solid #f39c12;">
-                        <option value="3" selected>Lỗi liên tiếp 3 Ngày</option>
+                        <option value="1" selected>Lỗi trong 1 Ngày (Mới nhất)</option>
+                        <option value="3">Lỗi liên tiếp 3 Ngày</option>
                         <option value="5">Lỗi liên tiếp 5 Ngày</option>
                         <option value="7">Lỗi liên tiếp 7 Ngày</option>
                     </select>
@@ -62,34 +78,51 @@
                 2. (PS_CONGES > 2%) VÀ (PS_SO_ATT > 500)
             </div>
 
-            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #f39c12; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px;">
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #f39c12; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; margin-bottom: 15px;">
                 <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang phân tích nghẽn mạng 3G...
             </div>
-            
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
 
-            <div class="table-wrapper" id="tableContainer">
-                <div style="padding: 15px; border-bottom: 1px solid #eee; font-weight: bold; color: #d35400;">
-                    Tổng số Cell nghẽn mạng 3G: <span id="totalCount">0</span> Cell.
-                    <span style="font-size: 12px; font-weight: normal; color: #7f8c8d; margin-left: 10px;">(Dữ liệu chi tiết hiển thị của ngày mới nhất)</span>
+            <!-- BẢNG CÓ PHÂN TRANG -->
+            <div class="table-container" id="tableContainer">
+                <div style="padding: 15px 20px; border-bottom: 1px solid #ecf0f1; font-weight: bold; color: #d35400; background: #fdfdfd;">
+                    Tổng số Cell nghẽn mạng 3G: <span id="totalCount" style="font-size: 16px;">0</span> Cell.
                 </div>
-                <table class="data-table" id="congestionTable">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Tên Cell 3G</th>
-                            <th>Ngày Mới Nhất</th>
-                            <th>CS CONGES (%)</th>
-                            <th>CS ATT</th>
-                            <th>PS CONGES (%)</th>
-                            <th>PS ATT</th>
-                            <th>Lý do Nghẽn</th>
-                            <th style="text-align: center;">Thao Tác</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                    </tbody>
-                </table>
+                
+                <div class="table-wrapper">
+                    <table class="data-table" id="congestionTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Tên Cell 3G</th>
+                                <th>Ngày Mới Nhất</th>
+                                <th>CS CONGES (%)</th>
+                                <th>CS ATT</th>
+                                <th>PS CONGES (%)</th>
+                                <th>PS ATT</th>
+                                <th>Lý do Nghẽn</th>
+                                <th style="text-align: center;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- THANH PHÂN TRANG -->
+                <div class="pagination-bar">
+                    <div class="page-info">
+                        Hiển thị 
+                        <select id="pageSize" onchange="changePageSize()">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select> 
+                        dòng / trang
+                    </div>
+                    <div class="page-controls" id="pageControls"></div>
+                </div>
             </div>
 
         </div>
@@ -103,6 +136,10 @@
         document.head.appendChild(xlsxScript);
     });
 
+    window.cachedData = [];
+    window.currentPage = 1;
+    window.rowsPerPage = 20;
+
     async function fetchCongestionCells() {
         const days = document.getElementById('daysSelect').value;
         
@@ -111,7 +148,6 @@
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('tableContainer').style.display = 'none';
         document.getElementById('btnExport').style.display = 'none';
-        document.getElementById('tableBody').innerHTML = '';
 
         try {
             const response = await fetch(`/api/congestion-3g-data?days=${days}`);
@@ -123,71 +159,115 @@
             if (data.length === 0) {
                 document.getElementById('errorMsg').innerText = `Tuyệt vời! Không có Cell 3G nào bị nghẽn mạng liên tục trong ${days} ngày.`;
                 document.getElementById('errorMsg').className = 'alert alert-success';
-                document.getElementById('errorMsg').style.color = '#27ae60';
-                document.getElementById('errorMsg').style.backgroundColor = '#e8f8f5';
-                document.getElementById('errorMsg').style.borderColor = '#bce8e0';
                 document.getElementById('errorMsg').style.display = 'block';
                 return;
             }
 
+            window.cachedData = data;
             document.getElementById('totalCount').innerText = data.length;
-            const tbody = document.getElementById('tableBody');
-            
-            data.forEach((row, index) => {
-                const tr = document.createElement('tr');
-                
-                const csCong = parseFloat(row.CSCONGES);
-                const csAtt = parseFloat(row.CS_SO_ATT);
-                const psCong = parseFloat(row.PSCONGES);
-                const psAtt = parseFloat(row.PS_SO_ATT);
-
-                const isCsCongested = (!isNaN(csCong) && csCong > 2) && (!isNaN(csAtt) && csAtt > 100);
-                const isPsCongested = (!isNaN(psCong) && psCong > 2) && (!isNaN(psAtt) && psAtt > 500);
-
-                const csStyle = isCsCongested ? 'bad-cell' : '';
-                const psStyle = isPsCongested ? 'bad-cell' : '';
-
-                tr.innerHTML = `
-                    <td>${index + 1}</td>
-                    <td style="font-weight: bold; color: #2980b9;">${row.Cell_name}</td>
-                    <td>${row.Latest_Date}</td>
-                    <td class="${csStyle}">${row.CSCONGES}</td>
-                    <td class="${csStyle}">${row.CS_SO_ATT}</td>
-                    <td class="${psStyle}">${row.PSCONGES}</td>
-                    <td class="${psStyle}">${row.PS_SO_ATT}</td>
-                    <td><span class="violation-badge">${row.Violations}</span></td>
-                    <td style="text-align:center;">
-                        <a href="/kpi-analytics?network=3g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+            window.currentPage = 1;
+            renderTablePage();
 
             document.getElementById('tableContainer').style.display = 'block';
             document.getElementById('btnExport').style.display = 'block';
 
         } catch (error) {
-            console.error(error);
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('errorMsg').innerText = 'Lỗi truy xuất dữ liệu từ Database.';
             document.getElementById('errorMsg').style.display = 'block';
         }
     }
 
+    function renderTablePage() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        const start = (window.currentPage - 1) * window.rowsPerPage;
+        const end = start + window.rowsPerPage;
+        const pageData = window.cachedData.slice(start, end);
+
+        pageData.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            
+            const csCong = parseFloat(row.CSCONGES);
+            const csAtt = parseFloat(row.CS_SO_ATT);
+            const psCong = parseFloat(row.PSCONGES);
+            const psAtt = parseFloat(row.PS_SO_ATT);
+
+            const isCsCongested = (!isNaN(csCong) && csCong > 2) && (!isNaN(csAtt) && csAtt > 100);
+            const isPsCongested = (!isNaN(psCong) && psCong > 2) && (!isNaN(psAtt) && psAtt > 500);
+
+            const csStyle = isCsCongested ? 'bad-cell' : '';
+            const psStyle = isPsCongested ? 'bad-cell' : '';
+
+            tr.innerHTML = `
+                <td>${start + index + 1}</td>
+                <td style="font-weight: bold; color: #2980b9;">${row.Cell_name}</td>
+                <td>${row.Latest_Date}</td>
+                <td class="${csStyle}">${row.CSCONGES}</td>
+                <td class="${csStyle}">${row.CS_SO_ATT}</td>
+                <td class="${psStyle}">${row.PSCONGES}</td>
+                <td class="${psStyle}">${row.PS_SO_ATT}</td>
+                <td><span class="violation-badge">${row.Violations}</span></td>
+                <td style="text-align:center;">
+                    <a href="/kpi-analytics?network=3g&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 KPI</a>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        renderPaginationControls();
+    }
+
+    function renderPaginationControls() {
+        const totalPages = Math.ceil(window.cachedData.length / window.rowsPerPage);
+        const controls = document.getElementById('pageControls');
+        controls.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        controls.insertAdjacentHTML('beforeend', `<button class="btn-page" onclick="goToPage(${window.currentPage - 1})" ${window.currentPage === 1 ? 'disabled' : ''}>&laquo;</button>`);
+
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= window.currentPage - 1 && i <= window.currentPage + 1)) {
+                controls.insertAdjacentHTML('beforeend', `<button class="btn-page ${window.currentPage === i ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
+            } else if (i === window.currentPage - 2 || i === window.currentPage + 2) {
+                controls.insertAdjacentHTML('beforeend', `<span style="padding: 5px;">...</span>`);
+            }
+        }
+
+        controls.insertAdjacentHTML('beforeend', `<button class="btn-page" onclick="goToPage(${window.currentPage + 1})" ${window.currentPage === totalPages ? 'disabled' : ''}>&raquo;</button>`);
+    }
+
+    function goToPage(page) {
+        const totalPages = Math.ceil(window.cachedData.length / window.rowsPerPage);
+        if (page >= 1 && page <= totalPages) {
+            window.currentPage = page;
+            renderTablePage();
+            document.querySelector('.table-wrapper').scrollTop = 0;
+        }
+    }
+
+    function changePageSize() {
+        window.rowsPerPage = parseInt(document.getElementById('pageSize').value);
+        window.currentPage = 1;
+        renderTablePage();
+    }
+
     function exportToExcel() {
-        if (typeof XLSX === 'undefined') {
-            alert('Thư viện Excel chưa tải xong, vui lòng đợi...');
-            return;
-        }
-        let table = document.getElementById('congestionTable').cloneNode(true);
-        // Xóa cột thao tác khi xuất file Excel
-        for (let i = 0; i < table.rows.length; i++) {
-            table.rows[i].deleteCell(-1); 
-        }
-        let wb = XLSX.utils.table_to_book(table, {sheet: "Congestion_3G"});
+        if (typeof XLSX === 'undefined') { alert('Đang tải thư viện Excel...'); return; }
+        
+        let exportData = window.cachedData.map((row, i) => ({
+            "STT": i + 1, "Tên Cell 3G": row.Cell_name, "Ngày Cập Nhật": row.Latest_Date,
+            "CS CONGES (%)": parseFloat(row.CSCONGES), "CS ATT": parseFloat(row.CS_SO_ATT),
+            "PS CONGES (%)": parseFloat(row.PSCONGES), "PS ATT": parseFloat(row.PS_SO_ATT),
+            "Nguyên Nhân Lỗi": row.Violations
+        }));
+
+        let ws = XLSX.utils.json_to_sheet(exportData);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Congestion_3G");
         let days = document.getElementById('daysSelect').value;
-        let fileName = `Bao_Cao_Congestion_3G_Lien_Tiep_${days}_Ngay.xlsx`;
-        XLSX.writeFile(wb, fileName);
+        XLSX.writeFile(wb, `Bao_Cao_Congestion_3G_${days}_Ngay.xlsx`);
     }
 </script>
 </body>
