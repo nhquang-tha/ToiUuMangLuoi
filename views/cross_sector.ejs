@@ -1,3 +1,4 @@
+
 <%- include('partials/head') %>
 <%
     let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
@@ -10,13 +11,17 @@
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
     .filter-card { background: var(--bg-surface); padding: 20px; border-radius: 12px; box-shadow: var(--shadow-card); margin-bottom: 25px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border-top: 4px solid #e67e22;}
-    
     .info-box { background: rgba(230, 126, 34, 0.1); border-left: 4px solid #e67e22; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: var(--text-main); font-size: 13.5px; line-height: 1.6;}
     
-    .table-wrapper { width: 100%; overflow-x: auto; background: var(--bg-surface); border-radius: 8px; box-shadow: var(--shadow-card); display: none; animation: fadeIn 0.5s ease; border: 1px solid var(--border-color);}
+    /* CẤU HÌNH THANH CUỘN VÀ BẢNG */
+    .table-container { background: var(--bg-surface); border-radius: 8px; box-shadow: var(--shadow-card); display: none; animation: fadeIn 0.5s ease; border: 1px solid var(--border-color); overflow: hidden;}
+    .table-wrapper { width: 100%; max-height: 60vh; overflow-y: auto; overflow-x: auto; }
+    
     .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
     .data-table th, .data-table td { padding: 15px; text-align: left; }
-    .data-table th { background-color: var(--bg-body); color: var(--text-muted); font-weight: bold; position: sticky; top: 0; z-index: 10; text-transform: uppercase; font-size: 11px; border-bottom: 2px solid var(--border-color);}
+    
+    /* TIÊU ĐỀ CỐ ĐỊNH */
+    .data-table th { background-color: var(--bg-body); color: var(--text-muted); font-weight: bold; position: sticky; top: 0; z-index: 10; text-transform: uppercase; font-size: 11px; border-bottom: 2px solid var(--border-color); box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1);}
     .data-table td { border-bottom: 1px solid var(--border-color); color: var(--text-main); }
     
     .score-badge { padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 12px; color: white; display: inline-block; text-align: center; min-width: 40px;}
@@ -33,11 +38,18 @@
     .btn-kpi { background: var(--primary); color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; border: none; cursor: pointer;}
     .btn-kpi:hover { filter: brightness(1.1); transform: translateY(-2px); }
 
+    /* CẤU HÌNH PHÂN TRANG */
+    .pagination-bar { padding: 12px 20px; background: var(--bg-surface); border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .page-info select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); outline: none; cursor: pointer; font-weight: bold; background: var(--bg-body); color: var(--text-main);}
+    .page-controls { display: flex; gap: 5px; }
+    .btn-page { background: var(--bg-body); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 6px; cursor: pointer; color: var(--text-main); font-weight: bold; transition: 0.2s;}
+    .btn-page:hover:not(:disabled) { background: #e67e22; color: white; border-color: #e67e22; }
+    .btn-page.active { background: #e67e22; color: white; border-color: #e67e22; }
+    .btn-page:disabled { opacity: 0.5; cursor: not-allowed; }
+
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
-
-<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 
 <div class="layout">
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
@@ -72,32 +84,51 @@
                 </div>
             </div>
 
-            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: var(--bg-surface); border-radius: 8px; box-shadow: var(--shadow-card); margin-bottom: 15px;">
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 16px; font-weight: bold; background: var(--bg-surface); border-radius: 8px; margin-bottom: 15px;">
                 <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang chạy thuật toán ánh xạ chéo nội trạm...
             </div>
             
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: rgba(231, 76, 60, 0.1); border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 15px;"></div>
 
-            <div class="table-wrapper" id="tableContainer">
+            <!-- BẢNG CÓ PHÂN TRANG -->
+            <div class="table-container" id="tableContainer">
                 <div style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); font-weight: bold; color: var(--text-main); font-size: 15px;">
-                    Phát hiện <span id="totalCount" style="color: #e74c3c; font-size: 18px;">0</span> cặp Sector có dấu hiệu đấu chéo 
+                    Phát hiện <span id="totalCount" style="color: #e74c3c; font-size: 18px;">0</span> cặp Sector nghi ngờ đấu chéo 
                     <span style="font-size: 12px; font-weight: normal; color: var(--text-muted); margin-left: 10px;">(Ngày quét: <span id="scanDate"></span>)</span>
                 </div>
-                <table class="data-table" id="crossTable">
-                    <thead>
-                        <tr>
-                            <th style="width: 50px;">#</th>
-                            <th style="width: 100px; text-align: center;">Mức Nghi Ngờ</th>
-                            <th>Mã Trạm (Site)</th>
-                            <th>Nạn Nhân (Sụt Lưu Lượng)</th>
-                            <th>Kẻ Hưởng Lợi (Tăng Lưu Lượng)</th>
-                            <th>Lý do chẩn đoán</th>
-                            <th style="text-align: center;">Thao Tác</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                    </tbody>
-                </table>
+                
+                <div class="table-wrapper">
+                    <table class="data-table" id="crossTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th style="width: 100px; text-align: center;">Mức Nghi Ngờ</th>
+                                <th>Mã Trạm (Site)</th>
+                                <th>Nạn Nhân (Sụt Lưu Lượng)</th>
+                                <th>Kẻ Hưởng Lợi (Tăng Lưu Lượng)</th>
+                                <th>Lý do chẩn đoán</th>
+                                <th style="text-align: center;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- THANH PHÂN TRANG -->
+                <div class="pagination-bar">
+                    <div class="page-info">
+                        Hiển thị 
+                        <select id="pageSize" onchange="changePageSize()">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select> 
+                        cặp / trang
+                    </div>
+                    <div class="page-controls" id="pageControls"></div>
+                </div>
             </div>
 
         </div>
@@ -105,7 +136,15 @@
 </div>
 
 <script>
-    window.crossSectorData = [];
+    document.addEventListener('DOMContentLoaded', function() {
+        const xlsxScript = document.createElement('script');
+        xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
+        document.head.appendChild(xlsxScript);
+    });
+
+    window.cachedData = [];
+    window.currentPage = 1;
+    window.rowsPerPage = 20;
 
     async function fetchCrossSectorData() {
         const net = document.getElementById('networkSelect').value;
@@ -114,7 +153,6 @@
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('tableContainer').style.display = 'none';
         document.getElementById('btnExport').style.display = 'none';
-        document.getElementById('tableBody').innerHTML = '';
 
         try {
             const response = await fetch(`/api/cross-sector-data?network=${net}`);
@@ -138,58 +176,104 @@
                 return;
             }
 
-            window.crossSectorData = result.data;
+            window.cachedData = result.data;
             document.getElementById('totalCount').innerText = result.data.length;
             document.getElementById('scanDate').innerText = result.latestDate;
             
-            const tbody = document.getElementById('tableBody');
-            
-            result.data.forEach((row, index) => {
-                const tr = document.createElement('tr');
-                
-                let badgeClass = row.score >= 100 ? 'score-high' : 'score-med';
-
-                tr.innerHTML = `
-                    <td>${index + 1}</td>
-                    <td style="text-align: center;"><span class="score-badge ${badgeClass}">${row.score}%</span></td>
-                    <td style="font-weight: bold; color: var(--text-main); font-size: 14px;">${row.site}</td>
-                    <td>
-                        <div class="cell-box">
-                            <span class="cell-name">${row.sector_down.name}</span>
-                            <div class="stat-row"><span class="stat-label">Traffic Swap:</span> <span class="stat-val-down">${row.sector_down.traffic_change}</span></div>
-                            <div class="stat-row"><span class="stat-label">CQI Drop:</span> <span class="stat-val-down">${row.sector_down.cqi_change}</span></div>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="cell-box">
-                            <span class="cell-name" style="color: #27ae60;">${row.sector_up.name}</span>
-                            <div class="stat-row"><span class="stat-label">Traffic Swap:</span> <span class="stat-val-up">${row.sector_up.traffic_change}</span></div>
-                            <div class="stat-row"><span class="stat-label">CQI Status:</span> <span class="stat-val-down">${row.sector_up.cqi_change}</span></div>
-                        </div>
-                    </td>
-                    <td style="white-space: normal; line-height: 1.5; font-size: 12px;">${row.reasons}</td>
-                    <td style="text-align:center;">
-                        <a href="/kpi-analytics?network=${net}&cell=${encodeURIComponent(row.sector_down.name + ',' + row.sector_up.name)}" target="_blank" class="btn-kpi">📈 Vẽ Biểu Đồ</a>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+            window.currentPage = 1;
+            renderTablePage();
 
             document.getElementById('tableContainer').style.display = 'block';
             document.getElementById('btnExport').style.display = 'block';
 
         } catch (error) {
-            console.error(error);
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('errorMsg').innerText = 'Lỗi truy xuất hệ thống phân tích. Vui lòng thử lại sau.';
             document.getElementById('errorMsg').style.display = 'block';
         }
     }
 
+    function renderTablePage() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        const net = document.getElementById('networkSelect').value;
+
+        const start = (window.currentPage - 1) * window.rowsPerPage;
+        const end = start + window.rowsPerPage;
+        const pageData = window.cachedData.slice(start, end);
+
+        pageData.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            let badgeClass = row.score >= 100 ? 'score-high' : 'score-med';
+
+            tr.innerHTML = `
+                <td>${start + index + 1}</td>
+                <td style="text-align: center;"><span class="score-badge ${badgeClass}">${row.score}%</span></td>
+                <td style="font-weight: bold; color: var(--text-main); font-size: 14px;">${row.site}</td>
+                <td>
+                    <div class="cell-box">
+                        <span class="cell-name">${row.sector_down.name}</span>
+                        <div class="stat-row"><span class="stat-label">Traffic Swap:</span> <span class="stat-val-down">${row.sector_down.traffic_change}</span></div>
+                        <div class="stat-row"><span class="stat-label">CQI Drop:</span> <span class="stat-val-down">${row.sector_down.cqi_change}</span></div>
+                    </div>
+                </td>
+                <td>
+                    <div class="cell-box">
+                        <span class="cell-name" style="color: #27ae60;">${row.sector_up.name}</span>
+                        <div class="stat-row"><span class="stat-label">Traffic Swap:</span> <span class="stat-val-up">${row.sector_up.traffic_change}</span></div>
+                        <div class="stat-row"><span class="stat-label">CQI Status:</span> <span class="stat-val-down">${row.sector_up.cqi_change}</span></div>
+                    </div>
+                </td>
+                <td style="white-space: normal; line-height: 1.5; font-size: 12px; min-width: 200px;">${row.reasons}</td>
+                <td style="text-align:center;">
+                    <a href="/kpi-analytics?network=${net}&cell=${encodeURIComponent(row.sector_down.name + ',' + row.sector_up.name)}" target="_blank" class="btn-kpi">📈 Xem Biểu Đồ</a>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        renderPaginationControls();
+    }
+
+    function renderPaginationControls() {
+        const totalPages = Math.ceil(window.cachedData.length / window.rowsPerPage);
+        const controls = document.getElementById('pageControls');
+        controls.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        controls.insertAdjacentHTML('beforeend', `<button class="btn-page" onclick="goToPage(${window.currentPage - 1})" ${window.currentPage === 1 ? 'disabled' : ''}>&laquo;</button>`);
+
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= window.currentPage - 1 && i <= window.currentPage + 1)) {
+                controls.insertAdjacentHTML('beforeend', `<button class="btn-page ${window.currentPage === i ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
+            } else if (i === window.currentPage - 2 || i === window.currentPage + 2) {
+                controls.insertAdjacentHTML('beforeend', `<span style="padding: 5px;">...</span>`);
+            }
+        }
+
+        controls.insertAdjacentHTML('beforeend', `<button class="btn-page" onclick="goToPage(${window.currentPage + 1})" ${window.currentPage === totalPages ? 'disabled' : ''}>&raquo;</button>`);
+    }
+
+    function goToPage(page) {
+        const totalPages = Math.ceil(window.cachedData.length / window.rowsPerPage);
+        if (page >= 1 && page <= totalPages) {
+            window.currentPage = page;
+            renderTablePage();
+            document.querySelector('.table-wrapper').scrollTop = 0;
+        }
+    }
+
+    function changePageSize() {
+        window.rowsPerPage = parseInt(document.getElementById('pageSize').value);
+        window.currentPage = 1;
+        renderTablePage();
+    }
+
     function exportToExcel() {
-        if (!window.crossSectorData || window.crossSectorData.length === 0) return;
+        if (!window.cachedData || window.cachedData.length === 0) return;
         
-        let exportData = window.crossSectorData.map((r, i) => ({
+        let exportData = window.cachedData.map((r, i) => ({
             "STT": i + 1,
             "Mức Nghi Ngờ (%)": r.score,
             "Mã Trạm (Site)": r.site,
