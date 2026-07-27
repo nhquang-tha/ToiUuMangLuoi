@@ -1516,6 +1516,7 @@ exports.resetImportedData = async (req, res) => {
 // =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
 // Dựa trên 3 yếu tố: Traffic Swap, CQI Drop, HO Failure (Proxy qua Drop/Latency)
+// Đảm bảo tuyệt đối điều kiện vật lý: Cùng Site Code và Cùng Băng Tần
 // =========================================================================
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
@@ -1535,37 +1536,44 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI
+        // 2. Lấy dữ liệu KPI (Bổ sung việc gọi trực tiếp cột Site từ Database)
         let querySql = '';
         if (network === '4g') {
-            querySql = `SELECT Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate FROM kpi_4g WHERE Thoi_gian IN (${placeholders}) AND Cell_name NOT LIKE 'MBF_TH%'`;
+            querySql = `SELECT Site_name as site, Cell_name as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate FROM kpi_4g WHERE Thoi_gian IN (${placeholders}) AND Cell_name NOT LIKE 'MBF_TH%'`;
         } else {
-            querySql = `SELECT Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput FROM kpi_5g WHERE Thoi_gian IN (${placeholders}) AND Ten_CELL NOT LIKE 'MBF_TH%'`;
+            querySql = `SELECT Ten_GNODEB as site, Ten_CELL as cell, Thoi_gian as date, Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput FROM kpi_5g WHERE Thoi_gian IN (${placeholders}) AND Ten_CELL NOT LIKE 'MBF_TH%'`;
         }
 
         const [kpiData] = await db.query(querySql, targetDates);
 
-        // 3. Gom nhóm theo Site (Lấy mã lõi 6 ký tự để biết 2 sector nào chung 1 trạm)
+        // 3. Gom nhóm theo Site CHÍNH XÁC TỪ DATABASE
         const siteMap = {};
         kpiData.forEach(row => {
             const cell = row.cell;
             if (!cell) return;
-            const coreCode = cell.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
             
-            if (!siteMap[coreCode]) siteMap[coreCode] = {};
-            if (!siteMap[coreCode][cell]) siteMap[coreCode][cell] = { has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 };
+            // Ưu tiên dùng Site Code từ DB để nhóm chính xác 100%. 
+            // Nếu trạm nào bị null Site thì mới dùng Regex cắt 6 ký tự dự phòng.
+            let siteCode = row.site;
+            if (!siteCode) {
+                siteCode = cell.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
+            }
+            siteCode = String(siteCode).trim();
+            
+            if (!siteMap[siteCode]) siteMap[siteCode] = {};
+            if (!siteMap[siteCode][cell]) siteMap[siteCode][cell] = { has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 };
             
             if (row.date === t0) {
-                siteMap[coreCode][cell].t0_traffic = parseFloat(row.traffic) || 0;
-                siteMap[coreCode][cell].t0_prb = parseFloat(row.prb) || 0;
-                siteMap[coreCode][cell].t0_cqi = parseFloat(row.cqi) || 0;
-                siteMap[coreCode][cell].t0_thput = parseFloat(row.thput) || 0;
-                siteMap[coreCode][cell].t0_drop = parseFloat(row.drop_rate) || 0;
-                siteMap[coreCode][cell].has_t0 = true;
+                siteMap[siteCode][cell].t0_traffic = parseFloat(row.traffic) || 0;
+                siteMap[siteCode][cell].t0_prb = parseFloat(row.prb) || 0;
+                siteMap[siteCode][cell].t0_cqi = parseFloat(row.cqi) || 0;
+                siteMap[siteCode][cell].t0_thput = parseFloat(row.thput) || 0;
+                siteMap[siteCode][cell].t0_drop = parseFloat(row.drop_rate) || 0;
+                siteMap[siteCode][cell].has_t0 = true;
             } else {
-                siteMap[coreCode][cell].past_traffic += parseFloat(row.traffic) || 0;
-                siteMap[coreCode][cell].past_cqi += parseFloat(row.cqi) || 0;
-                siteMap[coreCode][cell].count_past++;
+                siteMap[siteCode][cell].past_traffic += parseFloat(row.traffic) || 0;
+                siteMap[siteCode][cell].past_cqi += parseFloat(row.cqi) || 0;
+                siteMap[siteCode][cell].count_past++;
             }
         });
 
@@ -1603,7 +1611,7 @@ exports.getCrossSectorData = async (req, res) => {
                 if (dropCells.length > 0 && spikeCells.length > 0) {
                     dropCells.forEach(dCell => {
                         spikeCells.forEach(sCell => {
-                            // BỘ LỌC 1: BẢO VỆ VẬT LÝ (KHÔNG CHO PHÉP CHÉO L1800 VỚI L900)
+                            // BỘ LỌC 1: BẢO VỆ VẬT LÝ (KHÔNG CHO PHÉP CHÉO KHÁC BĂNG TẦN)
                             const matchD = dCell.cell.match(/[A-Za-z](\d)\d$/);
                             const matchS = sCell.cell.match(/[A-Za-z](\d)\d$/);
                             if (matchD && matchS && matchD[1] !== matchS[1]) {
@@ -1611,7 +1619,6 @@ exports.getCrossSectorData = async (req, res) => {
                             }
 
                             // BỘ LỌC 2: KIỂM TRA ĐỘ KHỚP LƯU LƯỢNG (TRAFFIC VOLUME MATCH)
-                            // Sector D_Mới ~ Sector S_Cũ VÀ Sector S_Mới ~ Sector D_Cũ
                             let err_Dnew_Sold = Math.abs(dCell.t0_traffic - sCell.avgTraffic) / Math.max(sCell.avgTraffic, 1);
                             let err_Snew_Dold = Math.abs(sCell.t0_traffic - dCell.avgTraffic) / Math.max(dCell.avgTraffic, 1);
                             
@@ -1633,10 +1640,10 @@ exports.getCrossSectorData = async (req, res) => {
                                 reasons.push("Tỷ lệ rớt dịch vụ (Drop Rate) tăng vọt");
                             }
 
-                            // Đã qua được bộ lọc Volume Match khắt khe thì 50 điểm là đủ tin cậy để đưa lên bảng
+                            // Đã qua được 2 lớp lọc khắt khe thì 50 điểm là đủ tin cậy để đưa lên bảng
                             if (score >= 50) { 
                                 suspiciousSites.push({
-                                    site: site,
+                                    site: site, // Hiển thị đúng Site Code từ Database
                                     score: score,
                                     reasons: reasons.join(' + '),
                                     sector_down: {
