@@ -1513,13 +1513,14 @@ exports.resetImportedData = async (req, res) => {
     } catch (e) { res.status(500).send("Lỗi máy chủ khi xóa dữ liệu. Vui lòng thử lại."); }
 };
 
-// =========================================================================
+/ =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
-// Đảm bảo 4 nguyên tắc SIÊU KHẮT KHE:
+// Đảm bảo 5 nguyên tắc SIÊU KHẮT KHE:
 // 1. Không quét trạm MBF_TH
 // 2. Phải cùng chung 1 Site Code
-// 3. CHỈ so sánh L900, L1800, NR3700, NR700 (Loại bỏ 2100/2600...)
-// 4. Siết chặt sai số tráo đổi lưu lượng chỉ còn 25% (Volume Swap <= 25%)
+// 3. Phải cùng dải băng tần (L900, L1800, NR3700, NR700)
+// 4. KIỂM TRA PHẦN CỨNG: Bắt buộc cùng loại MIMO (VD: 4T4R không thể chéo 2T2R)
+// 5. Tráo đổi lưu lượng: Sai số Volume Swap <= 25%
 // =========================================================================
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
@@ -1539,11 +1540,11 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI
+        // 2. Lấy dữ liệu KPI (Lấy thêm MIMO từ Database)
         let querySql = '';
         if (network === '4g') {
             querySql = `
-                SELECT Site_name as site, CellType as cell_type, Cell_name as cell, Thoi_gian as date, 
+                SELECT Site_name as site, CellType as cell_type, MIMO as mimo_type, Cell_name as cell, Thoi_gian as date, 
                        Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, 
                        User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate 
                 FROM kpi_4g 
@@ -1551,8 +1552,9 @@ exports.getCrossSectorData = async (req, res) => {
                 AND Cell_name NOT LIKE 'MBF_TH%'
             `;
         } else {
+            // Đối với 5G, tùy cấu trúc DB của bạn, nếu bảng kpi_5g không có cột MIMO, ta sẽ gán 'Massive_MIMO' mặc định để bypass
             querySql = `
-                SELECT Ten_GNODEB as site, Loai_NE as cell_type, Ten_CELL as cell, Thoi_gian as date, 
+                SELECT Ten_GNODEB as site, Loai_NE as cell_type, 'Massive_MIMO' as mimo_type, Ten_CELL as cell, Thoi_gian as date, 
                        Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput 
                 FROM kpi_5g 
                 WHERE Thoi_gian IN (${placeholders}) 
@@ -1578,6 +1580,7 @@ exports.getCrossSectorData = async (req, res) => {
             if (!siteMap[siteCode][cell]) {
                 siteMap[siteCode][cell] = { 
                     cell_type: row.cell_type, 
+                    mimo_type: row.mimo_type, // Lưu lại chuẩn MIMO
                     has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 
                 };
             }
@@ -1603,7 +1606,6 @@ exports.getCrossSectorData = async (req, res) => {
             const cells = siteMap[site];
             let cellStats = [];
 
-            // Tính trung bình 7 ngày trước cho mỗi cell
             for (let cellName in cells) {
                 const c = cells[cellName];
                 if (!c.has_t0 || c.count_past === 0) continue;
@@ -1611,13 +1613,14 @@ exports.getCrossSectorData = async (req, res) => {
                 const avgTraffic = c.past_traffic / c.count_past;
                 const avgCqi = c.past_cqi / c.count_past;
                 
-                // Cắt nhiễu: Phải có Volume thực tế lớn hơn 5GB
                 if (avgTraffic > 5 || c.t0_traffic > 5) {
                     const deltaTraffic = ((c.t0_traffic - avgTraffic) / avgTraffic) * 100;
                     const deltaCqi = c.t0_cqi - avgCqi; 
                     
                     cellStats.push({ 
-                        cell: cellName, cell_type: c.cell_type,
+                        cell: cellName, 
+                        cell_type: c.cell_type,
+                        mimo_type: c.mimo_type,
                         avgTraffic, t0_traffic: c.t0_traffic, deltaTraffic,
                         t0_prb: c.t0_prb, t0_thput: c.t0_thput, t0_drop: c.t0_drop,
                         avgCqi, t0_cqi: c.t0_cqi, deltaCqi
@@ -1639,12 +1642,10 @@ exports.getCrossSectorData = async (req, res) => {
                             const getBand = (typeStr) => {
                                 if (!typeStr) return null;
                                 let s = String(typeStr).toUpperCase();
-                                // Chỉ chấp nhận 4 dải tần này
                                 if (s.includes('1800')) return '1800';
                                 if (s.includes('900')) return '900';
                                 if (s.includes('3700') || s.includes('3500')) return '3700'; 
                                 if (s.includes('700')) return '700';
-                                // Các băng tần khác -> Cắm nhãn loại trừ
                                 if (s.includes('2100') || s.includes('2600')) return 'INVALID';
                                 return null;
                             };
@@ -1652,32 +1653,43 @@ exports.getCrossSectorData = async (req, res) => {
                             let bandD = getBand(dCell.cell_type);
                             let bandS = getBand(sCell.cell_type);
 
-                            // Nếu phát hiện 2100 hoặc 2600 -> Lập tức Vứt bỏ
-                            if (bandD === 'INVALID' || bandS === 'INVALID') {
-                                return;
-                            }
+                            if (bandD === 'INVALID' || bandS === 'INVALID') return;
+                            if (bandD && bandS && bandD !== bandS) return; 
                             
-                            // Phải hoàn toàn cùng dải tần (L1800 chéo L1800, L900 chéo L900...)
-                            if (bandD && bandS && bandD !== bandS) {
-                                return; 
-                            }
-                            
-                            // Nếu DB bị Null, tự bắt mạch dựa vào đuôi của Tên Cell
                             if (!bandD || !bandS) {
                                 const matchD = dCell.cell.match(/[A-Za-z](\d)\d$/);
                                 const matchS = sCell.cell.match(/[A-Za-z](\d)\d$/);
-                                if (matchD && matchS && matchD[1] !== matchS[1]) {
-                                    return; // Khác dải số đuôi -> Vứt bỏ
-                                }
+                                if (matchD && matchS && matchD[1] !== matchS[1]) return;
                             }
 
                             // ==========================================
-                            // BỘ LỌC 2: SIẾT CHẶT ĐỘ KHỚP LƯU LƯỢNG XUỐNG 25%
+                            // BỘ LỌC 2: KIỂM TRA PHẦN CỨNG MIMO (4T4R vs 2T2R...)
+                            // ==========================================
+                            const getMimoStandard = (mimoStr) => {
+                                if (!mimoStr) return null; // Nếu CSDL Null thì đành bỏ qua để bypass
+                                let s = String(mimoStr).toUpperCase().trim();
+                                // Đưa về định dạng chuẩn để dễ so sánh
+                                if (s.includes('4T4R')) return '4T4R';
+                                if (s.includes('2T2R')) return '2T2R';
+                                if (s.includes('1T1R') || s.includes('1T2R')) return '1T_2T'; 
+                                if (s.includes('8T8R') || s.includes('MASSIVE')) return 'MMIMO';
+                                return s;
+                            };
+
+                            let mimoD = getMimoStandard(dCell.mimo_type);
+                            let mimoS = getMimoStandard(sCell.mimo_type);
+
+                            // Nếu cả 2 đều có giá trị MIMO nhưng khác nhau -> Vứt bỏ ngay lập tức!
+                            if (mimoD && mimoS && mimoD !== mimoS) {
+                                return;
+                            }
+
+                            // ==========================================
+                            // BỘ LỌC 3: SIẾT CHẶT ĐỘ KHỚP LƯU LƯỢNG (<= 25%)
                             // ==========================================
                             let err_Dnew_Sold = Math.abs(dCell.t0_traffic - sCell.avgTraffic) / Math.max(sCell.avgTraffic, 1);
                             let err_Snew_Dold = Math.abs(sCell.t0_traffic - dCell.avgTraffic) / Math.max(dCell.avgTraffic, 1);
                             
-                            // Nếu sai số > 25% -> Vứt bỏ (Chặn đứng các ca báo động giả)
                             if (err_Dnew_Sold > 0.25 || err_Snew_Dold > 0.25) {
                                 return; 
                             }
@@ -1685,13 +1697,11 @@ exports.getCrossSectorData = async (req, res) => {
                             let score = 50; 
                             let reasons = ["Tráo đổi lưu lượng (Độ khớp Volume cực cao <= 25%)"];
 
-                            // Chẩn đoán phụ: Suy giảm CQI
                             if (dCell.deltaCqi < -3 || sCell.deltaCqi < -3) {
                                 score += 25;
                                 reasons.push("Sụt giảm CQI đột ngột");
                             }
 
-                            // Chẩn đoán phụ: Lỗi Handover (Rớt dịch vụ)
                             if (network === '4g' && (dCell.t0_drop > 0.5 || sCell.t0_drop > 0.5)) {
                                 score += 25;
                                 reasons.push("Tỷ lệ rớt dịch vụ (HO Proxy) tăng vọt");
@@ -1720,11 +1730,9 @@ exports.getCrossSectorData = async (req, res) => {
             }
         }
 
-        // Lọc bỏ trùng lặp nếu A_B và B_A bị tính 2 lần
         const uniqueList = [];
         const seen = new Set();
         suspiciousSites.sort((a, b) => b.score - a.score).forEach(item => {
-            // Sắp xếp tên alphabet để khóa duy nhất (X_Y hoặc Y_X đều ra X_Y)
             let names = [item.sector_down.name, item.sector_up.name].sort();
             let key = names[0] + "_" + names[1];
             
