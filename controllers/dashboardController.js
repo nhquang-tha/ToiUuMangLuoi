@@ -1513,7 +1513,7 @@ exports.resetImportedData = async (req, res) => {
     } catch (e) { res.status(500).send("Lỗi máy chủ khi xóa dữ liệu. Vui lòng thử lại."); }
 };
 
-/ =========================================================================
+//=========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
 // Đảm bảo 5 nguyên tắc SIÊU KHẮT KHE:
 // 1. Không quét trạm MBF_TH
