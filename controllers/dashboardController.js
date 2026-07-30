@@ -850,48 +850,89 @@ exports.handleImportData = async (req, res) => {
                 if (headerString.includes('qoe_score') || headerString.includes('qoe rank') || headerString.includes('qoe_rank')) validationError = '❌ LỖI: Bạn chọn mục "Import Dịch vụ (QoS)" nhưng lại tải lên file Trải nghiệm (QoE).';
             }
 
-            if (validationError) {
+           if (validationError) {
                 return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: validationError });
             }
 
             let colMapping = [];
 
-            // ÁNH XẠ DỮ LIỆU ĐỘNG (KHÔNG TẠO CỘT THỪA VÀ ÁP DỤNG MỞ RỘNG TỪ KHÓA)
+            // ÁNH XẠ DỮ LIỆU ĐỘNG (KHÔNG TẠO CỘT THỪA VÀ ÁP DỤNG MỞ RỘNG TỪ KHÓA ĐỂ ĐỌC FILE MỚI)
             excelHeaders.forEach((exHeader, idx) => {
                 let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                 let mappedCol = null;
 
                 if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                    if (h === 'tỉnh' || h === 'ma_tinh' || h === 'tinh') mappedCol = 'Ma_Tinh';
+                    // 1. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
+                    if (h === 'tỉnh' || h === 'ma_tinh' || h === 'tinh' || h.includes('province')) mappedCol = 'Ma_Tinh';
                     else if (h === 'đơn vị' || h === 'don_vi' || h.includes('district') || h.includes('quận') || h.includes('huyện')) mappedCol = 'Don_Vi';
-                    else if (h === 'phường xã' || h === 'phuong_xa' || h.includes('phường') || h.includes('xã')) mappedCol = 'Phuong_Xa';
-                    else if (h === 'site' || h.includes('site name') || h === 'site_name' || h === 'tên site') mappedCol = 'Site_Name';
-                    else if (h === 'cell' || h.includes('cell name') || h === 'cell_name' || h === 'tên cell') mappedCol = 'Cell_Name';
-                    else if (h === 'cell_id' || h === 'cell id' || h === 'cellid') mappedCol = 'Cell_ID';
+                    else if (h === 'phường xã' || h === 'phuong_xa' || h.includes('phường') || h.includes('xã') || h.includes('ward')) mappedCol = 'Phuong_Xa';
+                    else if (h === 'site' || h.includes('site name') || h === 'site_name' || h === 'tên site' || h === 'site code') mappedCol = 'Site_Name';
+                    else if (h === 'cell' || h.includes('cell name') || h === 'cell_name' || h === 'tên cell' || h === 'cell code') mappedCol = 'Cell_Name';
+                    else if (h === 'cell_id' || h === 'cell id' || h === 'cellid' || h.includes('id cell')) mappedCol = 'Cell_ID';
                     
+                    // 2. Nhóm Điểm số & Xếp hạng (Core Metrics)
                     if (networkType === 'mbb_qoe') {
-                        if (h.includes('qoe score') || h.includes('qoe_score') || h === 'score' || h.includes('điểm') || h === 'qoe') mappedCol = 'QoE_Score';
-                        else if (h.includes('qoe rank') || h.includes('qoe_rank') || h === 'rank' || h.includes('hạng')) mappedCol = 'QoE_Rank';
-                    } else {
-                        if (h.includes('qos score') || h.includes('qos_score') || h === 'score' || h.includes('điểm') || h === 'qos') mappedCol = 'QoS_Score';
-                        else if (h.includes('qos rank') || h.includes('qos_rank') || h === 'rank' || h.includes('hạng')) mappedCol = 'QoS_Rank';
+                        if (h.includes('qoe score') || h.includes('qoe_score') || h === 'score' || h.includes('điểm qoe') || h === 'qoe' || h === 'điểm') mappedCol = 'QoE_Score';
+                        else if (h.includes('qoe rank') || h.includes('qoe_rank') || h === 'rank' || h.includes('hạng qoe') || h.includes('xếp hạng')) mappedCol = 'QoE_Rank';
+                    } else if (networkType === 'mbb_qos') {
+                        if (h.includes('qos score') || h.includes('qos_score') || h === 'score' || h.includes('điểm qos') || h === 'qos' || h === 'điểm') mappedCol = 'QoS_Score';
+                        else if (h.includes('qos rank') || h.includes('qos_rank') || h === 'rank' || h.includes('hạng qos') || h.includes('xếp hạng')) mappedCol = 'QoS_Rank';
                     }
 
-                    // Tự động quét các cột phụ trợ chuẩn khác (như Norm_Speed, Point_Latency...) nếu có trong Excel
+                    // 3. Nhóm Chỉ số thành phần của MBB QoS (Phủ sóng, Sẵn sàng, Truy cập, Giữ dịch vụ, Toàn vẹn)
+                    if (networkType === 'mbb_qos') {
+                        // Nhóm Coverage (Chất lượng vùng phủ)
+                        if (h.includes('coverage') || h.includes('vùng phủ') || h.includes('cov')) {
+                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Cov';
+                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Cov';
+                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Cov';
+                            else mappedCol = 'In_Cov';
+                        }
+                        // Nhóm Resource (Độ sẵn sàng tài nguyên)
+                        else if (h.includes('resource') || h.includes('tài nguyên') || h.includes('res')) {
+                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Res';
+                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Res';
+                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Res';
+                            else mappedCol = 'In_Res';
+                        }
+                        // Nhóm Accessibility (Khả năng truy cập)
+                        else if (h.includes('accessibility') || h.includes('truy cập') || h.includes('acc')) {
+                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Acc';
+                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Acc';
+                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Acc';
+                            else mappedCol = 'In_Acc';
+                        }
+                        // Nhóm Retainability (Khả năng duy trì / Rớt)
+                        else if (h.includes('retainability') || h.includes('duy trì') || h.includes('ret') || h.includes('drop')) {
+                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Ret';
+                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Ret';
+                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Ret';
+                            else mappedCol = 'In_Ret';
+                        }
+                        // Nhóm Integrity (Tính toàn vẹn dịch vụ)
+                        else if (h.includes('integrity') || h.includes('toàn vẹn') || h.includes('int')) {
+                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Int';
+                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Int';
+                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Int';
+                            else mappedCol = 'In_Int';
+                        }
+                    }
+
+                    // Tự động quét các trường hợp ngoại lệ khác chưa được bao phủ bên trên
                     if (!mappedCol) {
                         let safeName = createSafeColumnName(exHeader);
                         let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
                         if (exactMatch) mappedCol = exactMatch.original;
                     }
 
-                    // Đẩy dữ liệu vào mảng Map nếu nó nằm trong danh sách Cột Chuẩn
+                    // Đẩy dữ liệu vào mảng Map nếu nó nằm trong danh sách Cột Chuẩn (Sẵn sàng import)
                     if (mappedCol) {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                         if (dbMatch) {
                             colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
                         }
                     }
-                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác trong Excel như "Thực hiện", "Ghi chú"...
+                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác trong Excel
                 }
                 else if (networkType === 'kpi_3g') {
                     if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
