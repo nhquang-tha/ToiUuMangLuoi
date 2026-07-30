@@ -815,17 +815,44 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
                         rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
-                        headerRowIdx = i; break;
+                        headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
             }
 
             if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
+
+            // [NÂNG CẤP TỐI THƯỢNG]: GIẢI QUYẾT TÌNH TRẠNG MERGE CELL (TRỘN Ô) TRONG EXCEL
+            const baseHeaders = rawData[headerRowIdx];
+            const prevHeaders1 = headerRowIdx > 0 ? rawData[headerRowIdx - 1] : [];
+            const prevHeaders2 = headerRowIdx > 1 ? rawData[headerRowIdx - 2] : [];
+
+            let excelHeaders = [];
+            let lastP1 = '';
+            let lastP2 = '';
+
+            for(let c = 0; c < baseHeaders.length; c++) {
+                let h = String(baseHeaders[c] || '').trim();
+                
+                let p1Raw = prevHeaders1[c];
+                let p2Raw = prevHeaders2[c];
+                
+                // Thuật toán Fill-forward để lấy tiêu đề từ ô bị trộn (Merged Cell) phía trên
+                let p1 = (p1Raw !== undefined && p1Raw !== null && String(p1Raw).trim() !== '') ? String(p1Raw).trim() : lastP1;
+                let p2 = (p2Raw !== undefined && p2Raw !== null && String(p2Raw).trim() !== '') ? String(p2Raw).trim() : lastP2;
+                
+                lastP1 = p1;
+                lastP2 = p2;
+
+                if (h === '') {
+                    excelHeaders.push('');
+                } else {
+                    // Ghép tiêu đề cha và tiêu đề con lại thành 1 chuỗi dài để Regex dễ bắt bệnh
+                    excelHeaders.push(`${p2} ${p1} ${h}`.trim());
+                }
+            }
             
-            // Dữ liệu sẽ luôn quét từ dòng ngay sau Header
-            dataStartIdx = headerRowIdx + 1;
-            const excelHeaders = rawData[headerRowIdx];
-            
+            // TẮT HOÀN TOÀN AUTO-MIGRATION CHO QOE VÀ QOS (KHÔNG CHO TẠO CỘT MỚI RÁC)
             if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
@@ -875,21 +902,28 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
+            // ÁNH XẠ DỮ LIỆU ĐỘNG (ÁP DỤNG REGEX THÔNG MINH VÀ MERGE HEADER)
             excelHeaders.forEach((exHeader, idx) => {
                 if (exHeader === undefined || exHeader === null) return;
-                // Loại bỏ tất cả ký tự ẩn, khoảng trắng kép, xuống dòng \r\n
-                let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, '').trim();
-                if (h === '') return;
+                
+                // Tiêu đề đã được ghép cả cha lẫn con (Dùng cho Regex QoE/QoS)
+                let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
+                // Tiêu đề gốc (Dùng cho các cột thông thường)
+                let baseH = String(baseHeaders[idx] || '').toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
+                
+                if (baseH === '') return;
                 let mappedCol = null;
 
                 if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                    if (h.match(/^tỉnh$|^ma_tinh$|^tinh$|^ma tinh$|province/)) mappedCol = 'Ma_Tinh';
-                    else if (h.match(/^đơn vị$|^don_vi$|^don vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
-                    else if (h.match(/^phường xã$|^phuong_xa$|^phuong xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
-                    else if (h.match(/^site$|site name|site_name|tên site|site code/)) mappedCol = 'Site_Name';
-                    else if (h.match(/^cell$|cell name|cell_name|tên cell|cell code/)) mappedCol = 'Cell_Name';
-                    else if (h.match(/^cell_id$|^cell id$|^ci$|id cell|mã cell/)) mappedCol = 'Cell_ID';
+                    // 1. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
+                    if (baseH.match(/^tỉnh$|^ma_tinh$|^tinh$|^ma tinh$|province/)) mappedCol = 'Ma_Tinh';
+                    else if (baseH.match(/^đơn vị$|^don_vi$|^don vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
+                    else if (baseH.match(/^phường xã$|^phuong_xa$|^phuong xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
+                    else if (baseH.match(/^site$|site name|site_name|tên site|site code/)) mappedCol = 'Site_Name';
+                    else if (baseH.match(/^cell$|cell name|cell_name|tên cell|cell code/)) mappedCol = 'Cell_Name';
+                    else if (baseH.match(/^cell_id$|^cell id$|^ci$|id cell|mã cell/)) mappedCol = 'Cell_ID';
                     
+                    // 2. Nhóm Điểm số & Xếp hạng (Core Metrics)
                     if (networkType === 'mbb_qoe' && !mappedCol) {
                         if (h.match(/qoe.*score|điểm.*qoe|qoe.*điểm|score.*qoe|^qoe$/)) mappedCol = 'QoE_Score';
                         else if (h.match(/qoe.*rank|hạng.*qoe|qoe.*hạng|xếp hạng.*qoe|^rank$/)) mappedCol = 'QoE_Rank';
@@ -898,12 +932,15 @@ exports.handleImportData = async (req, res) => {
                         else if (h.match(/qos.*rank|hạng.*qos|qos.*hạng|xếp hạng.*qos|^rank$/)) mappedCol = 'QoS_Rank';
                     }
 
+                    // 3. Nhóm Chỉ số thành phần của MBB QoS & QoE
                     if ((networkType === 'mbb_qos' || networkType === 'mbb_qoe') && !mappedCol) {
+                        // Nhận diện tiền tố (Dựa trên chuỗi Header đã ghép cả cha lẫn con)
                         let prefix = 'In_'; 
                         if (h.match(/norm|chuẩn hóa|chuan hoa/)) prefix = 'Norm_';
-                        else if (h.match(/point|điểm|diem thanh phan/)) prefix = 'Point_';
+                        else if (h.match(/point|thành phần|thanh phan|điểm tp/)) prefix = 'Point_';
                         else if (h.match(/out|đầu ra|dau ra/)) prefix = 'Out_';
 
+                        // Ánh xạ các cột của bảng QoS
                         if (networkType === 'mbb_qos') {
                             if (h.match(/\bdl\b|vùng phủ|vung phu|rsrp|cov|coverage/)) mappedCol = prefix + 'DL';
                             else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
@@ -911,6 +948,7 @@ exports.handleImportData = async (req, res) => {
                             else if (h.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
                             else if (h.match(/int|toàn vẹn|toan ven|integrity|thput/)) mappedCol = prefix + 'Int';
                         } 
+                        // Ánh xạ các cột của bảng QoE
                         else if (networkType === 'mbb_qoe') {
                             if (h.match(/speed|tốc độ|toc do/)) mappedCol = prefix + 'Speed';
                             else if (h.match(/lat|độ trễ|do tre|ping|delay/)) mappedCol = prefix + 'Latency';
@@ -919,12 +957,15 @@ exports.handleImportData = async (req, res) => {
                         }
                     }
 
+                    // 4. Fallback
                     if (!mappedCol) {
-                        let safeName = createSafeColumnName(exHeader);
-                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
+                        let safeNameCombined = createSafeColumnName(exHeader);
+                        let safeNameBase = createSafeColumnName(baseHeaders[idx]);
+                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeNameCombined.toLowerCase() || c.original.toLowerCase() === safeNameBase.toLowerCase());
                         if (exactMatch) mappedCol = exactMatch.original;
                     }
 
+                    // 5. Đẩy dữ liệu vào Mapping
                     if (mappedCol) {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                         if (dbMatch) {
