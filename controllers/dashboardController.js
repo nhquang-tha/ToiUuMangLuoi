@@ -7,6 +7,7 @@ const getSafeFloat = (val) => {
     return isNaN(f) ? 0 : f;
 };
 
+/* STREAMING_CHUNK:Initializing Excel helper functions... */
 function fixSheetRange(sheet) {
     if (!sheet) return sheet;
     let range = { s: { c: 10000000, r: 10000000 }, e: { c: 0, r: 0 } };
@@ -53,6 +54,7 @@ const getInt = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
+/* STREAMING_CHUNK:Defining sorting and formatting helpers... */
 const sortWeeks = (weeksArray) => {
     return weeksArray.sort((a, b) => {
         let matchA = a.match(/Tuần (\d+) \((\d+)\)/);
@@ -92,6 +94,7 @@ const createSafeColumnName = (str) => {
     return normalizeStr(str);
 };
 
+/* STREAMING_CHUNK:Fetching KPI history data... */
 async function getKpiHistory() {
     try {
         const [rows3g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_3g');
@@ -122,6 +125,7 @@ async function getKpiHistory() {
     } catch (e) { return { kpi3g: [], kpi4g: [], kpi5g: [], qoeWeeks: [], qosWeeks: [] }; }
 }
 
+/* STREAMING_CHUNK:Aggregating dashboard data... */
 async function aggregateDashboardData() {
     try {
         console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
@@ -183,6 +187,7 @@ async function aggregateDashboardData() {
     }
 }
 
+/* STREAMING_CHUNK:Syncing worst cells caching... */
 async function syncWorstCells() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Worst Cells 4G...");
@@ -245,6 +250,7 @@ async function syncWorstCells() {
     }
 }
 
+/* STREAMING_CHUNK:Syncing 3G congestion caching... */
 async function syncCongestion3G() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Congestion 3G...");
@@ -302,6 +308,7 @@ async function syncCongestion3G() {
     }
 }
 
+/* STREAMING_CHUNK:Syncing traffic down caching... */
 async function syncTrafficDown() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Traffic Down...");
@@ -499,6 +506,7 @@ async function syncTrafficDown() {
     }
 }
 
+/* STREAMING_CHUNK:Syncing bad cells prioritization... */
 async function syncBadCells() {
     try {
         console.log("⏳ Bắt đầu phân tích Ma Trận Ưu Tiên Bad Cells (Luật 5/7 ngày)...");
@@ -549,6 +557,7 @@ async function syncBadCells() {
     }
 }
 
+/* STREAMING_CHUNK:Syncing QoE/QoS summary caching... */
 async function syncQoeQosSummary() {
     try {
         console.log("⏳ Bắt đầu tính toán cache QoE / QoS Summary...");
@@ -681,6 +690,7 @@ async function syncQoeQosSummary() {
     }
 }
 
+/* STREAMING_CHUNK:Base routing endpoints... */
 exports.renderPage = (pageName) => {
     return (req, res) => {
         let userRole = req.session && req.session.user ? req.session.user.role : 'user';
@@ -694,6 +704,7 @@ exports.getImportPage = async (req, res) => {
     res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: null });
 };
 
+/* STREAMING_CHUNK:Executing dynamic import mapping and parsing... */
 exports.handleImportData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     let history = await getKpiHistory();
@@ -732,7 +743,7 @@ exports.handleImportData = async (req, res) => {
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
         const standardCols = networkType === 'mbb_qoe' 
             ? ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qoe_score', 'qoe_rank', 'norm_speed', 'norm_latency', 'norm_jitter', 'norm_packetloss', 'point_speed', 'point_latency', 'point_jitter', 'point_packetloss', 'out_speed', 'out_latency', 'out_jitter', 'out_packetloss', 'in_speed', 'in_latency', 'in_jitter', 'in_packetloss', 'created_at']
-            : ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qos_score', 'qos_rank', 'norm_res', 'norm_acc', 'norm_ret', 'norm_int', 'norm_cov', 'point_res', 'point_acc', 'point_ret', 'point_int', 'point_cov', 'out_res', 'out_acc', 'out_ret', 'out_int', 'out_cov', 'in_res', 'in_acc', 'in_ret', 'in_int', 'in_cov', 'created_at'];
+            : ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qos_score', 'qos_rank', 'norm_res', 'norm_acc', 'norm_ret', 'norm_int', 'norm_dl', 'point_res', 'point_acc', 'point_ret', 'point_int', 'point_dl', 'out_res', 'out_acc', 'out_ret', 'out_int', 'out_dl', 'in_res', 'in_acc', 'in_ret', 'in_int', 'in_dl', 'created_at'];
 
         let colsToDrop = dbCols.filter(col => !standardCols.includes(col.original.toLowerCase()));
         
@@ -773,33 +784,45 @@ exports.handleImportData = async (req, res) => {
             let headerRowIdx = -1;
             let dataStartIdx = -1;
 
-            // [NÂNG CẤP]: THUẬT TOÁN QUÉT DÒNG ĐỘNG CHO FILE CŨ & MỚI
+            // [NÂNG CẤP]: THUẬT TOÁN QUÉT DÒNG ĐỘNG BẤT CHẤP FILE CŨ & MỚI
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                // Bước 1: Quét tìm dòng chứa Tiêu đề (Header)
+                // Bước 1: Quét tìm dòng chứa Tiêu đề (Header) chính xác nhất dựa trên số lượng từ khóa
+                let bestHeaderIdx = -1;
+                let maxMatch = 0;
                 for (let i = 0; i < Math.min(30, rawData.length); i++) {
                     if (!rawData[i]) continue;
-                    const rowStr = JSON.stringify(rawData[i]).toLowerCase();
-                    if (rowStr.includes('cell name') || rowStr.includes('tên cell') || rowStr.includes('site name')) {
-                        headerRowIdx = i; 
-                        break;
+                    let rowStr = rawData[i].map(x => String(x).toLowerCase()).join(' ');
+                    let matchCount = 0;
+                    if (rowStr.includes('cell') || rowStr.includes('site')) matchCount++;
+                    if (rowStr.includes('tỉnh') || rowStr.includes('tinh') || rowStr.includes('ma_tinh') || rowStr.includes('ma tinh')) matchCount++;
+                    if (rowStr.includes('qoe') || rowStr.includes('qos') || rowStr.includes('score') || rowStr.includes('rank')) matchCount++;
+                    if (rowStr.includes('norm') || rowStr.includes('point') || rowStr.includes('dl') || rowStr.includes('cov') || rowStr.includes('acc')) matchCount++;
+                    
+                    if (matchCount > maxMatch && matchCount >= 2) {
+                        maxMatch = matchCount;
+                        bestHeaderIdx = i;
                     }
                 }
+                if (bestHeaderIdx !== -1) headerRowIdx = bestHeaderIdx;
                 
                 // Bước 2: Quét tìm dòng bắt đầu Dữ liệu thật (Data Start)
                 if (headerRowIdx !== -1) {
                     dataStartIdx = headerRowIdx + 1; // Fallback mặc định
-                    for (let i = headerRowIdx + 1; i < Math.min(headerRowIdx + 20, rawData.length); i++) {
+                    for (let i = headerRowIdx + 1; i < Math.min(headerRowIdx + 30, rawData.length); i++) {
                         if (!rawData[i]) continue;
-                        let firstCol = String(rawData[i][0] || '').trim();
-                        let secondCol = String(rawData[i][1] || '').trim();
-                        let thirdCol = String(rawData[i][2] || '').trim();
+                        let isDataRow = false;
                         
-                        // Dấu hiệu nhận biết dòng dữ liệu thực tế đầu tiên:
-                        // Cột STT = '1' HOẶC các cột đầu tiên chứa định dạng mã trạm 3G/4G/5G
-                        if (firstCol === '1' || firstCol === '01' || 
-                            firstCol.match(/^(3G|4G|5G)/i) || 
-                            secondCol.match(/^(3G|4G|5G)/i) || 
-                            thirdCol.match(/^(3G|4G|5G)/i)) {
+                        // Quét 15 cột đầu tiên của hàng này để tìm STT = 1 hoặc Tên trạm
+                        for(let c = 0; c < Math.min(15, rawData[i].length); c++) {
+                            let cellVal = String(rawData[i][c] || '').trim().toUpperCase();
+                            // Dấu hiệu nhận biết dòng dữ liệu thực tế đầu tiên
+                            if (cellVal === '1' || cellVal === '01' || cellVal.startsWith('3G') || cellVal.startsWith('4G') || cellVal.startsWith('5G')) {
+                                isDataRow = true;
+                                break;
+                            }
+                        }
+                        
+                        if (isDataRow) {
                             dataStartIdx = i;
                             break;
                         }
@@ -879,14 +902,16 @@ exports.handleImportData = async (req, res) => {
 
             // ÁNH XẠ DỮ LIỆU ĐỘNG (ÁP DỤNG REGEX THÔNG MINH ĐỂ ĐỌC FILE CŨ VÀ MỚI)
             excelHeaders.forEach((exHeader, idx) => {
+                if (exHeader === undefined || exHeader === null) return;
                 let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
+                if (h === '') return;
                 let mappedCol = null;
 
                 if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                     // 1. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
-                    if (h.match(/^tỉnh$|^ma_tinh$|^tinh$|province/)) mappedCol = 'Ma_Tinh';
-                    else if (h.match(/^đơn vị$|^don_vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
-                    else if (h.match(/^phường xã$|^phuong_xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
+                    if (h.match(/^tỉnh$|^ma_tinh$|^tinh$|^ma tinh$|province/)) mappedCol = 'Ma_Tinh';
+                    else if (h.match(/^đơn vị$|^don_vi$|^don vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
+                    else if (h.match(/^phường xã$|^phuong_xa$|^phuong xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
                     else if (h.match(/^site$|site name|site_name|tên site|site code/)) mappedCol = 'Site_Name';
                     else if (h.match(/^cell$|cell name|cell_name|tên cell|cell code/)) mappedCol = 'Cell_Name';
                     else if (h.match(/^cell_id$|^cell id$|^ci$|id cell|mã cell/)) mappedCol = 'Cell_ID';
@@ -910,8 +935,7 @@ exports.handleImportData = async (req, res) => {
 
                         // Ánh xạ các cột của bảng QoS
                         if (networkType === 'mbb_qos') {
-                            // CẬP NHẬT: Đổi 'Cov' thành 'DL' theo yêu cầu
-                            if (h.match(/dl|vùng phủ|vung phu|rsrp|cov/)) mappedCol = prefix + 'DL';
+                            if (h.match(/\bdl\b|vùng phủ|vung phu|rsrp|cov/)) mappedCol = prefix + 'DL';
                             else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
                             else if (h.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
                             else if (h.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
@@ -943,7 +967,7 @@ exports.handleImportData = async (req, res) => {
                             }
                         }
                     }
-                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác (VD: "Ghi chú", "Thực hiện")
+                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác trong Excel
                 }
                 else if (networkType === 'kpi_3g') {
                     if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
@@ -1230,6 +1254,7 @@ exports.handleImportData = async (req, res) => {
     });
 };
 
+/* STREAMING_CHUNK:Base data retrieval APIs... */
 exports.getDistricts = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT DISTINCT District_code FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != "" ORDER BY District_code');
@@ -1439,6 +1464,7 @@ exports.getPoiData = async (req, res) => {
     }
 };
 
+/* STREAMING_CHUNK:Additional KPIs and QoE/QoS data getters... */
 exports.getKpiData = async (req, res) => {
     const { network, type, value } = req.query;
     if (!network || !type || !value) return res.json([]);
@@ -1594,14 +1620,9 @@ exports.resetImportedData = async (req, res) => {
     } catch (e) { res.status(500).send("Lỗi máy chủ khi xóa dữ liệu. Vui lòng thử lại."); }
 };
 
+/* STREAMING_CHUNK:Executing Cross Sector algorithmic matching... */
 // =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
-// Đảm bảo 5 nguyên tắc SIÊU KHẮT KHE:
-// 1. Không quét trạm MBF_TH
-// 2. Phải cùng chung 1 Site Code
-// 3. Phải cùng dải băng tần (L900, L1800, NR3700, NR700)
-// 4. KIỂM TRA PHẦN CỨNG: Bắt buộc cùng loại MIMO (VD: 4T4R không thể chéo 2T2R)
-// 5. Tráo đổi lưu lượng: Sai số Volume Swap <= 25%
 // =========================================================================
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
@@ -1621,7 +1642,7 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
-        // 2. Lấy dữ liệu KPI (Lấy thêm MIMO từ Database)
+        // 2. Lấy dữ liệu KPI
         let querySql = '';
         if (network === '4g') {
             querySql = `
@@ -1633,7 +1654,6 @@ exports.getCrossSectorData = async (req, res) => {
                 AND Cell_name NOT LIKE 'MBF_TH%'
             `;
         } else {
-            // Đối với 5G, tùy cấu trúc DB của bạn, nếu bảng kpi_5g không có cột MIMO, ta sẽ gán 'Massive_MIMO' mặc định để bypass
             querySql = `
                 SELECT Ten_GNODEB as site, Loai_NE as cell_type, 'Massive_MIMO' as mimo_type, Ten_CELL as cell, Thoi_gian as date, 
                        Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput 
@@ -1661,7 +1681,7 @@ exports.getCrossSectorData = async (req, res) => {
             if (!siteMap[siteCode][cell]) {
                 siteMap[siteCode][cell] = { 
                     cell_type: row.cell_type, 
-                    mimo_type: row.mimo_type, // Lưu lại chuẩn MIMO
+                    mimo_type: row.mimo_type, 
                     has_t0: false, past_traffic: 0, past_cqi: 0, count_past: 0 
                 };
             }
@@ -1682,7 +1702,6 @@ exports.getCrossSectorData = async (req, res) => {
 
         const suspiciousSites = [];
 
-        // 4. Thuật toán Đối soát
         for (let site in siteMap) {
             const cells = siteMap[site];
             let cellStats = [];
@@ -1716,10 +1735,6 @@ exports.getCrossSectorData = async (req, res) => {
                 if (dropCells.length > 0 && spikeCells.length > 0) {
                     dropCells.forEach(dCell => {
                         spikeCells.forEach(sCell => {
-                            
-                            // ==========================================
-                            // BỘ LỌC 1: KIỂM TRA BĂNG TẦN L900/L1800/NR3700/NR700
-                            // ==========================================
                             const getBand = (typeStr) => {
                                 if (!typeStr) return null;
                                 let s = String(typeStr).toUpperCase();
@@ -1743,13 +1758,9 @@ exports.getCrossSectorData = async (req, res) => {
                                 if (matchD && matchS && matchD[1] !== matchS[1]) return;
                             }
 
-                            // ==========================================
-                            // BỘ LỌC 2: KIỂM TRA PHẦN CỨNG MIMO (4T4R vs 2T2R...)
-                            // ==========================================
                             const getMimoStandard = (mimoStr) => {
-                                if (!mimoStr) return null; // Nếu CSDL Null thì đành bỏ qua để bypass
+                                if (!mimoStr) return null; 
                                 let s = String(mimoStr).toUpperCase().trim();
-                                // Đưa về định dạng chuẩn để dễ so sánh
                                 if (s.includes('4T4R')) return '4T4R';
                                 if (s.includes('2T2R')) return '2T2R';
                                 if (s.includes('1T1R') || s.includes('1T2R')) return '1T_2T'; 
@@ -1760,14 +1771,10 @@ exports.getCrossSectorData = async (req, res) => {
                             let mimoD = getMimoStandard(dCell.mimo_type);
                             let mimoS = getMimoStandard(sCell.mimo_type);
 
-                            // Nếu cả 2 đều có giá trị MIMO nhưng khác nhau -> Vứt bỏ ngay lập tức!
                             if (mimoD && mimoS && mimoD !== mimoS) {
                                 return;
                             }
 
-                            // ==========================================
-                            // BỘ LỌC 3: SIẾT CHẶT ĐỘ KHỚP LƯU LƯỢNG (<= 25%)
-                            // ==========================================
                             let err_Dnew_Sold = Math.abs(dCell.t0_traffic - sCell.avgTraffic) / Math.max(sCell.avgTraffic, 1);
                             let err_Snew_Dold = Math.abs(sCell.t0_traffic - dCell.avgTraffic) / Math.max(dCell.avgTraffic, 1);
                             
@@ -1816,7 +1823,6 @@ exports.getCrossSectorData = async (req, res) => {
         suspiciousSites.sort((a, b) => b.score - a.score).forEach(item => {
             let names = [item.sector_down.name, item.sector_up.name].sort();
             let key = names[0] + "_" + names[1];
-            
             if (!seen.has(key)) { seen.add(key); uniqueList.push(item); }
         });
 
