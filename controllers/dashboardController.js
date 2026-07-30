@@ -871,7 +871,7 @@ exports.handleImportData = async (req, res) => {
                 if (headerString.includes('qoe_score') || headerString.includes('qoe rank') || headerString.includes('qoe_rank')) validationError = '❌ LỖI: Bạn chọn mục "Import Dịch vụ (QoS)" nhưng lại tải lên file Trải nghiệm (QoE).';
             }
 
-           if (validationError) {
+            if (validationError) {
                 return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: validationError });
             }
 
@@ -910,7 +910,8 @@ exports.handleImportData = async (req, res) => {
 
                         // Ánh xạ các cột của bảng QoS
                         if (networkType === 'mbb_qos') {
-                            if (h.match(/cov|vùng phủ|vung phu|rsrp/)) mappedCol = prefix + 'Cov';
+                            // CẬP NHẬT: Đổi 'Cov' thành 'DL' theo yêu cầu
+                            if (h.match(/dl|vùng phủ|vung phu|rsrp|cov/)) mappedCol = prefix + 'DL';
                             else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
                             else if (h.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
                             else if (h.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
