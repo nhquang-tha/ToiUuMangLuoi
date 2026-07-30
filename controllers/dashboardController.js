@@ -1,15 +1,31 @@
 const db = require('../models/db');
 const xlsx = require('xlsx');
 
-// Hàm bổ trợ: Biến đổi thông minh cho số thập phân (Hỗ trợ cả 99,5 và 1,000.5)
+// Hàm bổ trợ: Biến đổi thông minh cho số thập phân (Bao thầu mọi định dạng US/VN)
 const getSafeFloat = (val) => {
     if (val === undefined || val === null || val === '') return 0;
-    let s = String(val).trim();
-    if (s.includes(',') && !s.includes('.')) {
-        s = s.replace(/,/g, '.'); // Đổi 99,5 thành 99.5
-    } else if (s.includes(',') && s.includes('.')) {
-        s = s.replace(/,/g, ''); // Đổi 1,000.5 thành 1000.5
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    
+    // Loại bỏ dấu nháy kép/nháy đơn nếu có từ file CSV
+    let s = String(val).trim().replace(/['"]/g, '');
+    
+    if (s.includes('.') && s.includes(',')) {
+        let lastDot = s.lastIndexOf('.');
+        let lastComma = s.lastIndexOf(',');
+        if (lastComma > lastDot) {
+            // Định dạng VN: 1.234,56 -> Xóa chấm, đổi phẩy thành chấm
+            s = s.replace(/\./g, '').replace(/,/g, '.');
+        } else {
+            // Định dạng US: 1,234.56 -> Xóa phẩy
+            s = s.replace(/,/g, '');
+        }
+    } else if (s.includes(',')) {
+        // Nếu chỉ có phẩy (VD: 99,5) -> Đổi thành chấm
+        s = s.replace(/,/g, '.');
     }
+    
+    // Chỉ giữ lại số, dấu chấm và dấu trừ
+    s = s.replace(/[^0-9.-]/g, '');
     const f = parseFloat(s);
     return isNaN(f) ? 0 : f;
 };
@@ -38,7 +54,7 @@ function fixSheetRange(sheet) {
 
 function parseDateToSortableInteger(val) {
     if (!val) return 0;
-    let s = String(val).trim();
+    let s = String(val).trim().replace(/['"]/g, '');
     let parts = s.split('/');
     if (parts.length === 3) {
         let d = parts[0].padStart(2, '0');
@@ -75,7 +91,7 @@ const formatExcelDate = (excelDate) => {
         const y = date.getFullYear();
         return `${d}/${m}/${y}`;
     }
-    return excelDate; 
+    return String(excelDate).replace(/['"]/g, ''); 
 };
 
 const normalizeStr = (str) => {
@@ -85,6 +101,7 @@ const normalizeStr = (str) => {
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "") 
         .replace(/đ/g, 'd')             
+        .replace(/['"]/g, "") // Lột dấu nháy khỏi CSV
         .replace(/[^a-z0-9_]/g, '_')    
         .replace(/_+/g, '_')            
         .replace(/^_|_$/g, '');         
@@ -739,7 +756,7 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
-    // [NÂNG CẤP BẢO VỆ CỘT]: Dọn dẹp rác nhưng giữ lại chính xác các cột _DL
+    // DỌN RÁC & CỘT LỖI TỰ ĐỘNG
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
         const standardCols = networkType === 'mbb_qoe' 
             ? ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qoe_score', 'qoe_rank', 'norm_speed', 'norm_latency', 'norm_jitter', 'norm_packetloss', 'point_speed', 'point_latency', 'point_jitter', 'point_packetloss', 'out_speed', 'out_latency', 'out_jitter', 'out_packetloss', 'in_speed', 'in_latency', 'in_jitter', 'in_packetloss', 'created_at']
@@ -751,9 +768,7 @@ exports.handleImportData = async (req, res) => {
             try {
                 await db.query(`ALTER TABLE ${networkType} DROP COLUMN \`${col.original}\``);
                 console.log(`🗑️ Đã xóa cột rác tự tạo: ${col.original} khỏi bảng ${networkType}`);
-            } catch (e) {
-                console.error(`Lỗi khi xóa cột ${col.original}:`, e.message);
-            }
+            } catch (e) {}
         }
 
         if (colsToDrop.length > 0) {
@@ -780,35 +795,80 @@ exports.handleImportData = async (req, res) => {
             let rawData = xlsx.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
             if (rawData.length === 0) continue;
 
-            // Xử lý CSV nếu file dùng dấu chấm phẩy làm vách ngăn
-            if (rawData.length > 0 && rawData[0].length === 1 && String(rawData[0][0]).includes(';')) {
-                rawData = rawData.map(row => row.length > 0 ? String(row[0]).split(';') : []);
-            }
-
-            let headerRowIdx = -1;
             let dataStartIdx = -1;
-
-            // [TỐI ƯU TUYỆT ĐỐI]: TÌM DÒNG HEADER TRƯỚC TIÊN ĐỂ BAO THẦU CẢ CSV VÀ EXCEL
-            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                let bestHeaderIdx = -1;
-                let maxMatch = 0;
-                for (let i = 0; i < Math.min(30, rawData.length); i++) {
-                    if (!rawData[i]) continue;
-                    let rowStr = rawData[i].map(x => String(x).toLowerCase()).join(' ');
-                    let matchCount = 0;
-                    
-                    if (rowStr.includes('cell') || rowStr.includes('site')) matchCount++;
-                    if (rowStr.includes('tỉnh') || rowStr.includes('tinh') || rowStr.includes('ma_tinh') || rowStr.includes('province')) matchCount++;
-                    if (rowStr.includes('qoe') || rowStr.includes('qos') || rowStr.includes('score') || rowStr.includes('rank') || rowStr.includes('tổng hợp') || rowStr.includes('dl')) matchCount++;
-                    if (rowStr.includes('norm') || rowStr.includes('point') || rowStr.includes('cov') || rowStr.includes('acc') || rowStr.includes('chuẩn hóa') || rowStr.includes('thành phần')) matchCount++;
-                    
-                    if (matchCount > maxMatch && matchCount >= 2) {
-                        maxMatch = matchCount;
-                        bestHeaderIdx = i;
+            let excelHeaders = [];
+            
+            // Xử lý Unmerge cell cho Excel
+            const merges = sheet['!merges'] || [];
+            merges.forEach(merge => {
+                if (merge.s.r > 15) return; 
+                let val = rawData[merge.s.r] ? rawData[merge.s.r][merge.s.c] : undefined;
+                if (val === undefined || val === null || val === '') return;
+                
+                for (let r = merge.s.r; r <= merge.e.r; r++) {
+                    if (!rawData[r]) rawData[r] = [];
+                    for (let c = merge.s.c; c <= merge.e.c; c++) {
+                        rawData[r][c] = val; 
                     }
                 }
-                if (bestHeaderIdx !== -1) headerRowIdx = bestHeaderIdx;
+            });
+
+            // THUẬT TOÁN TÌM DÒNG DỮ LIỆU ĐẦU TIÊN (Bao thầu CSV và XLSX)
+            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+                for (let i = 0; i < Math.min(40, rawData.length); i++) {
+                    let row = rawData[i];
+                    if (!row) continue;
+                    let firstCellStr = String(row[0] || '').trim().toLowerCase();
+                    if (firstCellStr === 'summary' || firstCellStr.includes('không thành công') || firstCellStr.includes('phân trang')) continue;
+
+                    let isDataRow = false;
+                    let numberCount = 0;
+
+                    // Đếm số lượng dữ liệu dạng số (hỗ trợ cả dấu phẩy tiếng Việt)
+                    for (let c = 0; c < row.length; c++) {
+                        let val = String(row[c] || '').replace(/['"]/g, '').replace(/,/g, '.');
+                        if (!isNaN(parseFloat(val))) numberCount++;
+                    }
+                    
+                    if (numberCount >= 8) {
+                        isDataRow = true;
+                    } else {
+                        // Backup check: Quét tìm mã trạm hoặc số thứ tự
+                        for(let c = 0; c < Math.min(15, row.length); c++) {
+                            let cellVal = String(row[c] || '').trim().replace(/['"]/g, '').toUpperCase();
+                            if (cellVal === '1' || cellVal === '01' || (c === 0 && !isNaN(parseInt(cellVal))) || cellVal.match(/^(3G|4G|5G)/)) {
+                                if (!cellVal.includes('CELL') && !cellVal.includes('SITE') && !cellVal.includes('NAME') && !cellVal.includes('RANK') && !cellVal.includes('SCORE') && !cellVal.includes('ĐIỂM')) {
+                                    isDataRow = true; break;
+                                }
+                            }
+                        }
+                    }
+                    if (isDataRow) {
+                        dataStartIdx = i; break;
+                    }
+                }
+
+                if (dataStartIdx === -1 || dataStartIdx === 0) continue;
+
+                // THUẬT TOÁN QUÉT DỌC VÀ TRÁM Ô (Rã đông Merged Cells)
+                let maxCols = 0;
+                for (let r = 0; r < dataStartIdx; r++) {
+                    if (rawData[r] && rawData[r].length > maxCols) maxCols = rawData[r].length;
+                }
+
+                for (let c = 0; c < maxCols; c++) {
+                    let colTexts = [];
+                    for (let r = 0; r < dataStartIdx; r++) {
+                        if (rawData[r] && rawData[r][c] !== undefined && rawData[r][c] !== null) {
+                            // Lột sạch dấu nháy kép ẩn của file CSV tải từ hệ thống DB
+                            let txt = String(rawData[r][c]).toLowerCase().replace(/['"]/g, '').replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
+                            if (txt && !colTexts.includes(txt)) colTexts.push(txt);
+                        }
+                    }
+                    excelHeaders.push(colTexts.join(' | '));
+                }
             } else {
+                let headerRowIdx = -1;
                 for (let i = 0; i < Math.min(30, rawData.length); i++) {
                     if (!rawData[i]) continue;
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
@@ -820,62 +880,28 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
                         rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
-                        headerRowIdx = i; break;
+                        headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
-            }
-
-            if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
-            
-            dataStartIdx = headerRowIdx + 1; // Mọi dòng bên dưới Header sẽ được quét tìm dữ liệu
-
-            let excelHeaders = [];
-            let h3_base = [];
-
-            // Thuật toán Fill-forward (Rã đông Merged Cells) gom 3 dòng tiêu đề lại
-            const h1 = headerRowIdx >= 2 ? rawData[headerRowIdx - 2] : [];
-            const h2 = headerRowIdx >= 1 ? rawData[headerRowIdx - 1] : [];
-            const h3 = rawData[headerRowIdx];
-            h3_base = h3;
-
-            let lastP1 = '';
-            let lastP2 = '';
-            const maxCols = Math.max(h1 ? h1.length : 0, h2 ? h2.length : 0, h3 ? h3.length : 0);
-
-            for (let c = 0; c < maxCols; c++) {
-                let v1 = (h1 && h1[c] !== undefined && h1[c] !== null && String(h1[c]).trim() !== '') ? String(h1[c]).trim() : lastP1;
-                let v2 = (h2 && h2[c] !== undefined && h2[c] !== null && String(h2[c]).trim() !== '') ? String(h2[c]).trim() : lastP2;
-                let v3 = (h3 && h3[c] !== undefined && h3[c] !== null) ? String(h3[c]).trim() : '';
-                
-                lastP1 = v1;
-                lastP2 = v2;
-
-                if (v1 === '' && v2 === '' && v3 === '') {
-                    excelHeaders.push('');
-                } else {
-                    let combinedHeader = `${v1} ${v2} ${v3}`.trim().replace(/\s+/g, ' ');
-                    excelHeaders.push(combinedHeader);
-                }
+                if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
+                excelHeaders = rawData[headerRowIdx].map(h => String(h || '').replace(/['"]/g, '').trim());
             }
 
             if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
-                    if (!h) continue;
-                    let safeName = createSafeColumnName(h);
+                    let lastWord = h.split('|').pop().trim();
+                    if (!lastWord) continue;
+                    let safeName = createSafeColumnName(lastWord);
                     if (!safeName) continue;
-                    
-                    let normH = normalizeStr(h);
+                    let normH = normalizeStr(lastWord);
                     let exists = dbCols.some(c => c.norm === normH || c.original.toLowerCase() === safeName.toLowerCase());
-                    
                     if (!exists) {
                         try {
                             console.log(`⚡ Auto-Migration: Thêm cột mới [${safeName}] vào bảng ${networkType}`);
                             await db.query(`ALTER TABLE ${networkType} ADD COLUMN \`${safeName}\` VARCHAR(255)`);
                             isSchemaChanged = true;
-                        } catch (e) {
-                            console.error(`Lỗi tạo cột ${safeName}:`, e.message);
-                        }
+                        } catch (e) { console.error(`Lỗi tạo cột ${safeName}:`, e.message); }
                     }
                 }
                 if (isSchemaChanged) {
@@ -907,195 +933,179 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
-            // [NÂNG CẤP TUYỆT ĐỐI] - ÁNH XẠ THÔNG MINH KẾT HỢP DÒ TÌM TRỰC TIẾP
-            excelHeaders.forEach((exHeader, idx) => {
-                if (exHeader === undefined || exHeader === null || exHeader === '') return;
-                
-                let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
-                let baseH = String(h3_base[idx] || '').toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
-                
-                if (h === '') return;
+            // ÁNH XẠ THÔNG MINH
+            excelHeaders.forEach((colStr, idx) => {
+                if (!colStr) return;
                 let mappedCol = null;
 
-                // 1. Dò tìm CHÍNH XÁC tên cột trong Database trước (Rất hiệu quả với file xuất từ hệ thống)
-                let directMatch = dbCols.find(c => 
-                    c.original.toLowerCase() === baseH || 
-                    c.original.toLowerCase() === h ||
-                    c.original.toLowerCase() === baseH.replace(/ /g, '_') ||
-                    c.original.toLowerCase() === h.replace(/ /g, '_')
-                );
+                // 1. Dò tìm trực tiếp với Database (Áp dụng cho file CSV export từ hệ thống)
+                let exactMatch = dbCols.find(dbC => {
+                    let orig = dbC.original.toLowerCase();
+                    return colStr.includes(orig) || colStr.includes(orig.replace(/_/g, ' '));
+                });
 
-                if (directMatch) {
-                    mappedCol = directMatch.original;
-                } 
+                if (exactMatch) {
+                    mappedCol = exactMatch.original;
+                }
                 else if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                    // 2. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
-                    if (baseH.match(/^tỉnh$|^ma_tinh$|^tinh$|^ma tinh$|province/)) mappedCol = 'Ma_Tinh';
-                    else if (baseH.match(/^đơn vị$|^don_vi$|^don vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
-                    else if (baseH.match(/^phường xã$|^phuong_xa$|^phuong xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
-                    else if (baseH.match(/^site$|site name|site_name|tên site|site code/)) mappedCol = 'Site_Name';
-                    else if (baseH.match(/^cell$|cell name|cell_name|tên cell|cell code/)) mappedCol = 'Cell_Name';
-                    else if (baseH.match(/^cell_id$|^cell id$|^ci$|id cell|mã cell/)) mappedCol = 'Cell_ID';
+                    // 2. Nhóm Không gian
+                    if (colStr.match(/\btỉnh\b|\bma_tinh\b|\btinh\b|\bprovince\b/)) mappedCol = 'Ma_Tinh';
+                    else if (colStr.match(/\bđơn vị\b|\bdon_vi\b|\bdon vi\b|\bdistrict\b|\bquận\b|\bhuyện\b/)) mappedCol = 'Don_Vi';
+                    else if (colStr.match(/\bphường xã\b|\bphuong_xa\b|\bphuong xa\b|\bphường\b|\bxã\b|\bward\b/)) mappedCol = 'Phuong_Xa';
+                    else if (colStr.match(/\bsite\b|\bsite name\b|\bsite_name\b|\btên site\b|\bsite code\b/)) mappedCol = 'Site_Name';
+                    else if (colStr.match(/\bcell\b|\bcell name\b|\bcell_name\b|\btên cell\b|\bcell code\b/)) mappedCol = 'Cell_Name';
+                    else if (colStr.match(/\bcell_id\b|\bcell id\b|\bci\b|\bid cell\b|\bmã cell\b/)) mappedCol = 'Cell_ID';
                     
-                    // 3. Nhóm Điểm số & Xếp hạng (Core Metrics)
+                    // 3. Nhóm Điểm số
                     if (networkType === 'mbb_qoe' && !mappedCol) {
-                        if (h.match(/qoe.*score|điểm.*qoe|score.*qoe|tổng hợp/)) {
-                            if (!h.match(/chuẩn hóa|chuan hoa|thành phần|thanh phan|đầu ra|dau ra|đầu vào|dau vao|norm|point|in|out/)) {
+                        if (colStr.match(/qoe.*score|điểm.*qoe|score.*qoe|tổng hợp/)) {
+                            if (!colStr.match(/chuẩn hóa|chuan hoa|thành phần|thanh phan|đầu ra|dau ra|đầu vào|dau vao|norm|point|in|out/)) {
                                 mappedCol = 'QoE_Score';
                             }
                         }
-                        else if (h.match(/qoe.*rank|hạng.*qoe|xếp hạng|rank/)) mappedCol = 'QoE_Rank';
+                        else if (colStr.match(/qoe.*rank|hạng.*qoe|xếp hạng|rank/)) mappedCol = 'QoE_Rank';
                     } else if (networkType === 'mbb_qos' && !mappedCol) {
-                        if (h.match(/qos.*score|điểm.*qos|score.*qos|tổng hợp/)) {
-                            if (!h.match(/chuẩn hóa|chuan hoa|thành phần|thanh phan|đầu ra|dau ra|đầu vào|dau vao|norm|point|in|out/)) {
+                        if (colStr.match(/qos.*score|điểm.*qos|score.*qos|tổng hợp/)) {
+                            if (!colStr.match(/chuẩn hóa|chuan hoa|thành phần|thanh phan|đầu ra|dau ra|đầu vào|dau vao|norm|point|in|out/)) {
                                 mappedCol = 'QoS_Score';
                             }
                         }
-                        else if (h.match(/qos.*rank|hạng.*qos|xếp hạng|rank/)) mappedCol = 'QoS_Rank';
+                        else if (colStr.match(/qos.*rank|hạng.*qos|xếp hạng|rank/)) mappedCol = 'QoS_Rank';
                     }
 
-                    // 4. Nhóm Chỉ số thành phần của MBB QoS & QoE
+                    // 4. Nhóm Chỉ số thành phần
                     if ((networkType === 'mbb_qos' || networkType === 'mbb_qoe') && !mappedCol) {
                         let prefix = 'In_'; 
-                        if (h.match(/norm|chuẩn hóa|chuan hoa/)) prefix = 'Norm_';
-                        else if (h.match(/point|thành phần|thanh phan|điểm tp/)) prefix = 'Point_';
-                        else if (h.match(/out|đầu ra|dau ra/)) prefix = 'Out_';
+                        if (colStr.match(/norm|chuẩn hóa|chuan hoa/)) prefix = 'Norm_';
+                        else if (colStr.match(/point|thành phần|thanh phan|điểm tp/)) prefix = 'Point_';
+                        else if (colStr.match(/out|đầu ra|dau ra/)) prefix = 'Out_';
 
                         if (networkType === 'mbb_qos') {
-                            if (h.match(/\bdl\b|_dl\b|vùng phủ|vung phu|rsrp|cov|coverage/)) mappedCol = prefix + 'DL';
-                            else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
-                            else if (h.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
-                            else if (h.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
-                            else if (h.match(/int|toàn vẹn|toan ven|integrity|thput/)) mappedCol = prefix + 'Int';
+                            if (colStr.match(/\bdl\b|_dl\b|vùng phủ|vung phu|rsrp|cov|coverage/)) mappedCol = prefix + 'DL';
+                            else if (colStr.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
+                            else if (colStr.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
+                            else if (colStr.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
+                            else if (colStr.match(/int|toàn vẹn|toan ven|integrity|thput/)) mappedCol = prefix + 'Int';
                         } 
                         else if (networkType === 'mbb_qoe') {
-                            if (h.match(/speed|tốc độ|toc do/)) mappedCol = prefix + 'Speed';
-                            else if (h.match(/lat|độ trễ|do tre|ping|delay/)) mappedCol = prefix + 'Latency';
-                            else if (h.match(/jit|biến động|jitter/)) mappedCol = prefix + 'Jitter';
-                            else if (h.match(/loss|mất gói|mat goi/)) mappedCol = prefix + 'PacketLoss';
+                            if (colStr.match(/speed|tốc độ|toc do/)) mappedCol = prefix + 'Speed';
+                            else if (colStr.match(/lat|độ trễ|do tre|ping|delay/)) mappedCol = prefix + 'Latency';
+                            else if (colStr.match(/jit|biến động|jitter/)) mappedCol = prefix + 'Jitter';
+                            else if (colStr.match(/loss|mất gói|mat goi/)) mappedCol = prefix + 'PacketLoss';
                         }
                     }
                 }
-                else if (networkType === 'kpi_3g') {
-                    if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
-                    else if (h === 'ci' || h === 'cell id') mappedCol = 'CI';
-                    else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
-                    else if (h.includes('cs_so_att')) mappedCol = 'CS_SO_ATT';
-                    else if (h.includes('ps_so_att')) mappedCol = 'PS_SO_ATT';
-                    else if (h.includes('cs_rab congestion')) mappedCol = 'CSCONGES';
-                    else if (h.includes('ps_rab congestion')) mappedCol = 'PSCONGES';
-                    else if (h.includes('cs_total traffic') || h === 'traffic') mappedCol = 'TRAFFIC';
-                    else if (h.includes('cs_call setup success')) mappedCol = 'CSSR';
-                    else if (h.includes('cs_drop call')) mappedCol = 'DCR';
-                } 
-                else if (networkType === 'kpi_4g') {
-                    if (h.includes('site name')) mappedCol = 'Site_name';
-                    else if (h.includes('celltype')) mappedCol = 'CellType';
-                    else if (h.includes('district code')) mappedCol = 'District_code';
-                    else if (h.includes('cell name')) mappedCol = 'Cell_name';
-                    else if (h.includes('mimo')) mappedCol = 'MIMO';
-                    else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
-                    else if (h.includes('user downlink average')) mappedCol = 'User_DL_Avg_Throughput_Kbps';
-                    else if (h.includes('user uplink average')) mappedCol = 'User_UL_Avg_Throughput_Kbps';
-                    else if (h.includes('utilizing rate downlink') || h.includes('untilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
-                    else if (h.includes('utilizing rate uplink') || h.includes('untilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
-                    else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
-                    else if (h.includes('cqi_4g') || h.includes('cqi 4g') || h === 'cqi') mappedCol = 'CQI_4G';
-                    else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
-                    else if (h.includes('erab setup success') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
-                    else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
-                } 
-                else if (networkType === 'kpi_5g') {
-                    if (h.includes('nhà cung cấp') || h === 'nha_cung_cap') mappedCol = 'Nha_cung_cap';
-                    else if (h.includes('tỉnh') || h === 'tinh') mappedCol = 'Tinh';
-                    else if (h.includes('tên gnodeb') || h === 'ten_gnodeb') mappedCol = 'Ten_GNODEB';
-                    else if (h.includes('tên cell') || h === 'ten_cell') mappedCol = 'Ten_CELL';
-                    else if (h.includes('mã vnp') || h === 'ma_vnp') mappedCol = 'Ma_VNP';
-                    else if (h.includes('loại ne') || h === 'loai_ne') mappedCol = 'Loai_NE';
-                    else if (h.includes('gnodeb_id') || h.includes('gnodeb id')) mappedCol = 'GNODEB_ID';
-                    else if (h.includes('cell_id') || h.includes('cell id')) mappedCol = 'CELL_ID';
-                    else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
-                    else if (h.includes('user_dl_avg_throughput') || h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
-                    else if (h.includes('user_ul_avg_throughput') || h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
-                    else if (h === 'traffic' || h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
-                    else if (h.includes('cqi_5g') || h.includes('cqi 5g') || h === 'cqi') mappedCol = 'CQI_5G';
-                    else if (h.includes('intra_sgnb_ps_change') || h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
-                    else if (h.includes('user_avg_number') || h.includes('average user number')) mappedCol = 'Average_User_Number';
-                    else if (h.includes('dlink_res_blk_ult') || h.includes('downlink resource block')) mappedCol = 'DL_RB_Ultilization';
-                    else if (h.includes('ulink_res_blk_ult') || h.includes('uplink resource block')) mappedCol = 'UL_RB_Ultilization';
-                    else if (h.includes('cell_avaibility_rate') || h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
-                    else if (h.includes('user_max_number') || h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
-                    else if (h.includes('ul_traffic_volume') || h.includes('ul traffic volume')) mappedCol = 'UL_Traffic_Volume_GB';
-                    else if (h.includes('dl_traffic_volume') || h.includes('dl traffic volume')) mappedCol = 'DL_Traffic_Volume_GB';
-                    else if (h.includes('cell_ul_avg_throughput') || h.includes('cell uplink average')) mappedCol = 'Cell_UL_Avg_Throughput';
-                    else if (h.includes('cell_dl_avg_throughput') || h.includes('cell downlink average')) mappedCol = 'Cell_DL_Avg_Throughput';
-                    else if (h.includes('sgnb_abn_release_rate') || h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
-                    else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
-                    else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
-                } 
-                else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
-                    if (h.includes('cell_code') || h === 'cell code') mappedCol = 'Cell_Code';
-                    else if (h.includes('site_code') || h === 'site code') mappedCol = 'Site_Code';
-                    else if (h === 'poi') mappedCol = 'POI';
-                } 
-                else if (networkType.startsWith('rf_')) {
-                    if (h.includes('cell_code') || h === 'cell code' || h === 'cell name' || h.includes('ten_cell')) mappedCol = 'Cell_code';
-                    else if (h === 'site_code' || h === 'site code' || h === 'site name') mappedCol = 'Site_code';
-                    else if (h === 'lat' || h === 'latitude' || h.includes('vĩ độ')) mappedCol = 'Latitude';
-                    else if (h === 'long' || h === 'longitude' || h.includes('kinh độ')) mappedCol = 'Longitude';
-                    else if (h === 'azimuth' || h === 'dir') mappedCol = 'Azimuth';
-                    else if (h === 'tilt' || h === 'm_tilt') mappedCol = 'Tilt';
-                    else if (h.includes('mimo')) mappedCol = 'MIMO';
-                    else mappedCol = createSafeColumnName(exHeader);
-                } 
-                else if (networkType === 'csht_data') {
-                    if (h === 'mã csht' || h.includes('ma csht')) mappedCol = 'Ma_CSHT';
-                    else if (h === 'tên csht' || h.includes('ten csht')) mappedCol = 'Ten_CSHT';
-                    else if (h === 'địa chỉ' || h.includes('dia chi')) mappedCol = 'Dia_Chi';
-                    else if (h === 'long' || h === 'longitude' || h.includes('kinh độ')) mappedCol = 'Longitude';
-                    else if (h === 'lat' || h === 'latitude' || h.includes('vĩ độ')) mappedCol = 'Latitude';
-                    else if (h.includes('loại nhà trạm')) mappedCol = 'Loai_Nha_Tram';
-                    else if (h.includes('đơn vị quản lý')) mappedCol = 'Don_Vi_Quan_Ly';
-                    else if (h === 'mã trạm 2g' || h.includes('tram 2g')) mappedCol = 'Ma_Tram_2G';
-                    else if (h === 'mã trạm 3g' || h.includes('tram 3g')) mappedCol = 'Ma_Tram_3G';
-                    else if (h === 'mã trạm 4g' || h.includes('tram 4g')) mappedCol = 'Ma_Tram_4G';
-                    else if (h === 'mã trạm 5g' || h.includes('tram 5g')) mappedCol = 'Ma_Tram_5G';
-                    else if (h === 'ip-3g' || h === 'ip 3g') mappedCol = 'IP_3G';
-                    else if (h === 'ip-4g' || h === 'ip 4g') mappedCol = 'IP_4G';
-                    else if (h === 'ip-5g' || h === 'ip 5g') mappedCol = 'IP_5G';
-                    else if (h.includes('so với mặt đất') || h.includes('mat dat')) mappedCol = 'Chieu_Cao_Mat_Dat';
-                    else if (h.includes('chiều cao cột') || h.includes('chieu cao cot')) mappedCol = 'Chieu_Cao_Cot';
-                    else if (h.includes('hình thức sở hữu') || h.includes('so huu')) mappedCol = 'Hinh_Thuc_So_Huu';
-                    else mappedCol = createSafeColumnName(exHeader);
-                } 
-                else if (networkType === 'alarm_data') {
-                    if (h === 'nhóm cảnh báo' || h.includes('nhóm')) mappedCol = 'nhom_canh_bao';
-                    else if (h === 'từ khóa chính trong tin nhắn' || h.includes('từ khóa')) mappedCol = 'tu_khoa';
-                    else if (h === 'nguyên nhân' || h.includes('nguyên nhân')) mappedCol = 'nguyen_nhan';
-                    else if (h === 'phương án kiểm tra, xử lý' || h.includes('phương án')) mappedCol = 'phuong_an_xu_ly';
-                    else mappedCol = createSafeColumnName(exHeader);
-                } 
-                else if (networkType === 'vat_tu') {
-                    if (h === 'mã' || h === 'ma') mappedCol = 'ma_vt';
-                    else if (h === 'tên' || h === 'ten') mappedCol = 'ten_vt';
-                    else if (h === 'tên đầy đủ' || h.includes('ten day du') || h.includes('tên đầy đủ')) mappedCol = 'ten_day_du';
-                    else if (h === 'đơn vị tính' || h.includes('don vi tinh') || h.includes('đơn vị tính')) mappedCol = 'don_vi_tinh';
-                    else if (h.includes('mã thiết bị') || h.includes('part number')) mappedCol = 'ma_thiet_bi';
-                    else if (h === 'loại card' || h.includes('loai card') || h.includes('loại card')) mappedCol = 'loai_card';
-                    else if (h === 'tên viết tắt' || h.includes('viet tat') || h.includes('viết tắt')) mappedCol = 'ten_viet_tat';
-                    else mappedCol = createSafeColumnName(exHeader);
-                }
-
-                // 5. Fallback cuối cùng
-                if (!mappedCol) {
-                    let safeNameCombined = createSafeColumnName(exHeader);
-                    let safeNameBase = createSafeColumnName(h3_base[idx]);
-                    let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeNameCombined.toLowerCase() || c.original.toLowerCase() === safeNameBase.toLowerCase());
-                    if (exactMatch) mappedCol = exactMatch.original;
+                else {
+                    let h = colStr;
+                    if (networkType === 'kpi_3g') {
+                        if (h.includes('tên cell') || h.includes('cell name') || h.includes('ten_cell')) mappedCol = 'Ten_CELL';
+                        else if (h.includes('ci') || h.includes('cell id')) mappedCol = 'CI';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
+                        else if (h.includes('cs_so_att')) mappedCol = 'CS_SO_ATT';
+                        else if (h.includes('ps_so_att')) mappedCol = 'PS_SO_ATT';
+                        else if (h.includes('cs_rab congestion')) mappedCol = 'CSCONGES';
+                        else if (h.includes('ps_rab congestion')) mappedCol = 'PSCONGES';
+                        else if (h.includes('cs_total traffic') || h.includes('traffic')) mappedCol = 'TRAFFIC';
+                        else if (h.includes('cs_call setup success')) mappedCol = 'CSSR';
+                        else if (h.includes('cs_drop call')) mappedCol = 'DCR';
+                    } 
+                    else if (networkType === 'kpi_4g') {
+                        if (h.includes('site name')) mappedCol = 'Site_name';
+                        else if (h.includes('celltype')) mappedCol = 'CellType';
+                        else if (h.includes('district code')) mappedCol = 'District_code';
+                        else if (h.includes('cell name')) mappedCol = 'Cell_name';
+                        else if (h.includes('mimo')) mappedCol = 'MIMO';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
+                        else if (h.includes('user downlink average')) mappedCol = 'User_DL_Avg_Throughput_Kbps';
+                        else if (h.includes('user uplink average')) mappedCol = 'User_UL_Avg_Throughput_Kbps';
+                        else if (h.includes('utilizing rate downlink') || h.includes('untilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
+                        else if (h.includes('utilizing rate uplink') || h.includes('untilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
+                        else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                        else if (h.includes('cqi_4g') || h.includes('cqi 4g') || h.match(/\bcqi\b/)) mappedCol = 'CQI_4G';
+                        else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
+                        else if (h.includes('erab setup success') || h.includes('e-rab')) mappedCol = 'eRAB_Setup_SR_All';
+                        else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
+                    } 
+                    else if (networkType === 'kpi_5g') {
+                        if (h.includes('nhà cung cấp') || h.includes('nha_cung_cap')) mappedCol = 'Nha_cung_cap';
+                        else if (h.match(/\btỉnh\b|\btinh\b/)) mappedCol = 'Tinh';
+                        else if (h.includes('tên gnodeb') || h.includes('ten_gnodeb')) mappedCol = 'Ten_GNODEB';
+                        else if (h.includes('tên cell') || h.includes('ten_cell')) mappedCol = 'Ten_CELL';
+                        else if (h.includes('mã vnp') || h.includes('ma_vnp')) mappedCol = 'Ma_VNP';
+                        else if (h.includes('loại ne') || h.includes('loai_ne')) mappedCol = 'Loai_NE';
+                        else if (h.includes('gnodeb_id') || h.includes('gnodeb id')) mappedCol = 'GNODEB_ID';
+                        else if (h.includes('cell_id') || h.includes('cell id')) mappedCol = 'CELL_ID';
+                        else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
+                        else if (h.includes('user_dl_avg_throughput') || h.includes('a user downlink average')) mappedCol = 'A_User_DL_Avg_Throughput';
+                        else if (h.includes('user_ul_avg_throughput') || h.includes('a user uplink average')) mappedCol = 'A_User_UL_Avg_Throughput';
+                        else if (h.match(/\btraffic\b/) || h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                        else if (h.includes('cqi_5g') || h.includes('cqi 5g') || h.match(/\bcqi\b/)) mappedCol = 'CQI_5G';
+                        else if (h.includes('intra_sgnb_ps_change') || h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
+                        else if (h.includes('user_avg_number') || h.includes('average user number')) mappedCol = 'Average_User_Number';
+                        else if (h.includes('dlink_res_blk_ult') || h.includes('downlink resource block')) mappedCol = 'DL_RB_Ultilization';
+                        else if (h.includes('ulink_res_blk_ult') || h.includes('uplink resource block')) mappedCol = 'UL_RB_Ultilization';
+                        else if (h.includes('cell_avaibility_rate') || h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
+                        else if (h.includes('user_max_number') || h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
+                        else if (h.includes('ul_traffic_volume') || h.includes('ul traffic volume')) mappedCol = 'UL_Traffic_Volume_GB';
+                        else if (h.includes('dl_traffic_volume') || h.includes('dl traffic volume')) mappedCol = 'DL_Traffic_Volume_GB';
+                        else if (h.includes('cell_ul_avg_throughput') || h.includes('cell uplink average')) mappedCol = 'Cell_UL_Avg_Throughput';
+                        else if (h.includes('cell_dl_avg_throughput') || h.includes('cell downlink average')) mappedCol = 'Cell_DL_Avg_Throughput';
+                        else if (h.includes('sgnb_abn_release_rate') || h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
+                        else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
+                        else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
+                    } 
+                    else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
+                        if (h.includes('cell_code') || h.includes('cell code')) mappedCol = 'Cell_Code';
+                        else if (h.includes('site_code') || h.includes('site code')) mappedCol = 'Site_Code';
+                        else if (h.includes('poi')) mappedCol = 'POI';
+                    } 
+                    else if (networkType.startsWith('rf_')) {
+                        if (h.includes('cell_code') || h.includes('cell code') || h.includes('cell name') || h.includes('ten_cell')) mappedCol = 'Cell_code';
+                        else if (h.includes('site_code') || h.includes('site code') || h.includes('site name')) mappedCol = 'Site_code';
+                        else if (h.match(/\blat\b|\blatitude\b|\bvĩ độ\b/)) mappedCol = 'Latitude';
+                        else if (h.match(/\blong\b|\blongitude\b|\bkinh độ\b/)) mappedCol = 'Longitude';
+                        else if (h.match(/\bazimuth\b|\bdir\b/)) mappedCol = 'Azimuth';
+                        else if (h.match(/\btilt\b|\bm_tilt\b/)) mappedCol = 'Tilt';
+                        else if (h.includes('mimo')) mappedCol = 'MIMO';
+                    } 
+                    else if (networkType === 'csht_data') {
+                        if (h.includes('mã csht') || h.includes('ma csht')) mappedCol = 'Ma_CSHT';
+                        else if (h.includes('tên csht') || h.includes('ten csht')) mappedCol = 'Ten_CSHT';
+                        else if (h.includes('địa chỉ') || h.includes('dia chi')) mappedCol = 'Dia_Chi';
+                        else if (h.match(/\blong\b|\blongitude\b|\bkinh độ\b/)) mappedCol = 'Longitude';
+                        else if (h.match(/\blat\b|\blatitude\b|\bvĩ độ\b/)) mappedCol = 'Latitude';
+                        else if (h.includes('loại nhà trạm')) mappedCol = 'Loai_Nha_Tram';
+                        else if (h.includes('đơn vị quản lý')) mappedCol = 'Don_Vi_Quan_Ly';
+                        else if (h.includes('mã trạm 2g') || h.includes('tram 2g')) mappedCol = 'Ma_Tram_2G';
+                        else if (h.includes('mã trạm 3g') || h.includes('tram 3g')) mappedCol = 'Ma_Tram_3G';
+                        else if (h.includes('mã trạm 4g') || h.includes('tram 4g')) mappedCol = 'Ma_Tram_4G';
+                        else if (h.includes('mã trạm 5g') || h.includes('tram 5g')) mappedCol = 'Ma_Tram_5G';
+                        else if (h.includes('ip-3g') || h.includes('ip 3g')) mappedCol = 'IP_3G';
+                        else if (h.includes('ip-4g') || h.includes('ip 4g')) mappedCol = 'IP_4G';
+                        else if (h.includes('ip-5g') || h.includes('ip 5g')) mappedCol = 'IP_5G';
+                        else if (h.includes('so với mặt đất') || h.includes('mat dat')) mappedCol = 'Chieu_Cao_Mat_Dat';
+                        else if (h.includes('chiều cao cột') || h.includes('chieu cao cot')) mappedCol = 'Chieu_Cao_Cot';
+                        else if (h.includes('hình thức sở hữu') || h.includes('so huu')) mappedCol = 'Hinh_Thuc_So_Huu';
+                    } 
+                    else if (networkType === 'alarm_data') {
+                        if (h.includes('nhóm cảnh báo') || h.includes('nhóm')) mappedCol = 'nhom_canh_bao';
+                        else if (h.includes('từ khóa chính trong tin nhắn') || h.includes('từ khóa')) mappedCol = 'tu_khoa';
+                        else if (h.includes('nguyên nhân')) mappedCol = 'nguyen_nhan';
+                        else if (h.includes('phương án kiểm tra, xử lý') || h.includes('phương án')) mappedCol = 'phuong_an_xu_ly';
+                    } 
+                    else if (networkType === 'vat_tu') {
+                        if (h.match(/\bmã\b|\bma\b/)) mappedCol = 'ma_vt';
+                        else if (h.match(/\btên\b|\bten\b/)) mappedCol = 'ten_vt';
+                        else if (h.includes('tên đầy đủ') || h.includes('ten day du')) mappedCol = 'ten_day_du';
+                        else if (h.includes('đơn vị tính') || h.includes('don vi tinh')) mappedCol = 'don_vi_tinh';
+                        else if (h.includes('mã thiết bị') || h.includes('part number')) mappedCol = 'ma_thiet_bi';
+                        else if (h.includes('loại card') || h.includes('loai card')) mappedCol = 'loai_card';
+                        else if (h.includes('tên viết tắt') || h.includes('viet tat')) mappedCol = 'ten_viet_tat';
+                    }
                 }
 
                 if (mappedCol) {
-                    let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                    let dbMatch = dbCols.find(dbC => dbC.original.toLowerCase() === mappedCol.toLowerCase());
                     if (dbMatch) {
                         let existingMap = colMapping.find(m => m.dbCol === dbMatch.original);
                         if (existingMap) {
@@ -1129,7 +1139,7 @@ exports.handleImportData = async (req, res) => {
 
                 const rowObj = {}; 
                 let hasKpiData = false;
-                let hasValidIdentifier = false;
+                let cellIdentifierFound = false;
                 let isHeaderRow = false;
 
                 colMapping.forEach(map => {
@@ -1164,20 +1174,23 @@ exports.handleImportData = async (req, res) => {
                     rowObj[map.dbCol] = val;
                     if (val !== null && val !== undefined && val !== '') hasKpiData = true;
 
-                    let colNameStr = map.dbCol.toLowerCase();
-                    if (colNameStr.includes('cell') || colNameStr.includes('site') || colNameStr.includes('csht') || colNameStr.includes('vt') || colNameStr.includes('tu_khoa')) {
-                        let stringVal = String(val).toLowerCase().trim();
-                        if (stringVal) {
-                            if (stringVal.includes('tên cell') || stringVal.includes('cell name') || stringVal.includes('site name') || stringVal === 'site' || stringVal === 'cell' || stringVal.includes('điểm') || stringVal.includes('score')) {
-                                isHeaderRow = true; 
-                            } else {
-                                hasValidIdentifier = true;
-                            }
+                    // Xác thực xem dòng này có chứa Tên Trạm / Tên Cell / ID hợp lệ không
+                    let strValLower = String(val).toLowerCase().trim().replace(/['"]/g, '');
+                    
+                    // Nhận diện dòng header (chống việc import dòng rác)
+                    if (strValLower === 'cell name' || strValLower === 'tên cell' || strValLower === 'site name') {
+                        isHeaderRow = true;
+                    }
+                    
+                    // Nhận diện dòng dữ liệu có chứa Cell (Mở rộng cho tất cả các file)
+                    if (['Cell_Name', 'Site_Name', 'Cell_ID', 'Ten_CELL', 'CI', 'Cell_code', 'Site_code', 'Ma_CSHT', 'ma_vt'].map(k => k.toLowerCase()).includes(map.dbCol.toLowerCase())) {
+                        if (strValLower !== '' && strValLower !== 'null' && strValLower !== 'undefined') {
+                            cellIdentifierFound = true;
                         }
                     }
                 });
 
-                if (hasKpiData && hasValidIdentifier && !isHeaderRow) {
+                if (hasKpiData && cellIdentifierFound && !isHeaderRow) {
                     if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
                     insertData.push(rowObj);
                 }
