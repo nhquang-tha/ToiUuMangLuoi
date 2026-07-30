@@ -773,12 +773,42 @@ exports.handleImportData = async (req, res) => {
             let headerRowIdx = -1;
             let dataStartIdx = -1;
 
-            if (networkType === 'mbb_qoe') {
-                headerRowIdx = 4; dataStartIdx = 5;
-            } else if (networkType === 'mbb_qos') {
-                headerRowIdx = 4; dataStartIdx = 9; 
+            // [NÂNG CẤP]: THUẬT TOÁN QUÉT DÒNG ĐỘNG CHO FILE CŨ & MỚI
+            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+                // Bước 1: Quét tìm dòng chứa Tiêu đề (Header)
+                for (let i = 0; i < Math.min(30, rawData.length); i++) {
+                    if (!rawData[i]) continue;
+                    const rowStr = JSON.stringify(rawData[i]).toLowerCase();
+                    if (rowStr.includes('cell name') || rowStr.includes('tên cell') || rowStr.includes('site name')) {
+                        headerRowIdx = i; 
+                        break;
+                    }
+                }
+                
+                // Bước 2: Quét tìm dòng bắt đầu Dữ liệu thật (Data Start)
+                if (headerRowIdx !== -1) {
+                    dataStartIdx = headerRowIdx + 1; // Fallback mặc định
+                    for (let i = headerRowIdx + 1; i < Math.min(headerRowIdx + 20, rawData.length); i++) {
+                        if (!rawData[i]) continue;
+                        let firstCol = String(rawData[i][0] || '').trim();
+                        let secondCol = String(rawData[i][1] || '').trim();
+                        let thirdCol = String(rawData[i][2] || '').trim();
+                        
+                        // Dấu hiệu nhận biết dòng dữ liệu thực tế đầu tiên:
+                        // Cột STT = '1' HOẶC các cột đầu tiên chứa định dạng mã trạm 3G/4G/5G
+                        if (firstCol === '1' || firstCol === '01' || 
+                            firstCol.match(/^(3G|4G|5G)/i) || 
+                            secondCol.match(/^(3G|4G|5G)/i) || 
+                            thirdCol.match(/^(3G|4G|5G)/i)) {
+                            dataStartIdx = i;
+                            break;
+                        }
+                    }
+                }
             } else {
-                for (let i = 0; i < Math.min(20, rawData.length); i++) {
+                // Logic quét dòng tự động cho các bảng thông thường khác
+                for (let i = 0; i < Math.min(30, rawData.length); i++) {
+                    if (!rawData[i]) continue;
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
                     if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
                         rowStr.includes('tên cell') || rowStr.includes('cell name') ||
@@ -788,15 +818,6 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
                         rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
-                        headerRowIdx = i; dataStartIdx = i + 1; break;
-                    }
-                }
-            }
-            
-            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                for (let i = 0; i < Math.min(20, rawData.length); i++) {
-                    const rowStr = JSON.stringify(rawData[i]).toLowerCase();
-                    if (rowStr.includes('cell name') || rowStr.includes('tên cell') || rowStr.includes('site name')) {
                         headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
