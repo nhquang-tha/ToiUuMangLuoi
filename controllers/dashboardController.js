@@ -197,9 +197,8 @@ async function syncWorstCells() {
             const targetDates = uniqueDates.slice(0, days);
             if (targetDates.length === 0) continue;
             const placeholders = targetDates.map(() => '?').join(',');
-            const t0_date = targetDates[0]; // Bắt chính xác ngày mới nhất của mảng này
+            const t0_date = targetDates[0]; 
             
-            // Xóa MAX(Thoi_gian) vì nó sắp xếp sai (30/06 > 23/07 theo chuẩn string)
             const query = `
                 SELECT Cell_name, 
                     AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
@@ -221,7 +220,6 @@ async function syncWorstCells() {
                 if (r.CQI_4G < 93) vios.push('CQI Thấp');
                 if (r.Service_Drop_all > 0.3) vios.push('Drop Rate Cao');
                 
-                // Gán cứng t0_date vào vị trí Latest_Date thay vì lấy r.Latest_Date bị sai
                 insertData.push([
                     t0_date, 
                     days, 
@@ -261,6 +259,7 @@ async function syncCongestion3G() {
             const targetDates = uniqueDates.slice(0, days);
             if (targetDates.length === 0) continue;
             const placeholders = targetDates.map(() => '?').join(',');
+            const t0_date = targetDates[0];
 
             const query = `
                 SELECT Ten_CELL as Cell_name, MAX(Thoi_gian) as Latest_Date,
@@ -270,7 +269,7 @@ async function syncCongestion3G() {
                 FROM kpi_3g WHERE Thoi_gian IN (${placeholders}) AND ((CSCONGES > 2 AND CS_SO_ATT > 100) OR (PSCONGES > 2 AND PS_SO_ATT > 500))
                 GROUP BY Ten_CELL HAVING So_Ngay_Vi_Pham >= ? AND is_in_t0 > 0
             `;
-            const [rows] = await db.query(query, [targetDates[0], ...targetDates, days]);
+            const [rows] = await db.query(query, [t0_date, ...targetDates, days]);
             
             let insertData = [];
             rows.forEach(r => {
@@ -279,7 +278,7 @@ async function syncCongestion3G() {
                 if (r.PSCONGES > 2 && r.PS_SO_ATT > 500) vios.push('Nghẽn PS');
                 
                 insertData.push([
-                    r.Latest_Date || null, 
+                    t0_date, 
                     days, 
                     r.Cell_name || null,
                     getSafeFloat(r.CSCONGES), 
@@ -753,7 +752,7 @@ exports.handleImportData = async (req, res) => {
             if (networkType === 'mbb_qoe') {
                 headerRowIdx = 4; dataStartIdx = 5;
             } else if (networkType === 'mbb_qos') {
-                headerRowIdx = 4; dataStartIdx = 9; // Đối với mẫu file mới, thuật toán bên dưới sẽ tự sửa lỗi nếu Index này lệch
+                headerRowIdx = 4; dataStartIdx = 9; 
             } else {
                 for (let i = 0; i < Math.min(20, rawData.length); i++) {
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
@@ -770,7 +769,6 @@ exports.handleImportData = async (req, res) => {
                 }
             }
             
-            // [CẬP NHẬT THÔNG MINH]: Nếu QoS/QoE đổi cấu trúc, tìm lại header
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 for (let i = 0; i < Math.min(20, rawData.length); i++) {
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
@@ -784,9 +782,7 @@ exports.handleImportData = async (req, res) => {
 
             const excelHeaders = rawData[headerRowIdx];
             
-            // --- CẬP NHẬT: KÍCH HOẠT AUTO-MIGRATION CHO CẢ QOE / QOS ---
-            // Bất kỳ cột nào mới được thêm vào file Excel (Mbb_qos) sẽ tự đẻ ra trong Database
-            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+            if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
                     if (!h) continue;
@@ -799,9 +795,7 @@ exports.handleImportData = async (req, res) => {
                     if (!exists) {
                         try {
                             console.log(`⚡ Auto-Migration: Thêm cột mới [${safeName}] vào bảng ${networkType}`);
-                            // Riêng QoE/QoS để cột kiểu FLOAT chứa điểm phẩy thập phân
-                            let colType = (networkType === 'mbb_qoe' || networkType === 'mbb_qos') ? 'FLOAT' : 'VARCHAR(255)';
-                            await db.query(`ALTER TABLE ${networkType} ADD COLUMN \`${safeName}\` ${colType}`);
+                            await db.query(`ALTER TABLE ${networkType} ADD COLUMN \`${safeName}\` VARCHAR(255)`);
                             isSchemaChanged = true;
                         } catch (e) {
                             console.error(`Lỗi tạo cột ${safeName}:`, e.message);
@@ -837,8 +831,6 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
-            // --- CẬP NHẬT: XÓA BỎ HOÀN TOÀN MAPPING CỨNG QOE/QOS BẰNG INDEX ---
-            // Đưa QoE/QoS vào chuẩn Mapping Động bằng String (Tên Cột)
             excelHeaders.forEach((exHeader, idx) => {
                 let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                 let mappedCol = null;
@@ -852,7 +844,6 @@ exports.handleImportData = async (req, res) => {
                     else if (h === 'cell_id' || h === 'cell id') mappedCol = 'Cell_ID';
                     else if (h.includes('qoe score') || h.includes('qoe_score') || h === 'score') mappedCol = 'QoE_Score';
                     else if (h.includes('qoe rank') || h.includes('qoe_rank') || h === 'rank') mappedCol = 'QoE_Rank';
-                    else mappedCol = createSafeColumnName(exHeader); // Cho phép Auto-Migration bắt mọi cột mới
                 } 
                 else if (networkType === 'mbb_qos') {
                     if (h === 'tỉnh' || h === 'ma_tinh') mappedCol = 'Ma_Tinh';
@@ -863,7 +854,6 @@ exports.handleImportData = async (req, res) => {
                     else if (h === 'cell_id' || h === 'cell id') mappedCol = 'Cell_ID';
                     else if (h.includes('qos score') || h.includes('qos_score') || h === 'score') mappedCol = 'QoS_Score';
                     else if (h.includes('qos rank') || h.includes('qos_rank') || h === 'rank') mappedCol = 'QoS_Rank';
-                    else mappedCol = createSafeColumnName(exHeader); // Cho phép Auto-Migration bắt mọi cột mới
                 }
                 else if (networkType === 'kpi_3g') {
                     if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
@@ -975,7 +965,6 @@ exports.handleImportData = async (req, res) => {
                     else mappedCol = createSafeColumnName(exHeader);
                 }
 
-                // TÌM CỘT TƯƠNG ỨNG TRONG DATABASE
                 let actualDbCol = null;
                 
                 if (networkType === 'ta_query') {
@@ -1515,7 +1504,7 @@ exports.resetImportedData = async (req, res) => {
     } catch (e) { res.status(500).send("Lỗi máy chủ khi xóa dữ liệu. Vui lòng thử lại."); }
 };
 
-//=========================================================================
+// =========================================================================
 // THUẬT TOÁN CHẨN ĐOÁN CROSS SECTOR (ĐẤU CHÉO CÁP)
 // Đảm bảo 5 nguyên tắc SIÊU KHẮT KHE:
 // 1. Không quét trạm MBF_TH
