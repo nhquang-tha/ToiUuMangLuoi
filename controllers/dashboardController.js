@@ -728,6 +728,30 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
+    // [MỚI] TỰ ĐỘNG DỌN DẸP XÓA BỎ CỘT RÁC DO LỖI TỰ ĐỘNG TẠO TRƯỚC ĐÓ
+    if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+        const standardCols = networkType === 'mbb_qoe' 
+            ? ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qoe_score', 'qoe_rank', 'norm_speed', 'norm_latency', 'norm_jitter', 'norm_packetloss', 'point_speed', 'point_latency', 'point_jitter', 'point_packetloss', 'out_speed', 'out_latency', 'out_jitter', 'out_packetloss', 'in_speed', 'in_latency', 'in_jitter', 'in_packetloss', 'created_at']
+            : ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qos_score', 'qos_rank', 'norm_res', 'norm_acc', 'norm_ret', 'norm_int', 'norm_cov', 'point_res', 'point_acc', 'point_ret', 'point_int', 'point_cov', 'out_res', 'out_acc', 'out_ret', 'out_int', 'out_cov', 'in_res', 'in_acc', 'in_ret', 'in_int', 'in_cov', 'created_at'];
+
+        let colsToDrop = dbCols.filter(col => !standardCols.includes(col.original.toLowerCase()));
+        
+        for (let col of colsToDrop) {
+            try {
+                await db.query(`ALTER TABLE ${networkType} DROP COLUMN \`${col.original}\``);
+                console.log(`🗑️ Đã xóa cột rác tự tạo: ${col.original} khỏi bảng ${networkType}`);
+            } catch (e) {
+                console.error(`Lỗi khi xóa cột ${col.original}:`, e.message);
+            }
+        }
+
+        // Cập nhật lại danh sách cột sau khi xóa
+        if (colsToDrop.length > 0) {
+            const [newCols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
+            dbCols = newCols.map(c => ({ original: c.Field, norm: normalizeStr(c.Field) }));
+        }
+    }
+
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
         try { await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]); } catch (e) {}
     }
@@ -782,6 +806,7 @@ exports.handleImportData = async (req, res) => {
 
             const excelHeaders = rawData[headerRowIdx];
             
+            // TẮT HOÀN TOÀN AUTO-MIGRATION CHO QOE VÀ QOS (KHÔNG CHO TẠO CỘT MỚI RÁC)
             if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
                 let isSchemaChanged = false;
                 for (let h of excelHeaders) {
@@ -831,29 +856,42 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
+            // ÁNH XẠ DỮ LIỆU ĐỘNG (KHÔNG TẠO CỘT THỪA VÀ ÁP DỤNG MỞ RỘNG TỪ KHÓA)
             excelHeaders.forEach((exHeader, idx) => {
                 let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                 let mappedCol = null;
 
-                if (networkType === 'mbb_qoe') {
-                    if (h === 'tỉnh' || h === 'ma_tinh') mappedCol = 'Ma_Tinh';
-                    else if (h === 'đơn vị' || h === 'don_vi' || h.includes('district')) mappedCol = 'Don_Vi';
-                    else if (h === 'phường xã' || h === 'phuong_xa') mappedCol = 'Phuong_Xa';
-                    else if (h === 'site' || h.includes('site name') || h === 'site_name') mappedCol = 'Site_Name';
-                    else if (h === 'cell' || h.includes('cell name') || h === 'cell_name') mappedCol = 'Cell_Name';
-                    else if (h === 'cell_id' || h === 'cell id') mappedCol = 'Cell_ID';
-                    else if (h.includes('qoe score') || h.includes('qoe_score') || h === 'score') mappedCol = 'QoE_Score';
-                    else if (h.includes('qoe rank') || h.includes('qoe_rank') || h === 'rank') mappedCol = 'QoE_Rank';
-                } 
-                else if (networkType === 'mbb_qos') {
-                    if (h === 'tỉnh' || h === 'ma_tinh') mappedCol = 'Ma_Tinh';
-                    else if (h === 'đơn vị' || h === 'don_vi' || h.includes('district')) mappedCol = 'Don_Vi';
-                    else if (h === 'phường xã' || h === 'phuong_xa') mappedCol = 'Phuong_Xa';
-                    else if (h === 'site' || h.includes('site name') || h === 'site_name') mappedCol = 'Site_Name';
-                    else if (h === 'cell' || h.includes('cell name') || h === 'cell_name') mappedCol = 'Cell_Name';
-                    else if (h === 'cell_id' || h === 'cell id') mappedCol = 'Cell_ID';
-                    else if (h.includes('qos score') || h.includes('qos_score') || h === 'score') mappedCol = 'QoS_Score';
-                    else if (h.includes('qos rank') || h.includes('qos_rank') || h === 'rank') mappedCol = 'QoS_Rank';
+                if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+                    if (h === 'tỉnh' || h === 'ma_tinh' || h === 'tinh') mappedCol = 'Ma_Tinh';
+                    else if (h === 'đơn vị' || h === 'don_vi' || h.includes('district') || h.includes('quận') || h.includes('huyện')) mappedCol = 'Don_Vi';
+                    else if (h === 'phường xã' || h === 'phuong_xa' || h.includes('phường') || h.includes('xã')) mappedCol = 'Phuong_Xa';
+                    else if (h === 'site' || h.includes('site name') || h === 'site_name' || h === 'tên site') mappedCol = 'Site_Name';
+                    else if (h === 'cell' || h.includes('cell name') || h === 'cell_name' || h === 'tên cell') mappedCol = 'Cell_Name';
+                    else if (h === 'cell_id' || h === 'cell id' || h === 'cellid') mappedCol = 'Cell_ID';
+                    
+                    if (networkType === 'mbb_qoe') {
+                        if (h.includes('qoe score') || h.includes('qoe_score') || h === 'score' || h.includes('điểm') || h === 'qoe') mappedCol = 'QoE_Score';
+                        else if (h.includes('qoe rank') || h.includes('qoe_rank') || h === 'rank' || h.includes('hạng')) mappedCol = 'QoE_Rank';
+                    } else {
+                        if (h.includes('qos score') || h.includes('qos_score') || h === 'score' || h.includes('điểm') || h === 'qos') mappedCol = 'QoS_Score';
+                        else if (h.includes('qos rank') || h.includes('qos_rank') || h === 'rank' || h.includes('hạng')) mappedCol = 'QoS_Rank';
+                    }
+
+                    // Tự động quét các cột phụ trợ chuẩn khác (như Norm_Speed, Point_Latency...) nếu có trong Excel
+                    if (!mappedCol) {
+                        let safeName = createSafeColumnName(exHeader);
+                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
+                        if (exactMatch) mappedCol = exactMatch.original;
+                    }
+
+                    // Đẩy dữ liệu vào mảng Map nếu nó nằm trong danh sách Cột Chuẩn
+                    if (mappedCol) {
+                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                        if (dbMatch) {
+                            colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
+                        }
+                    }
+                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác trong Excel như "Thực hiện", "Ghi chú"...
                 }
                 else if (networkType === 'kpi_3g') {
                     if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
