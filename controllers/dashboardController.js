@@ -756,7 +756,6 @@ exports.handleImportData = async (req, res) => {
             }
         }
 
-        // Cập nhật lại danh sách cột sau khi dọn dẹp
         if (colsToDrop.length > 0) {
             const [newCols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
             dbCols = newCols.map(c => ({ original: c.Field, norm: normalizeStr(c.Field) }));
@@ -784,7 +783,6 @@ exports.handleImportData = async (req, res) => {
             let headerRowIdx = -1;
             let dataStartIdx = -1;
 
-            // [NÂNG CẤP]: THUẬT TOÁN QUÉT TÌM HEADER THÔNG MINH CHO CẢ FILE CŨ VÀ MỚI
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 let bestHeaderIdx = -1;
                 let maxMatch = 0;
@@ -794,8 +792,8 @@ exports.handleImportData = async (req, res) => {
                     let matchCount = 0;
                     if (rowStr.includes('cell') || rowStr.includes('site')) matchCount++;
                     if (rowStr.includes('tỉnh') || rowStr.includes('tinh') || rowStr.includes('ma_tinh') || rowStr.includes('ma tinh') || rowStr.includes('province')) matchCount++;
-                    if (rowStr.includes('qoe') || rowStr.includes('qos') || rowStr.includes('score') || rowStr.includes('rank') || rowStr.includes('tổng hợp')) matchCount++;
-                    if (rowStr.includes('norm') || rowStr.includes('point') || rowStr.includes('dl') || rowStr.includes('cov') || rowStr.includes('acc') || rowStr.includes('chuẩn hóa') || rowStr.includes('thành phần')) matchCount++;
+                    if (rowStr.includes('qoe') || rowStr.includes('qos') || rowStr.includes('score') || rowStr.includes('rank') || rowStr.includes('tổng hợp') || rowStr.includes('dl')) matchCount++;
+                    if (rowStr.includes('norm') || rowStr.includes('point') || rowStr.includes('cov') || rowStr.includes('acc') || rowStr.includes('chuẩn hóa') || rowStr.includes('thành phần')) matchCount++;
                     
                     if (matchCount > maxMatch && matchCount >= 2) {
                         maxMatch = matchCount;
@@ -822,10 +820,8 @@ exports.handleImportData = async (req, res) => {
 
             if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
             
-            // Dữ liệu sẽ luôn quét từ dòng ngay sau Header
             dataStartIdx = headerRowIdx + 1;
 
-            // [NÂNG CẤP ĐỘT PHÁ]: THUẬT TOÁN ĐIỀN ĐẦY HEADER BỊ TRỘN Ô (MERGED CELLS)
             const baseHeaders = rawData[headerRowIdx] || [];
             const prevHeaders1 = headerRowIdx > 0 ? rawData[headerRowIdx - 1] : [];
             const prevHeaders2 = headerRowIdx > 1 ? rawData[headerRowIdx - 2] : [];
@@ -834,7 +830,6 @@ exports.handleImportData = async (req, res) => {
             let lastP1 = '';
             let lastP2 = '';
             
-            // Quét đến cột xa nhất có thể có chữ để không bỏ sót cột nào
             const maxCols = Math.max(
                 baseHeaders ? baseHeaders.length : 0,
                 prevHeaders1 ? prevHeaders1.length : 0,
@@ -847,18 +842,15 @@ exports.handleImportData = async (req, res) => {
                 let p1Raw = prevHeaders1 ? prevHeaders1[c] : '';
                 let p2Raw = prevHeaders2 ? prevHeaders2[c] : '';
                 
-                // Nếu ô phía trên có chữ thì lấy chữ đó, nếu trống thì mượn chữ của ô bên trái (Fill Forward)
                 let p1 = (p1Raw !== undefined && p1Raw !== null && String(p1Raw).trim() !== '') ? String(p1Raw).trim() : lastP1;
                 let p2 = (p2Raw !== undefined && p2Raw !== null && String(p2Raw).trim() !== '') ? String(p2Raw).trim() : lastP2;
                 
-                // Cập nhật trí nhớ
                 lastP1 = p1;
                 lastP2 = p2;
 
                 if (h === '' && p1 === '' && p2 === '') {
                     excelHeaders.push('');
                 } else {
-                    // Dồn 3 dòng tiêu đề lại thành 1 chuỗi dài
                     let combinedHeader = `${p2} ${p1} ${h}`.trim().replace(/\s+/g, ' ');
                     excelHeaders.push(combinedHeader);
                 }
@@ -913,23 +905,36 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
-            // ÁNH XẠ DỮ LIỆU ĐỘNG SAU KHI ĐÃ ĐIỀN ĐẦY TIÊU ĐỀ BỊ KHUYẾT
+            // [NÂNG CẤP TUYỆT ĐỐI] - ÁNH XẠ THÔNG MINH KẾT HỢP DÒ TÌM TRỰC TIẾP
             excelHeaders.forEach((exHeader, idx) => {
                 if (exHeader === undefined || exHeader === null || exHeader === '') return;
                 
-                let h = String(exHeader).toLowerCase();
+                let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
+                let baseH = String(baseHeaders[idx] || '').toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
+                
+                if (baseH === '') return;
                 let mappedCol = null;
 
-                if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                    // 1. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
-                    if (h.match(/tỉnh|ma_tinh|tinh|province/)) mappedCol = 'Ma_Tinh';
-                    else if (h.match(/đơn vị|don_vi|district|quận|huyện/)) mappedCol = 'Don_Vi';
-                    else if (h.match(/phường xã|phuong_xa|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
-                    else if (h.match(/site name|site_name|tên site|site code|^site$/)) mappedCol = 'Site_Name';
-                    else if (h.match(/cell name|cell_name|tên cell|cell code|^cell$/)) mappedCol = 'Cell_Name';
-                    else if (h.match(/cell_id|cell id|ci|id cell|mã cell/)) mappedCol = 'Cell_ID';
+                // 1. Dò tìm CHÍNH XÁC tên cột trong Database trước (Rất hiệu quả với file xuất từ hệ thống)
+                let directMatch = dbCols.find(c => 
+                    c.original.toLowerCase() === baseH || 
+                    c.original.toLowerCase() === h ||
+                    c.original.toLowerCase() === baseH.replace(/ /g, '_')
+                );
+
+                if (directMatch) {
+                    mappedCol = directMatch.original;
+                } 
+                else if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+                    // 2. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
+                    if (baseH.match(/^tỉnh$|^ma_tinh$|^tinh$|^ma tinh$|province/)) mappedCol = 'Ma_Tinh';
+                    else if (baseH.match(/^đơn vị$|^don_vi$|^don vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
+                    else if (baseH.match(/^phường xã$|^phuong_xa$|^phuong xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
+                    else if (baseH.match(/^site$|site name|site_name|tên site|site code/)) mappedCol = 'Site_Name';
+                    else if (baseH.match(/^cell$|cell name|cell_name|tên cell|cell code/)) mappedCol = 'Cell_Name';
+                    else if (baseH.match(/^cell_id$|^cell id$|^ci$|id cell|mã cell/)) mappedCol = 'Cell_ID';
                     
-                    // 2. Nhóm Điểm số & Xếp hạng (Core Metrics)
+                    // 3. Nhóm Điểm số & Xếp hạng (Core Metrics)
                     if (networkType === 'mbb_qoe' && !mappedCol) {
                         if (h.match(/qoe.*score|điểm.*qoe|score.*qoe|tổng hợp/)) {
                             if (!h.match(/chuẩn hóa|chuan hoa|thành phần|thanh phan|đầu ra|dau ra|đầu vào|dau vao|norm|point|in|out/)) {
@@ -946,7 +951,7 @@ exports.handleImportData = async (req, res) => {
                         else if (h.match(/qos.*rank|hạng.*qos|xếp hạng|rank/)) mappedCol = 'QoS_Rank';
                     }
 
-                    // 3. Nhóm Chỉ số thành phần của MBB QoS & QoE
+                    // 4. Nhóm Chỉ số thành phần của MBB QoS & QoE
                     if ((networkType === 'mbb_qos' || networkType === 'mbb_qoe') && !mappedCol) {
                         let prefix = 'In_'; 
                         if (h.match(/norm|chuẩn hóa|chuan hoa/)) prefix = 'Norm_';
@@ -954,8 +959,7 @@ exports.handleImportData = async (req, res) => {
                         else if (h.match(/out|đầu ra|dau ra/)) prefix = 'Out_';
 
                         if (networkType === 'mbb_qos') {
-                            // Chú ý ở đây: Các từ khóa 'dl', 'vùng phủ', 'cov' sẽ map vào cột '_DL'
-                            if (h.match(/\bdl\b|vùng phủ|vung phu|rsrp|cov|coverage/)) mappedCol = prefix + 'DL';
+                            if (h.match(/\bdl\b|_dl\b|vùng phủ|vung phu|rsrp|cov|coverage/)) mappedCol = prefix + 'DL';
                             else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
                             else if (h.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
                             else if (h.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
@@ -968,16 +972,6 @@ exports.handleImportData = async (req, res) => {
                             else if (h.match(/loss|mất gói|mat goi/)) mappedCol = prefix + 'PacketLoss';
                         }
                     }
-
-                    if (mappedCol) {
-                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
-                        if (dbMatch) {
-                            if (!colMapping.find(m => m.dbCol === dbMatch.original)) {
-                                colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
-                            }
-                        }
-                    }
-                    return; 
                 }
                 else if (networkType === 'kpi_3g') {
                     if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
@@ -1089,32 +1083,27 @@ exports.handleImportData = async (req, res) => {
                     else mappedCol = createSafeColumnName(exHeader);
                 }
 
-                let actualDbCol = null;
-                
-                if (networkType === 'ta_query') {
-                    // ... existing ta query maps
-                } else {
-                    if (mappedCol) {
-                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
-                        if (dbMatch) actualDbCol = dbMatch.original;
-                    }
-                    if (!actualDbCol) {
-                        const normEx = normalizeStr(exHeader);
-                        if (normEx) {
-                            const match = dbCols.find(dbC => dbC.norm === normEx);
-                            if (match) actualDbCol = match.original;
+                // 5. Fallback cuối cùng
+                if (!mappedCol) {
+                    let safeNameCombined = createSafeColumnName(exHeader);
+                    let safeNameBase = createSafeColumnName(baseHeaders[idx]);
+                    let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeNameCombined.toLowerCase() || c.original.toLowerCase() === safeNameBase.toLowerCase());
+                    if (exactMatch) mappedCol = exactMatch.original;
+                }
+
+                if (mappedCol) {
+                    let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                    if (dbMatch) {
+                        // Ghi đè chỉ mục thay vì bỏ qua, để luôn ưu tiên lấy cột cuối cùng có chứa dữ liệu thực tế (chống dummy columns)
+                        let existingMap = colMapping.find(m => m.dbCol === dbMatch.original);
+                        if (existingMap) {
+                            existingMap.excelIdx = idx;
+                        } else {
+                            colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
                         }
                     }
                 }
-
-                if (actualDbCol) colMapping.push({ excelIdx: idx, dbCol: actualDbCol });
             });
-
-            let uniqueMappings = []; let seenDbCols = new Set();
-            colMapping.forEach(m => {
-                if (!seenDbCols.has(m.dbCol)) { seenDbCols.add(m.dbCol); uniqueMappings.push(m); }
-            });
-            colMapping = uniqueMappings;
 
             if (colMapping.length === 0) continue;
 
@@ -1129,7 +1118,6 @@ exports.handleImportData = async (req, res) => {
                 'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
             ];
 
-            // BẮT BUỘC MỌI DÒNG SAU HEADER ĐỀU ĐƯỢC QUÉT ĐỂ TÌM DỮ LIỆU CHÍNH XÁC
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
                 if (!row || row.length === 0) continue; 
@@ -1138,7 +1126,7 @@ exports.handleImportData = async (req, res) => {
 
                 const rowObj = {}; 
                 let hasKpiData = false;
-                let hasValidIdentifier = false; // Phải có tên Cell thì mới được vào Database
+                let hasValidIdentifier = false;
 
                 colMapping.forEach(map => {
                     let val = row[map.excelIdx];
@@ -1172,18 +1160,15 @@ exports.handleImportData = async (req, res) => {
                     rowObj[map.dbCol] = val;
                     if (val !== null && val !== undefined && val !== '') hasKpiData = true;
 
-                    // Xác thực xem dòng này có chứa Tên Trạm / Tên Cell / ID hợp lệ không
                     let colNameStr = map.dbCol.toLowerCase();
                     if (colNameStr.includes('cell') || colNameStr.includes('site') || colNameStr.includes('csht') || colNameStr.includes('vt') || colNameStr.includes('tu_khoa')) {
                         let stringVal = String(val).toLowerCase().trim();
-                        // Dấu hiệu hợp lệ: Không rỗng, không phải là chữ tiêu đề phụ bị lặp
                         if (val && stringVal !== '' && !stringVal.includes('cell name') && !stringVal.includes('tên cell') && !stringVal.includes('site name')) {
                             hasValidIdentifier = true;
                         }
                     }
                 });
 
-                // Chỉ đưa vào DB nếu dòng này chứa Tên Cell/Site và không phải là dòng sub-header rác
                 if (hasKpiData && hasValidIdentifier) {
                     if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
                     insertData.push(rowObj);
@@ -1231,7 +1216,7 @@ exports.handleImportData = async (req, res) => {
                 totalImported += insertData.length;
             }
         } catch (error) { console.error(`Lỗi file:`, error); }
-    } 
+    }
 
     const runBackgroundSync = async () => {
         try {
