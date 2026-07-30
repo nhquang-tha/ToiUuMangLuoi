@@ -739,7 +739,7 @@ exports.handleImportData = async (req, res) => {
         return res.render('import_data', { title: 'Import Data', page: 'Import Data', userRole: userRole, history: history, message: null, error: errorLogs.join(' | ') });
     }
 
-    // [MỚI] TỰ ĐỘNG DỌN DẸP XÓA BỎ CỘT RÁC DO LỖI TỰ ĐỘNG TẠO TRƯỚC ĐÓ
+    // [NÂNG CẤP BẢO VỆ CỘT]: Dọn dẹp rác nhưng giữ lại chính xác các cột _DL
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
         const standardCols = networkType === 'mbb_qoe' 
             ? ['id', 'tuan', 'ma_tinh', 'don_vi', 'phuong_xa', 'site_name', 'cell_name', 'cell_id', 'qoe_score', 'qoe_rank', 'norm_speed', 'norm_latency', 'norm_jitter', 'norm_packetloss', 'point_speed', 'point_latency', 'point_jitter', 'point_packetloss', 'out_speed', 'out_latency', 'out_jitter', 'out_packetloss', 'in_speed', 'in_latency', 'in_jitter', 'in_packetloss', 'created_at']
@@ -756,7 +756,7 @@ exports.handleImportData = async (req, res) => {
             }
         }
 
-        // Cập nhật lại danh sách cột sau khi xóa
+        // Cập nhật lại danh sách cột sau khi dọn dẹp
         if (colsToDrop.length > 0) {
             const [newCols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
             dbCols = newCols.map(c => ({ original: c.Field, norm: normalizeStr(c.Field) }));
@@ -932,7 +932,6 @@ exports.handleImportData = async (req, res) => {
                     // 2. Nhóm Điểm số & Xếp hạng (Core Metrics)
                     if (networkType === 'mbb_qoe' && !mappedCol) {
                         if (h.match(/qoe.*score|điểm.*qoe|score.*qoe|tổng hợp/)) {
-                            // Chặn việc bắt nhầm sang điểm chuẩn hóa
                             if (!h.match(/chuẩn hóa|chuan hoa|thành phần|thanh phan|đầu ra|dau ra|đầu vào|dau vao|norm|point|in|out/)) {
                                 mappedCol = 'QoE_Score';
                             }
@@ -955,6 +954,7 @@ exports.handleImportData = async (req, res) => {
                         else if (h.match(/out|đầu ra|dau ra/)) prefix = 'Out_';
 
                         if (networkType === 'mbb_qos') {
+                            // Chú ý ở đây: Các từ khóa 'dl', 'vùng phủ', 'cov' sẽ map vào cột '_DL'
                             if (h.match(/\bdl\b|vùng phủ|vung phu|rsrp|cov|coverage/)) mappedCol = prefix + 'DL';
                             else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
                             else if (h.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
