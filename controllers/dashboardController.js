@@ -856,83 +856,72 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
-            // ÁNH XẠ DỮ LIỆU ĐỘNG (KHÔNG TẠO CỘT THỪA VÀ ÁP DỤNG MỞ RỘNG TỪ KHÓA ĐỂ ĐỌC FILE MỚI)
+            // ÁNH XẠ DỮ LIỆU ĐỘNG (ÁP DỤNG REGEX THÔNG MINH ĐỂ ĐỌC FILE CŨ VÀ MỚI)
             excelHeaders.forEach((exHeader, idx) => {
                 let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b]/g, '').trim();
                 let mappedCol = null;
 
                 if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                     // 1. Nhóm Dữ liệu Không gian (Địa lý & Trạm)
-                    if (h === 'tỉnh' || h === 'ma_tinh' || h === 'tinh' || h.includes('province')) mappedCol = 'Ma_Tinh';
-                    else if (h === 'đơn vị' || h === 'don_vi' || h.includes('district') || h.includes('quận') || h.includes('huyện')) mappedCol = 'Don_Vi';
-                    else if (h === 'phường xã' || h === 'phuong_xa' || h.includes('phường') || h.includes('xã') || h.includes('ward')) mappedCol = 'Phuong_Xa';
-                    else if (h === 'site' || h.includes('site name') || h === 'site_name' || h === 'tên site' || h === 'site code') mappedCol = 'Site_Name';
-                    else if (h === 'cell' || h.includes('cell name') || h === 'cell_name' || h === 'tên cell' || h === 'cell code') mappedCol = 'Cell_Name';
-                    else if (h === 'cell_id' || h === 'cell id' || h === 'cellid' || h.includes('id cell')) mappedCol = 'Cell_ID';
+                    if (h.match(/^tỉnh$|^ma_tinh$|^tinh$|province/)) mappedCol = 'Ma_Tinh';
+                    else if (h.match(/^đơn vị$|^don_vi$|district|quận|huyện/)) mappedCol = 'Don_Vi';
+                    else if (h.match(/^phường xã$|^phuong_xa$|phường|xã|ward/)) mappedCol = 'Phuong_Xa';
+                    else if (h.match(/^site$|site name|site_name|tên site|site code/)) mappedCol = 'Site_Name';
+                    else if (h.match(/^cell$|cell name|cell_name|tên cell|cell code/)) mappedCol = 'Cell_Name';
+                    else if (h.match(/^cell_id$|^cell id$|^ci$|id cell|mã cell/)) mappedCol = 'Cell_ID';
                     
                     // 2. Nhóm Điểm số & Xếp hạng (Core Metrics)
-                    if (networkType === 'mbb_qoe') {
-                        if (h.includes('qoe score') || h.includes('qoe_score') || h === 'score' || h.includes('điểm qoe') || h === 'qoe' || h === 'điểm') mappedCol = 'QoE_Score';
-                        else if (h.includes('qoe rank') || h.includes('qoe_rank') || h === 'rank' || h.includes('hạng qoe') || h.includes('xếp hạng')) mappedCol = 'QoE_Rank';
-                    } else if (networkType === 'mbb_qos') {
-                        if (h.includes('qos score') || h.includes('qos_score') || h === 'score' || h.includes('điểm qos') || h === 'qos' || h === 'điểm') mappedCol = 'QoS_Score';
-                        else if (h.includes('qos rank') || h.includes('qos_rank') || h === 'rank' || h.includes('hạng qos') || h.includes('xếp hạng')) mappedCol = 'QoS_Rank';
+                    if (networkType === 'mbb_qoe' && !mappedCol) {
+                        if (h.match(/qoe.*score|điểm.*qoe|qoe.*điểm|score.*qoe|^qoe$/)) mappedCol = 'QoE_Score';
+                        else if (h.match(/qoe.*rank|hạng.*qoe|qoe.*hạng|xếp hạng.*qoe|^rank$/)) mappedCol = 'QoE_Rank';
+                    } else if (networkType === 'mbb_qos' && !mappedCol) {
+                        if (h.match(/qos.*score|điểm.*qos|qos.*điểm|score.*qos|^qos$/)) mappedCol = 'QoS_Score';
+                        else if (h.match(/qos.*rank|hạng.*qos|qos.*hạng|xếp hạng.*qos|^rank$/)) mappedCol = 'QoS_Rank';
                     }
 
-                    // 3. Nhóm Chỉ số thành phần của MBB QoS (Phủ sóng, Sẵn sàng, Truy cập, Giữ dịch vụ, Toàn vẹn)
-                    if (networkType === 'mbb_qos') {
-                        // Nhóm Coverage (Chất lượng vùng phủ)
-                        if (h.includes('coverage') || h.includes('vùng phủ') || h.includes('cov')) {
-                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Cov';
-                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Cov';
-                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Cov';
-                            else mappedCol = 'In_Cov';
-                        }
-                        // Nhóm Resource (Độ sẵn sàng tài nguyên)
-                        else if (h.includes('resource') || h.includes('tài nguyên') || h.includes('res')) {
-                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Res';
-                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Res';
-                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Res';
-                            else mappedCol = 'In_Res';
-                        }
-                        // Nhóm Accessibility (Khả năng truy cập)
-                        else if (h.includes('accessibility') || h.includes('truy cập') || h.includes('acc')) {
-                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Acc';
-                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Acc';
-                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Acc';
-                            else mappedCol = 'In_Acc';
-                        }
-                        // Nhóm Retainability (Khả năng duy trì / Rớt)
-                        else if (h.includes('retainability') || h.includes('duy trì') || h.includes('ret') || h.includes('drop')) {
-                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Ret';
-                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Ret';
-                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Ret';
-                            else mappedCol = 'In_Ret';
-                        }
-                        // Nhóm Integrity (Tính toàn vẹn dịch vụ)
-                        else if (h.includes('integrity') || h.includes('toàn vẹn') || h.includes('int')) {
-                            if (h.includes('norm') || h.includes('chuẩn hóa')) mappedCol = 'Norm_Int';
-                            else if (h.includes('point') || h.includes('điểm thành phần')) mappedCol = 'Point_Int';
-                            else if (h.includes('out') || h.includes('đầu ra')) mappedCol = 'Out_Int';
-                            else mappedCol = 'In_Int';
+                    // 3. Nhóm Chỉ số thành phần của MBB QoS & QoE
+                    if ((networkType === 'mbb_qos' || networkType === 'mbb_qoe') && !mappedCol) {
+                        // Nhận diện tiền tố (Prefix: Norm_, Point_, Out_, In_)
+                        let prefix = 'In_'; // Mặc định là In_ (Dữ liệu thô đầu vào) nếu không có chỉ định
+                        if (h.match(/norm|chuẩn hóa|chuan hoa/)) prefix = 'Norm_';
+                        else if (h.match(/point|điểm|diem thanh phan/)) prefix = 'Point_';
+                        else if (h.match(/out|đầu ra|dau ra/)) prefix = 'Out_';
+
+                        // Ánh xạ các cột của bảng QoS
+                        if (networkType === 'mbb_qos') {
+                            if (h.match(/cov|vùng phủ|vung phu|rsrp/)) mappedCol = prefix + 'Cov';
+                            else if (h.match(/res|sẵn sàng|san sang|tài nguyên|availability/)) mappedCol = prefix + 'Res';
+                            else if (h.match(/acc|truy cập|truy cap|thiết lập/)) mappedCol = prefix + 'Acc';
+                            else if (h.match(/ret|duy trì|duy tri|rớt|drop/)) mappedCol = prefix + 'Ret';
+                            else if (h.match(/int|toàn vẹn|toan ven|integrity|thput/)) mappedCol = prefix + 'Int';
+                        } 
+                        // Ánh xạ các cột của bảng QoE
+                        else if (networkType === 'mbb_qoe') {
+                            if (h.match(/speed|tốc độ|toc do/)) mappedCol = prefix + 'Speed';
+                            else if (h.match(/lat|độ trễ|do tre|ping|delay/)) mappedCol = prefix + 'Latency';
+                            else if (h.match(/jit|biến động|jitter/)) mappedCol = prefix + 'Jitter';
+                            else if (h.match(/loss|mất gói|mat goi/)) mappedCol = prefix + 'PacketLoss';
                         }
                     }
 
-                    // Tự động quét các trường hợp ngoại lệ khác chưa được bao phủ bên trên
+                    // 4. Fallback: Nếu vẫn không khớp, thử so sánh tên cột trực tiếp bằng hàm chuẩn hóa
                     if (!mappedCol) {
                         let safeName = createSafeColumnName(exHeader);
                         let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
                         if (exactMatch) mappedCol = exactMatch.original;
                     }
 
-                    // Đẩy dữ liệu vào mảng Map nếu nó nằm trong danh sách Cột Chuẩn (Sẵn sàng import)
+                    // 5. Đẩy dữ liệu vào Mapping
                     if (mappedCol) {
                         let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                         if (dbMatch) {
-                            colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
+                            // Tránh việc 2 cột trong Excel cùng trỏ về 1 cột trong Database
+                            if (!colMapping.find(m => m.dbCol === dbMatch.original)) {
+                                colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
+                            }
                         }
                     }
-                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác trong Excel
+                    return; // Ngắt vòng lặp, bỏ qua hoàn toàn các cột rác (VD: "Ghi chú", "Thực hiện")
                 }
                 else if (networkType === 'kpi_3g') {
                     if (h.includes('tên cell') || h === 'tên cell' || h.includes('cell name') || h === 'ten_cell') mappedCol = 'Ten_CELL';
