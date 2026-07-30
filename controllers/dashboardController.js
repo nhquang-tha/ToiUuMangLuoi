@@ -3,7 +3,10 @@ const xlsx = require('xlsx');
 
 // Hàm bổ trợ: Biến đổi NaN hoặc undefined thành số 0 an toàn cho MySQL
 const getSafeFloat = (val) => {
-    const f = parseFloat(val);
+    if (val === undefined || val === null || val === '') return 0;
+    // Xử lý cả dấu phẩy tiếng Việt và dấu chấm tiếng Anh
+    let s = String(val).replace(/,/g, '.').replace(/[^0-9.-]/g, '');
+    const f = parseFloat(s);
     return isNaN(f) ? 0 : f;
 };
 
@@ -782,26 +785,42 @@ exports.handleImportData = async (req, res) => {
 
             let dataStartIdx = -1;
             let excelHeaders = [];
-            let h3_base = []; // Lưu lại dòng tiêu đề sát dữ liệu nhất để dò chính xác
+            let h3_base = [];
 
-            // [NÂNG CẤP TỐI THƯỢNG]: TÌM DÒNG DỮ LIỆU ĐẦU TIÊN ĐỂ QUÉT NGƯỢC LÊN LẤY HEADER
+            // [TỐI ƯU TUYỆT ĐỐI]: TÌM DÒNG DỮ LIỆU ĐẦU TIÊN CHUẨN XÁC CHO CẢ FILE CSV VÀ XLSX
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 for (let i = 0; i < Math.min(40, rawData.length); i++) {
-                    if (!rawData[i]) continue;
-                    let isDataRow = false;
+                    let row = rawData[i];
+                    if (!row) continue;
                     
-                    // Quét 15 cột đầu tiên để tìm dấu hiệu của dòng dữ liệu thật
-                    for(let c = 0; c < Math.min(15, rawData[i].length); c++) {
-                        let cellVal = String(rawData[i][c] || '').trim().toUpperCase();
-                        // Dấu hiệu: STT là số, hoặc chứa tên trạm 3G/4G/5G
-                        if (cellVal === '1' || cellVal === '01' || (c === 0 && !isNaN(parseInt(cellVal))) || cellVal.match(/^(3G|4G|5G)/)) {
-                            // Chống nhận nhầm chữ "CELL 4G" trong tiêu đề
-                            if (!cellVal.includes('CELL') && !cellVal.includes('SITE') && !cellVal.includes('NAME')) {
-                                isDataRow = true;
-                                break;
+                    let firstCellStr = String(row[0] || '').trim().toLowerCase();
+                    if (firstCellStr === 'summary' || firstCellStr.includes('không thành công') || firstCellStr.includes('phân trang')) continue;
+
+                    let isDataRow = false;
+                    let numberCount = 0;
+
+                    // Đếm số lượng dữ liệu dạng số (hỗ trợ cả dấu phẩy tiếng Việt như 99,5)
+                    for (let c = 0; c < row.length; c++) {
+                        let val = String(row[c] || '').replace(/,/g, '.');
+                        if (!isNaN(parseFloat(val))) numberCount++;
+                    }
+                    
+                    // Nếu dòng này chứa hơn 8 con số, nó chắc chắn là dòng Dữ Liệu
+                    if (numberCount > 8) {
+                        isDataRow = true;
+                    } else {
+                        // Backup check: Quét tìm mã trạm hoặc số thứ tự
+                        for(let c = 0; c < Math.min(15, row.length); c++) {
+                            let cellVal = String(row[c] || '').trim().toUpperCase();
+                            if (cellVal === '1' || cellVal === '01' || (c === 0 && !isNaN(parseInt(cellVal))) || cellVal.match(/^(3G|4G|5G)/)) {
+                                if (!cellVal.includes('CELL') && !cellVal.includes('SITE') && !cellVal.includes('NAME') && !cellVal.includes('RANK') && !cellVal.includes('SCORE')) {
+                                    isDataRow = true;
+                                    break;
+                                }
                             }
                         }
                     }
+
                     if (isDataRow) {
                         dataStartIdx = i;
                         break;
@@ -810,35 +829,37 @@ exports.handleImportData = async (req, res) => {
 
                 if (dataStartIdx === -1 || dataStartIdx === 0) continue;
 
-                // Lấy 3 dòng ngay phía trên dòng dữ liệu để làm Header
-                const h1 = dataStartIdx >= 3 ? rawData[dataStartIdx - 3] : [];
-                const h2 = dataStartIdx >= 2 ? rawData[dataStartIdx - 2] : [];
-                const h3 = dataStartIdx >= 1 ? rawData[dataStartIdx - 1] : [];
-                h3_base = h3;
+                // Lấy 3 dòng ngay phía trên dòng dữ liệu để gom Header
+                let h1 = dataStartIdx >= 3 ? rawData[dataStartIdx - 3] : [];
+                let h2 = dataStartIdx >= 2 ? rawData[dataStartIdx - 2] : [];
+                let h3 = dataStartIdx >= 1 ? rawData[dataStartIdx - 1] : [];
+                
+                if (!h1) h1 = []; if (!h2) h2 = []; if (!h3) h3 = [];
 
                 let lastP1 = '';
                 let lastP2 = '';
-                
-                const maxCols = Math.max(h1 ? h1.length : 0, h2 ? h2.length : 0, h3 ? h3.length : 0);
+                const maxCols = Math.max(h1.length, h2.length, h3.length);
 
                 for (let c = 0; c < maxCols; c++) {
-                    let v1 = h1 && h1[c] !== undefined && h1[c] !== null ? String(h1[c]).trim() : '';
-                    let v2 = h2 && h2[c] !== undefined && h2[c] !== null ? String(h2[c]).trim() : '';
-                    let v3 = h3 && h3[c] !== undefined && h3[c] !== null ? String(h3[c]).trim() : '';
+                    let v1 = (h1[c] !== undefined && h1[c] !== null && String(h1[c]).trim() !== '') ? String(h1[c]).trim() : lastP1;
+                    let v2 = (h2[c] !== undefined && h2[c] !== null && String(h2[c]).trim() !== '') ? String(h2[c]).trim() : lastP2;
+                    let v3 = (h3[c] !== undefined && h3[c] !== null) ? String(h3[c]).trim() : '';
                     
-                    // Fill Forward cho các ô Merge theo chiều ngang
-                    if (v1 === '' && lastP1 !== '') v1 = lastP1; else lastP1 = v1;
-                    if (v2 === '' && lastP2 !== '') v2 = lastP2; else lastP2 = v2;
+                    lastP1 = v1;
+                    lastP2 = v2;
 
                     if (v1 === '' && v2 === '' && v3 === '') {
                         excelHeaders.push('');
+                        h3_base.push('');
                     } else {
+                        // Gộp tất cả các tầng header lại
                         let combinedHeader = `${v1} ${v2} ${v3}`.trim().replace(/\s+/g, ' ');
                         excelHeaders.push(combinedHeader);
+                        // Lấy giá trị cơ bản sát gốc nhất (Dành cho việc so sánh direct match với CSV file)
+                        h3_base.push(v3 || v2 || v1);
                     }
                 }
             } else {
-                // QUÉT THÔNG THƯỜNG CHO CÁC BẢNG KHÁC
                 let headerRowIdx = -1;
                 for (let i = 0; i < Math.min(30, rawData.length); i++) {
                     if (!rawData[i]) continue;
@@ -856,7 +877,7 @@ exports.handleImportData = async (req, res) => {
                 }
                 if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
                 excelHeaders = rawData[headerRowIdx];
-                h3_base = excelHeaders; // Đối với file thường, chỉ có 1 dòng header
+                h3_base = excelHeaders;
             }
             
             if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
@@ -908,7 +929,7 @@ exports.handleImportData = async (req, res) => {
 
             let colMapping = [];
 
-            // [NÂNG CẤP TUYỆT ĐỐI] - ÁNH XẠ THÔNG MINH KẾT HỢP DÒ TÌM TRỰC TIẾP
+            // ÁNH XẠ DỮ LIỆU ĐỘNG SAU KHI ĐÃ ĐIỀN ĐẦY TIÊU ĐỀ
             excelHeaders.forEach((exHeader, idx) => {
                 if (exHeader === undefined || exHeader === null || exHeader === '') return;
                 
@@ -918,7 +939,7 @@ exports.handleImportData = async (req, res) => {
                 if (h === '') return;
                 let mappedCol = null;
 
-                // 1. Dò tìm CHÍNH XÁC tên cột trong Database trước (Giải quyết triệt để file "results...csv")
+                // 1. Dò tìm CHÍNH XÁC tên cột trong Database trước (Dành cho file CSV kết quả tải về)
                 let directMatch = dbCols.find(c => 
                     c.original.toLowerCase() === baseH || 
                     c.original.toLowerCase() === h ||
@@ -1098,7 +1119,6 @@ exports.handleImportData = async (req, res) => {
                 if (mappedCol) {
                     let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
                     if (dbMatch) {
-                        // Ghi đè chỉ mục thay vì bỏ qua, để luôn ưu tiên lấy cột cuối cùng có chứa dữ liệu thực tế (chống dummy columns)
                         let existingMap = colMapping.find(m => m.dbCol === dbMatch.original);
                         if (existingMap) {
                             existingMap.excelIdx = idx;
@@ -1148,6 +1168,7 @@ exports.handleImportData = async (req, res) => {
                         if (val === null || val === undefined || val === '' || String(val).trim() === '') {
                             val = null; 
                         } else if (typeof val === 'string') {
+                            // Chuyển đổi an toàn dấu phẩy sang dấu chấm trước khi parse
                             let parsed = parseFloat(val.replace(/,/g, '.'));
                             val = isNaN(parsed) ? null : parsed; 
                         } else if (typeof val === 'number') {
@@ -1386,7 +1407,7 @@ exports.getAllPoiExportData = async (req, res) => {
             SELECT p.POI, k.Thoi_gian, 
                    SUM(k.Total_Data_Traffic_Volume_GB) as Traf_4G, AVG(k.User_DL_Avg_Throughput_Kbps) as Thput_4G, AVG(k.CQI_4G) as CQI_4G,
                    0 as Traf_5G, 0 as Thput_5G, 0 as CQI_5G
-            FROM poi_4g p JOIN kpi_4g k ON p.Cell_Code = k.Cell_name 
+            FROM poi_4g p JOIN kpi_4g k ON p.Cell_name = k.Cell_name 
             WHERE k.Thoi_gian IS NOT NULL GROUP BY p.POI, k.Thoi_gian
             UNION ALL
             SELECT p.POI, k.Thoi_gian, 
