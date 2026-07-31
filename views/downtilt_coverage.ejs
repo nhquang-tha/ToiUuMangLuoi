@@ -6,68 +6,57 @@
     let sidebarUser = activeUser ? Object.assign({}, activeUser, { role: normalizedRole }) : null;
 %>
 <style>
-    .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
+    .layout { display: flex; height: 100vh; overflow: hidden; background-color: var(--bg-body); }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
-    .calc-container { display: flex; flex-wrap: wrap; gap: 20px; }
+    .calc-wrapper { display: flex; flex-wrap: wrap; gap: 20px; max-width: 1400px; margin: 0 auto;}
     
-    .calc-card { 
-        background: white; padding: 25px; border-radius: 12px; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05); flex: 1; min-width: 300px; 
-        border-top: 4px solid #3498db;
+    .calc-panel { 
+        background: var(--bg-surface); padding: 25px; border-radius: 12px; 
+        box-shadow: var(--shadow-card); flex: 1; min-width: 350px; 
+        border-top: 4px solid var(--primary);
+        display: flex; flex-direction: column; gap: 20px;
     }
     
-    .visual-card { 
-        background: white; padding: 25px; border-radius: 12px; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05); flex: 2; min-width: 300px;
-        border-top: 4px solid #9b59b6; display: flex; flex-direction: column;
+    .visual-panel { 
+        background: var(--bg-surface); padding: 25px; border-radius: 12px; 
+        box-shadow: var(--shadow-card); flex: 1.5; min-width: 400px;
+        border-top: 4px solid var(--success); 
+        display: flex; flex-direction: column;
     }
 
-    .form-group { margin-bottom: 15px; }
-    .form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #34495e; font-size: 13px;}
-    .input-wrapper { display: flex; align-items: center; border: 1px solid #bdc3c7; border-radius: 6px; overflow: hidden; background: #fdfdfd;}
-    .input-wrapper input { flex: 1; border: none; padding: 12px 15px; outline: none; font-size: 16px; color: #2c3e50; font-weight: bold; /* Tăng padding để dễ chạm trên mobile */ }
-    .input-wrapper span { background: #ecf0f1; padding: 12px 15px; color: #7f8c8d; font-weight: bold; border-left: 1px solid #bdc3c7; font-size: 13px;}
+    .section-title { font-size: 16px; font-weight: 700; color: var(--text-main); border-bottom: 2px solid var(--border-color); padding-bottom: 10px; margin: 0 0 15px 0; display: flex; align-items: center; gap: 8px;}
+    
+    .input-group { margin-bottom: 15px; }
+    .input-group label { display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-main); font-size: 13px;}
+    .input-row { display: flex; align-items: center; border: 1.5px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); transition: all 0.3s;}
+    .input-row:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+    .input-row input { flex: 1; border: none; padding: 10px 15px; outline: none; font-size: 14px; color: var(--text-main); font-weight: bold; background: transparent; width: 100%;}
+    .input-row .unit { background: var(--border-color); padding: 10px 15px; color: var(--text-muted); font-weight: 700; font-size: 12px; white-space: nowrap;}
 
-    /* CSS cho thanh chọn chế độ tính toán */
-    .mode-selector { display: flex; background: #ecf0f1; border-radius: 8px; padding: 4px; margin-bottom: 20px; }
-    .mode-selector label { flex: 1; text-align: center; margin: 0; padding: 10px; cursor: pointer; font-size: 13px; color: #7f8c8d; border-radius: 6px; transition: 0.3s; font-weight: bold;}
-    .mode-selector input[type="radio"] { display: none; }
-    .mode-selector input[type="radio"]:checked + label { background: #3498db; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    /* Styling for the two distinct calculation sections matching the image */
+    .calc-card-inner { background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px;}
+    .calc-card-inner.highlight { background: rgba(59, 130, 246, 0.05); border-color: #bfdbfe; }
+    
+    .result-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--border-color); }
+    .result-row:last-child { border-bottom: none; }
+    .result-label { font-size: 13px; color: var(--text-muted); font-weight: 600;}
+    .result-val { font-size: 15px; font-weight: 800; color: var(--text-main); }
+    .val-danger { color: var(--danger); }
+    .val-primary { color: var(--primary); }
+    .val-success { color: var(--success); }
 
-    .btn-calc { background: #3498db; color: white; border: none; padding: 14px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; font-size: 16px; transition: 0.2s; margin-top: 10px; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.2); }
-    .btn-calc:hover { background: #2980b9; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(52, 152, 219, 0.3); }
+    .btn-calc { background: var(--cta-gradient); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; width: 100%; font-size: 14px; transition: 0.2s; text-transform: uppercase; letter-spacing: 1px; box-shadow: var(--cta-shadow);}
+    .btn-calc:hover { transform: translateY(-2px); filter: brightness(1.1); }
+    .btn-calc.alt { background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
 
-    .result-box { background: #f4f9fd; border: 1px solid #d6eaf8; border-radius: 8px; padding: 15px 20px; margin-top: 20px; }
-    .result-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #bdc3c7; }
-    .result-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .result-label { color: #34495e; font-weight: bold; font-size: 14px; }
-    .result-value { font-size: 18px; font-weight: 900; color: #e74c3c; }
-    .result-value.ok { color: #27ae60; }
-    .result-value.highlight { color: #8e44ad; font-size: 22px; }
+    canvas { width: 100%; height: 400px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; margin-top: 15px; }
 
-    canvas { width: 100%; height: 350px; background: #fdfdfd; border: 1px solid #ecf0f1; border-radius: 8px; margin-top: 15px; }
+    .note-box { background: rgba(245, 158, 11, 0.1); border-left: 4px solid var(--warning); padding: 12px 15px; border-radius: 4px; font-size: 12px; color: var(--text-main); margin-top: 15px; line-height: 1.6;}
 
-    .help-text { font-size: 12px; color: #7f8c8d; margin-top: 5px; line-height: 1.4; }
-
-    /* =========================================
-       TỐI ƯU HÓA HIỂN THỊ TRÊN THIẾT BỊ DI ĐỘNG
-       ========================================= */
-    @media (max-width: 768px) {
-        .main-content { padding: 10px; }
-        .calc-card, .visual-card { 
-            min-width: 100%; 
-            padding: 15px; 
-            border-radius: 8px;
-        }
-        .topbar h1 { font-size: 18px; }
-        .mode-selector label { font-size: 12px; padding: 8px 5px; }
-        .input-wrapper input { font-size: 14px; padding: 10px; }
-        .input-wrapper span { font-size: 12px; padding: 10px; }
-        canvas { height: 280px; } /* Thu gọn chiều cao canvas trên mobile để vừa màn hình */
-        .result-label { font-size: 13px; }
-        .result-value { font-size: 16px; }
-        .result-value.highlight { font-size: 18px; }
+    @media (max-width: 1024px) {
+        .calc-wrapper { flex-direction: column; }
+        canvas { height: 300px; }
     }
 </style>
 
@@ -75,108 +64,131 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>📐 Antenna Downtilt & Coverage Calculator</h1>
-            <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 13px;">Công cụ tối ưu hóa góc ngẩng ăng ten để kiểm soát vùng phủ sóng và chống nhiễu đè (Overshoot).</p>
+            <h1>📐 Căn Chỉnh Góc Ngẩng (Downtilt & Coverage)</h1>
+            <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 13px;">Công cụ chuẩn kỹ thuật vô tuyến (RF) mô phỏng vùng phủ búp sóng chính và kiểm soát nhiễu đè (Overshoot).</p>
         </header>
         
         <div class="content-body">
-            <div class="calc-container">
+            <div class="calc-wrapper">
                 
-                <!-- BẢNG NHẬP LIỆU -->
-                <div class="calc-card">
-                    <h3 style="margin-top: 0; color: #2980b9; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; font-size: 16px;">⚙️ Thông Số Đầu Vào</h3>
+                <!-- PANEL NHẬP LIỆU & KẾT QUẢ -->
+                <div class="calc-panel">
                     
-                    <!-- CHỌN CHẾ ĐỘ TÍNH TOÁN -->
-                    <div class="mode-selector">
-                        <input type="radio" id="mode_coverage" name="calcMode" value="coverage" checked onchange="toggleMode()">
-                        <label for="mode_coverage">Tính Vùng Phủ (Cự ly)</label>
+                    <div>
+                        <div class="section-title"><i class="ph-fill ph-sliders"></i> Thông Số Trạm (Input Parameters)</div>
                         
-                        <input type="radio" id="mode_tilt" name="calcMode" value="tilt" onchange="toggleMode()">
-                        <label for="mode_tilt">Tính Góc Tilt (Biết Cự ly)</label>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Chiều cao Ăng ten (Antenna Height - Ht)</label>
-                        <div class="input-wrapper">
-                            <input type="number" id="h_t" value="30" step="1" inputmode="decimal">
-                            <span>Mét (m)</span>
+                        <div class="input-group">
+                            <label>Độ cao mặt đất vị trí cột anten so với mực nước biển</label>
+                            <div class="input-row">
+                                <input type="number" id="h_ground" value="110" step="1">
+                                <div class="unit">m</div>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Độ cao anten so với mặt đất vị trí cột anten</label>
+                            <div class="input-row">
+                                <input type="number" id="h_ant_agl" value="18" step="1">
+                                <div class="unit">m</div>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Độ cao khu vực cần phủ sóng so với mực nước biển</label>
+                            <div class="input-row">
+                                <input type="number" id="h_target" value="42" step="1">
+                                <div class="unit">m</div>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Nhập Vertical Beamwidth (Búp sóng đứng)</label>
+                            <div class="input-row">
+                                <input type="number" id="vbw" value="7" step="0.1">
+                                <div class="unit">Độ (°)</div>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Nhập Tilt điện Anten (Electrical Downtilt)</label>
+                            <div class="input-row">
+                                <input type="number" id="tilt_elec" value="6" step="0.1">
+                                <div class="unit">Độ (°)</div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>Chiều cao Thiết bị thu UE (User Height - Hr)</label>
-                        <div class="input-wrapper">
-                            <input type="number" id="h_r" value="1.5" step="0.1" inputmode="decimal">
-                            <span>Mét (m)</span>
+                    <!-- CALCULATE 1: TÍNH TILT TỪ BÁN KÍNH -->
+                    <div class="calc-card-inner highlight">
+                        <div class="section-title" style="color: var(--primary); border-color: #bfdbfe;"><i class="ph-fill ph-target"></i> Bài Toán 1: Tìm Tilt Theo Cự Ly</div>
+                        <div class="input-group">
+                            <label style="color: var(--primary);">Nhập Bán kính cần phủ sóng chính (Target Distance)</label>
+                            <div class="input-row" style="border-color: #93c5fd;">
+                                <input type="number" id="calc1_dist" value="1600" step="10">
+                                <div class="unit" style="background: #eff6ff; color: var(--primary);">m</div>
+                            </div>
                         </div>
-                        <div class="help-text">Mặc định 1.5m (chiều cao người cầm ĐT).</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Búp sóng đứng (Vertical Beamwidth)</label>
-                        <div class="input-wrapper">
-                            <input type="number" id="beamwidth" value="10" step="0.5" inputmode="decimal">
-                            <span>Độ (°)</span>
-                        </div>
-                        <div class="help-text">Khoảng 6° - 12° tùy loại ăng ten.</div>
-                    </div>
-
-                    <!-- TRƯỜNG NHẬP LIỆU DÀNH CHO CHẾ ĐỘ 1: TÍNH VÙNG PHỦ -->
-                    <div class="form-group" id="group_tilt">
-                        <label>Góc gục ăng ten đang thiết lập (Total Downtilt)</label>
-                        <div class="input-wrapper">
-                            <input type="number" id="tilt" value="6" step="0.5" inputmode="decimal">
-                            <span>Độ (°)</span>
-                        </div>
-                    </div>
-
-                    <!-- TRƯỜNG NHẬP LIỆU DÀNH CHO CHẾ ĐỘ 2: TÍNH GÓC TILT -->
-                    <div class="form-group" id="group_target_dist" style="display: none;">
-                        <label style="color: #8e44ad;">Cự ly cần phủ sóng tới (Target Distance - D)</label>
-                        <div class="input-wrapper" style="border-color: #9b59b6;">
-                            <input type="number" id="target_dist" value="270" step="10" inputmode="numeric">
-                            <span style="background: #f4ecf8; color: #8e44ad; border-left-color: #9b59b6;">Mét (m)</span>
-                        </div>
-                        <div class="help-text">Khoảng cách từ trạm đến rìa vùng cần phủ.</div>
-                    </div>
-
-                    <button class="btn-calc" onclick="calculateCoverage(true)">⚡ BẮT ĐẦU TÍNH TOÁN</button>
-
-                    <!-- KẾT QUẢ -->
-                    <div class="result-box">
-                        <!-- Hiển thị Tilt đề xuất nếu ở chế độ 2 -->
-                        <div class="result-item" id="res_tilt_item" style="display: none; background: #fdf4fdf2; padding: 10px; border-radius: 6px; border: 1px solid #e1cbed;">
-                            <span class="result-label" style="color: #8e44ad;">Góc Tilt Đề Xuất</span>
-                            <span class="result-value highlight" id="res_tilt_val">-- °</span>
-                        </div>
-
-                        <div class="result-item">
-                            <span class="result-label">Bán kính trong (Inner Radius)</span>
-                            <span class="result-value ok" id="res_inner">-- m</span>
-                        </div>
-                        <div class="result-item">
-                            <span class="result-label">Bán kính ngoài (Outer Radius)</span>
-                            <span class="result-value" id="res_outer">-- m</span>
-                        </div>
-                        <div class="result-item">
-                            <span class="result-label">Tâm búp sóng (Main Beam)</span>
-                            <span class="result-value" id="res_main" style="color: #3498db;">-- m</span>
+                        <button class="btn-calc" onclick="runCalc1()">Tính Toán (Calculate 1)</button>
+                        
+                        <div style="margin-top: 15px;">
+                            <div class="result-row">
+                                <span class="result-label">Tilt tổng anten (Total Downtilt)</span>
+                                <span class="result-val val-primary" id="res1_tilt_total">-- °</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Tilt cơ anten (Mechanical Downtilt)</span>
+                                <span class="result-val val-primary" id="res1_tilt_mech">-- °</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Bán kính 1/2 công suất trong</span>
+                                <span class="result-val" id="res1_inner">-- m</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Bán kính 1/2 công suất ngoài</span>
+                                <span class="result-val" id="res1_outer">-- m</span>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- CALCULATE 2: TÍNH BÁN KÍNH TỪ TILT -->
+                    <div class="calc-card-inner" style="background: rgba(16, 185, 129, 0.05); border-color: #a7f3d0;">
+                        <div class="section-title" style="color: var(--success); border-color: #a7f3d0;"><i class="ph-fill ph-ruler"></i> Bài Toán 2: Tìm Cự Ly Theo Tilt</div>
+                        <div class="input-group">
+                            <label style="color: var(--success);">Nhập Tilt tổng Anten (Total Downtilt)</label>
+                            <div class="input-row" style="border-color: #6ee7b7;">
+                                <input type="number" id="calc2_tilt_total" value="8" step="0.1">
+                                <div class="unit" style="background: #ecfdf5; color: var(--success);">Độ (°)</div>
+                            </div>
+                        </div>
+                        <button class="btn-calc alt" onclick="runCalc2()">Tính Toán (Calculate 2)</button>
+                        
+                        <div style="margin-top: 15px;">
+                            <div class="result-row">
+                                <span class="result-label">Bán kính 1/2 công suất trong (Inner)</span>
+                                <span class="result-val val-success" id="res2_inner">-- m</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Bán kính vùng phủ sóng chính (Main)</span>
+                                <span class="result-val val-success" id="res2_main">-- m</span>
+                            </div>
+                            <div class="result-row">
+                                <span class="result-label">Bán kính 1/2 công suất ngoài (Outer)</span>
+                                <span class="result-val val-success" id="res2_outer">-- m</span>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <!-- MÔ PHỎNG VISUALIZER -->
-                <div class="visual-card" id="visual_card_section">
-                    <h3 style="margin-top: 0; color: #8e44ad; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; font-size: 16px;">🌍 Mô Phỏng Đồ Họa Búp Sóng</h3>
+                <!-- PANEL VISUALIZER -->
+                <div class="visual-panel">
+                    <div class="section-title"><i class="ph-fill ph-monitor-play"></i> Mô Phỏng Trực Quan Búp Sóng (Beam Pattern)</div>
                     <div style="flex: 1; display: flex; flex-direction: column;">
-                        <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 0;">Mô phỏng mặt cắt dọc của vùng phủ sóng so với mặt đất.</p>
-                        <canvas id="coverageCanvas"></canvas>
+                        <canvas id="visualCanvas"></canvas>
                     </div>
                     
-                    <div style="margin-top: 15px; padding: 12px; background: #fffcf5; border-left: 4px solid #f1c40f; border-radius: 4px; font-size: 12px; color: #34495e; line-height: 1.5;">
-                        <b>💡 Khuyến nghị tối ưu (RNO):</b><br>
-                        - Nếu <b>Outer Radius = Vô cực</b>: Cảnh báo ăng ten đang phát vượt qua đường chân trời, gây nhiễu đè (Overshoot) cho trạm khác. Hãy tăng góc Tilt.<br>
-                        - Nếu vùng phủ quá hẹp (Inner Radius lớn): Tín hiệu sát chân cột sẽ rất yếu. Nên sử dụng ăng ten Null-Fill hoặc giảm Tilt.
+                    <div class="note-box">
+                        <strong>Chú ý (Tiêu chuẩn thiết kế VNPT):</strong><br>
+                        - <b>Góc A:</b> Vertical Beamwidth (Độ mở búp sóng dọc).<br>
+                        - <b>Điểm -3dB:</b> Là điểm công suất bắt đầu giảm đi 1/2. Từ bán kính 1/2 công suất trong đến bán kính 1/2 công suất ngoài là <b>vùng phủ búp sóng chính</b>.<br>
+                        - <b>Tilt tổng = Tilt cơ + Tilt điện.</b><br>
+                        - Nếu Bán kính ngoài hiển thị <b>Over Horizon (Vô cực)</b>, búp sóng trên đang phóng quá đường chân trời gây nhiễu giao thoa (Overshoot) cho trạm lân cận. Cần tăng Downtilt.
                     </div>
                 </div>
 
@@ -186,203 +198,292 @@
 </div>
 
 <script>
-    // Hàm khởi chạy lần đầu để hiện form mặc định (Không scroll)
-    window.onload = () => {
-        calculateCoverage(false);
-    };
-
-    function toggleMode() {
-        const mode = document.querySelector('input[name="calcMode"]:checked').value;
-        if (mode === 'coverage') {
-            document.getElementById('group_tilt').style.display = 'block';
-            document.getElementById('group_target_dist').style.display = 'none';
-            document.getElementById('res_tilt_item').style.display = 'none';
-        } else {
-            document.getElementById('group_tilt').style.display = 'none';
-            document.getElementById('group_target_dist').style.display = 'block';
-            document.getElementById('res_tilt_item').style.display = 'flex';
-        }
+    // Hàm lấy độ cao hiệu dụng (Effective Height)
+    function getEffectiveHeight() {
+        const h_ground = parseFloat(document.getElementById('h_ground').value) || 0;
+        const h_ant_agl = parseFloat(document.getElementById('h_ant_agl').value) || 0;
+        const h_target = parseFloat(document.getElementById('h_target').value) || 0;
+        // Chiều cao thực tế búp sóng rơi xuống = Cao độ gốc + Chiều cao cột - Cao độ vùng phủ
+        let H = (h_ground + h_ant_agl) - h_target;
+        return H > 0 ? H : 0.1; // Tránh lỗi chia cho 0
     }
 
-    // isUserTriggered = true nếu người dùng bấm nút, false nếu là tải trang lần đầu
-    function calculateCoverage(isUserTriggered = true) {
-        const mode = document.querySelector('input[name="calcMode"]:checked').value;
-        const ht = parseFloat(document.getElementById('h_t').value);
-        const hr = parseFloat(document.getElementById('h_r').value);
-        const bw = parseFloat(document.getElementById('beamwidth').value);
+    function runCalc1() {
+        const H = getEffectiveHeight();
+        const D = parseFloat(document.getElementById('calc1_dist').value) || 1600;
+        const vbw = parseFloat(document.getElementById('vbw').value) || 7;
+        const tilt_elec = parseFloat(document.getElementById('tilt_elec').value) || 6;
 
-        if (isNaN(ht) || isNaN(hr) || isNaN(bw)) {
-            alert("Vui lòng nhập đầy đủ các số liệu hợp lệ.");
-            return;
-        }
+        // 1. Tính Total Tilt từ khoảng cách D
+        // tan(theta) = H / D => theta = atan(H / D)
+        const rad_total_tilt = Math.atan(H / D);
+        const deg_total_tilt = rad_total_tilt * (180 / Math.PI);
+        
+        // 2. Tính Mech Tilt
+        const mech_tilt = deg_total_tilt - tilt_elec;
 
-        const deltaH = ht - hr;
-        if (deltaH <= 0) {
-            alert("Chiều cao ăng ten phải lớn hơn chiều cao User!");
-            return;
-        }
+        // 3. Tính Inner & Outer Radius
+        const deg_inner = deg_total_tilt + (vbw / 2);
+        const deg_outer = deg_total_tilt - (vbw / 2);
 
-        let tilt;
+        const rad_inner = deg_inner * (Math.PI / 180);
+        const rad_outer = deg_outer * (Math.PI / 180);
 
-        // XỬ LÝ LƯỢNG GIÁC THEO CHẾ ĐỘ
-        if (mode === 'coverage') {
-            tilt = parseFloat(document.getElementById('tilt').value);
-            if (isNaN(tilt)) {
-                alert("Vui lòng nhập Góc gục ăng ten hợp lệ.");
-                return;
-            }
+        const inner_dist = H / Math.tan(rad_inner);
+        
+        let outer_text = "";
+        let outer_dist = Infinity;
+        if (deg_outer <= 0) {
+            outer_text = "Over Horizon";
+            document.getElementById('res1_outer').className = "result-val val-danger";
         } else {
-            const targetDist = parseFloat(document.getElementById('target_dist').value);
-            if (isNaN(targetDist) || targetDist <= 0) {
-                alert("Vui lòng nhập Cự ly mục tiêu hợp lệ (> 0 mét).");
-                return;
-            }
-            tilt = Math.atan(deltaH / targetDist) * (180 / Math.PI);
-            document.getElementById('res_tilt_val').innerText = tilt.toFixed(1) + " °";
+            outer_dist = H / Math.tan(rad_outer);
+            outer_text = outer_dist.toFixed(2);
+            document.getElementById('res1_outer').className = "result-val val-primary";
         }
 
-        const angle_main = tilt;
-        const angle_inner = tilt + (bw / 2);
-        const angle_outer = tilt - (bw / 2);
+        // Cập nhật UI
+        document.getElementById('res1_tilt_total').innerText = deg_total_tilt.toFixed(2);
+        document.getElementById('res1_tilt_mech').innerText = mech_tilt.toFixed(2);
+        document.getElementById('res1_inner').innerText = inner_dist.toFixed(2);
+        document.getElementById('res1_outer').innerText = outer_text;
 
-        const rad_main = angle_main * (Math.PI / 180);
-        const rad_inner = angle_inner * (Math.PI / 180);
-        const rad_outer = angle_outer * (Math.PI / 180);
-
-        let d_inner = deltaH / Math.tan(rad_inner);
-        let d_main = deltaH / Math.tan(rad_main);
-        let d_outer = Infinity;
-
-        let outerText = "Vô cực (Nhiễu đè)";
-        if (angle_outer > 0) {
-            d_outer = deltaH / Math.tan(rad_outer);
-            outerText = d_outer.toFixed(1) + " m";
-            document.getElementById('res_outer').style.color = "#27ae60"; 
-        } else {
-            document.getElementById('res_outer').style.color = "#c0392b"; 
-        }
-
-        document.getElementById('res_inner').innerText = Math.abs(d_inner).toFixed(1) + " m";
-        document.getElementById('res_main').innerText = Math.abs(d_main).toFixed(1) + " m";
-        document.getElementById('res_outer').innerText = outerText;
-
-        // Vẽ mô phỏng
-        drawCanvas(ht, d_inner, d_main, d_outer, angle_outer <= 0);
-
-        // TỰ ĐỘNG CUỘN XUỐNG BIỂU ĐỒ TRÊN MOBILE KHI NGƯỜI DÙNG BẤM TÍNH TOÁN
-        if (isUserTriggered && window.innerWidth <= 768) {
-            setTimeout(() => {
-                document.getElementById('visual_card_section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
-        }
+        // Vẽ biểu đồ
+        drawVisual(H, inner_dist, D, outer_dist, deg_outer <= 0);
     }
 
-    function drawCanvas(ht, d_inner, d_main, d_outer, isInfinity) {
-        const canvas = document.getElementById('coverageCanvas');
+    function runCalc2() {
+        const H = getEffectiveHeight();
+        const tilt_total = parseFloat(document.getElementById('calc2_tilt_total').value) || 8;
+        const vbw = parseFloat(document.getElementById('vbw').value) || 7;
+
+        const deg_main = tilt_total;
+        const deg_inner = tilt_total + (vbw / 2);
+        const deg_outer = tilt_total - (vbw / 2);
+
+        const rad_main = deg_main * (Math.PI / 180);
+        const rad_inner = deg_inner * (Math.PI / 180);
+        const rad_outer = deg_outer * (Math.PI / 180);
+
+        const main_dist = H / Math.tan(rad_main);
+        const inner_dist = H / Math.tan(rad_inner);
+        
+        let outer_text = "";
+        let outer_dist = Infinity;
+        if (deg_outer <= 0) {
+            outer_text = "Over Horizon";
+            document.getElementById('res2_outer').className = "result-val val-danger";
+        } else {
+            outer_dist = H / Math.tan(rad_outer);
+            outer_text = outer_dist.toFixed(2);
+            document.getElementById('res2_outer').className = "result-val val-success";
+        }
+
+        // Cập nhật UI
+        document.getElementById('res2_inner').innerText = inner_dist.toFixed(2);
+        document.getElementById('res2_main').innerText = main_dist.toFixed(2);
+        document.getElementById('res2_outer').innerText = outer_text;
+
+        // Vẽ biểu đồ
+        drawVisual(H, inner_dist, main_dist, outer_dist, deg_outer <= 0);
+    }
+
+    // Engine vẽ mô phỏng HTML5 Canvas
+    function drawVisual(H, d_inner, d_main, d_outer, isInfinity) {
+        const canvas = document.getElementById('visualCanvas');
         const ctx = canvas.getContext('2d');
         
-        // Cập nhật lại kích thước thật cho Canvas sắc nét
+        // Cập nhật kích thước thực tế để nét vẽ không bị mờ
         canvas.width = canvas.clientWidth;
         canvas.height = canvas.clientHeight;
-        
         const w = canvas.width;
         const h = canvas.height;
 
         ctx.clearRect(0, 0, w, h);
 
-        // Lề quy hoạch giảm đi một chút để tiết kiệm diện tích trên mobile
-        const padX = window.innerWidth <= 768 ? 30 : 50; 
-        const padY = window.innerWidth <= 768 ? 40 : 50;
+        // Thiết lập padding và tọa độ gốc trạm
+        const padX = 50;
+        const padY = 50;
+        const towerX = padX;
+        const groundY = h - padY;
+        const towerTopY = padY; // Vẽ từ trên cùng xuống
         
-        const towerBaseX = padX;
-        const towerBaseY = h - padY;
-        
-        const maxDist = isInfinity ? Math.max(d_main * 2.5, 1000) : d_outer;
-        const scaleX = (w - padX * 2) / maxDist;
-        const scaleY = (h - padY * 2) / ht; 
+        // Tỷ lệ xích (Scale)
+        // Nếu bắn vượt đường chân trời, lấy cự ly main beam làm gốc rồi nhân rộng ra
+        const maxDistRender = isInfinity ? d_main * 2.5 : d_outer * 1.1; 
+        const scaleX = (w - padX * 2) / maxDistRender;
 
-        // Vẽ bầu trời và mặt đất
-        ctx.fillStyle = '#f0f8ff';
-        ctx.fillRect(0, 0, w, towerBaseY);
-        ctx.fillStyle = '#e8f6e9';
-        ctx.fillRect(0, towerBaseY, w, h - towerBaseY);
+        // 1. VẼ NỀN VÀ MẶT ĐẤT
+        ctx.fillStyle = '#f8fafc'; // Bầu trời
+        ctx.fillRect(0, 0, w, groundY);
+        ctx.fillStyle = '#f0fdf4'; // Đất
+        ctx.fillRect(0, groundY, w, h - groundY);
         
-        // Đường chân trời (Đất)
+        // Đường mặt đất nét đứt
         ctx.beginPath();
-        ctx.moveTo(0, towerBaseY);
-        ctx.lineTo(w, towerBaseY);
-        ctx.strokeStyle = '#27ae60';
-        ctx.lineWidth = 3;
+        ctx.moveTo(0, groundY);
+        ctx.lineTo(w, groundY);
+        ctx.strokeStyle = '#22c55e'; // Xanh lá
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 5]);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // Vẽ Tháp Ăng ten (Tower)
-        const towerTopY = towerBaseY - (ht * scaleY);
+        // Đường chân trời (ngang trạm) nét đứt
         ctx.beginPath();
-        ctx.moveTo(towerBaseX - 5, towerBaseY);
-        ctx.lineTo(towerBaseX, towerTopY);
-        ctx.lineTo(towerBaseX + 5, towerBaseY);
-        ctx.fillStyle = '#7f8c8d';
-        ctx.fill();
+        ctx.moveTo(towerX, towerTopY);
+        ctx.lineTo(w, towerTopY);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#64748b';
+        ctx.font = 'bold 14px Inter';
+        ctx.fillText('0° (Horizon)', w - 90, towerTopY - 10);
 
-        // Ăng ten màu đỏ trên đỉnh
+        // 2. VẼ THÁP (TOWER)
         ctx.beginPath();
-        ctx.rect(towerBaseX - 3, towerTopY, 6, 15);
-        ctx.fillStyle = '#c0392b';
-        ctx.fill();
-
-        // Tọa độ búp sóng trên màn hình
-        const px_inner = towerBaseX + (d_inner * scaleX);
-        const px_main = towerBaseX + (d_main * scaleX);
-        const px_outer = isInfinity ? w : towerBaseX + (d_outer * scaleX);
-
-        // Vẽ chùm tia sáng (Beam)
-        ctx.beginPath();
-        ctx.moveTo(towerBaseX, towerTopY);
-        ctx.lineTo(px_outer, isInfinity ? towerTopY + ((h - padY - towerTopY)/2) : towerBaseY); 
-        ctx.lineTo(px_inner, towerBaseY);
-        ctx.closePath();
+        ctx.moveTo(towerX - 15, groundY);
+        ctx.lineTo(towerX - 5, towerTopY + 20);
+        ctx.lineTo(towerX + 5, towerTopY + 20);
+        ctx.lineTo(towerX + 15, groundY);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
         
-        let gradient = ctx.createLinearGradient(towerBaseX, towerTopY, px_main, towerBaseY);
-        gradient.addColorStop(0, 'rgba(52, 152, 219, 0.6)');
-        gradient.addColorStop(1, 'rgba(46, 204, 113, 0.2)');
-        ctx.fillStyle = gradient;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+        // Cấu trúc chéo của tháp
+        ctx.beginPath();
+        ctx.moveTo(towerX - 13, groundY - 40); ctx.lineTo(towerX + 11, groundY - 80);
+        ctx.moveTo(towerX + 13, groundY - 40); ctx.lineTo(towerX - 11, groundY - 80);
+        ctx.moveTo(towerX - 9, groundY - 120); ctx.lineTo(towerX + 7, groundY - 160);
+        ctx.moveTo(towerX + 9, groundY - 120); ctx.lineTo(towerX - 7, groundY - 160);
+        ctx.strokeStyle = '#94a3b8';
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Vẽ tia Main Beam (Tia trung tâm)
-        ctx.beginPath();
-        ctx.setLineDash([5, 5]);
-        ctx.moveTo(towerBaseX, towerTopY);
-        ctx.lineTo(px_main, towerBaseY);
-        ctx.strokeStyle = '#e74c3c';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.setLineDash([]); 
+        // Ăng ten (Phần tử phát)
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(towerX - 4, towerTopY, 8, 30);
 
-        // Đánh dấu các mốc cự ly
-        ctx.fillStyle = '#2c3e50';
-        ctx.font = 'bold 11px Arial';
-        
-        ctx.beginPath(); ctx.arc(px_inner, towerBaseY, 4, 0, 2*Math.PI); ctx.fillStyle = '#3498db'; ctx.fill();
-        ctx.fillText(`Inner: ${d_inner.toFixed(0)}m`, px_inner - 20, towerBaseY + 18);
-        
-        ctx.beginPath(); ctx.arc(px_main, towerBaseY, 4, 0, 2*Math.PI); ctx.fillStyle = '#e74c3c'; ctx.fill();
-        ctx.fillText(`Main: ${d_main.toFixed(0)}m`, px_main - 20, towerBaseY + 32);
-        
-        if (!isInfinity) {
-            ctx.beginPath(); ctx.arc(px_outer, towerBaseY, 4, 0, 2*Math.PI); ctx.fillStyle = '#9b59b6'; ctx.fill();
-            ctx.fillText(`Outer: ${d_outer.toFixed(0)}m`, px_outer - 30, towerBaseY + 18);
+        // Ký hiệu chiều cao H
+        ctx.beginPath();
+        ctx.moveTo(towerX - 30, towerTopY); ctx.lineTo(towerX - 30, groundY);
+        ctx.moveTo(towerX - 35, towerTopY); ctx.lineTo(towerX - 25, towerTopY);
+        ctx.moveTo(towerX - 35, groundY); ctx.lineTo(towerX - 25, groundY);
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 16px Inter';
+        ctx.fillText(`H = ${H}m`, towerX - 90, (towerTopY + groundY) / 2);
+
+        // 3. XÁC ĐỊNH TỌA ĐỘ TIA TRÊN CANVAS
+        const px_inner = towerX + (d_inner * scaleX);
+        const px_main = towerX + (d_main * scaleX);
+        // Nếu bắn quá đường chân trời, tọa độ x sẽ kéo dài ra ngoài canvas, y sẽ hướng lên trên
+        let px_outer, py_outer;
+        if (isInfinity) {
+            px_outer = w;
+            // Tính góc âm (hướng lên)
+            const rad_up = Math.atan(H / d_main) - (parseFloat(document.getElementById('vbw').value) * Math.PI / 180 / 2);
+            py_outer = towerTopY - Math.tan(Math.abs(rad_up)) * (w - towerX);
         } else {
-            ctx.fillStyle = '#c0392b';
-            ctx.fillText(`Outer: Vô cực ➡`, w - 90, towerBaseY - 15);
+            px_outer = towerX + (d_outer * scaleX);
+            py_outer = groundY;
         }
 
-        // Vẽ nhãn Chiều cao
-        ctx.fillStyle = '#34495e';
-        ctx.fillText(`Ht = ${ht}m`, towerBaseX - 35, towerTopY - 10);
+        // 4. VẼ VÙNG PHỦ BÚP SÓNG (BEAM AREA)
+        ctx.beginPath();
+        ctx.moveTo(towerX, towerTopY + 15);
+        ctx.lineTo(px_outer, py_outer); 
+        ctx.lineTo(px_inner, groundY);
+        ctx.closePath();
+        
+        // Gradient màu cho vùng phủ (Từ Trạm ra xa)
+        let beamGrad = ctx.createLinearGradient(towerX, towerTopY, px_main, groundY);
+        beamGrad.addColorStop(0, 'rgba(59, 130, 246, 0.4)');   // Xanh dương nhạt ở gốc
+        beamGrad.addColorStop(1, 'rgba(16, 185, 129, 0.15)');  // Xanh lá mờ dần ở rìa
+        ctx.fillStyle = beamGrad;
+        ctx.fill();
+
+        // 5. VẼ CÁC TIA (RAYS)
+        const drawRay = (x, y, color, dash = []) => {
+            ctx.beginPath();
+            ctx.moveTo(towerX, towerTopY + 15);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.setLineDash(dash);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        };
+
+        drawRay(px_inner, groundY, '#2563eb'); // Tia dưới (-3dB Inner)
+        drawRay(px_outer, py_outer, '#2563eb'); // Tia trên (-3dB Outer)
+        drawRay(px_main, groundY, '#0f172a', [6, 4]); // Tia giữa (Main lobe downtilt)
+
+        // 6. GHI CHÚ VÀ KÝ HIỆU KHOẢNG CÁCH (LABELS)
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 12px Inter';
+        
+        // Mũi tên và chữ Inner
+        ctx.fillText(`Inner Radius`, px_inner - 35, groundY + 20);
+        ctx.fillText(`${d_inner.toFixed(0)}m`, px_inner - 20, groundY + 35);
+        
+        // Mũi tên và chữ Outer
+        if (isInfinity) {
+            ctx.fillStyle = '#dc2626';
+            ctx.fillText(`Outer Radius: Over Horizon (-3dB)`, w - 210, py_outer - 10);
+            ctx.beginPath();
+            ctx.arc(w - 10, py_outer, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        } else {
+            ctx.fillText(`Outer Radius (-3dB)`, px_outer - 50, groundY + 20);
+            ctx.fillText(`${d_outer.toFixed(0)}m`, px_outer - 15, groundY + 35);
+        }
+
+        // Góc Beamwidth cung tròn
+        const arcRadius = 150;
+        const rad_total = Math.atan(H / d_main);
+        const bw_rad = parseFloat(document.getElementById('vbw').value) * Math.PI / 180;
+        const startAngle = rad_total - bw_rad/2;
+        const endAngle = rad_total + bw_rad/2;
+        
+        ctx.beginPath();
+        // Cung tròn biểu diễn Vertical Beamwidth
+        ctx.arc(towerX, towerTopY + 15, arcRadius, startAngle, endAngle);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        
+        // Mũi tên nhỏ ở hai đầu cung tròn
+        const p1X = towerX + arcRadius * Math.cos(startAngle);
+        const p1Y = towerTopY + 15 + arcRadius * Math.sin(startAngle);
+        const p2X = towerX + arcRadius * Math.cos(endAngle);
+        const p2Y = towerTopY + 15 + arcRadius * Math.sin(endAngle);
+        
+        ctx.fillStyle = '#2563eb';
+        // Label Beamwidth
+        ctx.fillText(`Vertical`, p1X + 15, (p1Y + p2Y)/2 - 8);
+        ctx.fillText(`Beamwidth`, p1X + 10, (p1Y + p2Y)/2 + 6);
+
+        // Label Downtilt Angle
+        ctx.beginPath();
+        ctx.arc(towerX, towerTopY + 15, 250, 0, rad_total);
+        ctx.strokeStyle = '#475569';
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const dtLabelX = towerX + 260 * Math.cos(rad_total/2);
+        const dtLabelY = towerTopY + 15 + 260 * Math.sin(rad_total/2);
+        ctx.fillStyle = '#334155';
+        ctx.fillText(`Antenna`, dtLabelX, dtLabelY - 5);
+        ctx.fillText(`Downtilt Angle`, dtLabelX, dtLabelY + 10);
     }
+
+    // Chạy mặc định bài toán 1 khi tải trang
+    window.onload = () => { runCalc1(); };
 </script>
 </body>
 </html>
