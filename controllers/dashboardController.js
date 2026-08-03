@@ -21,7 +21,12 @@ const getSafeFloat = (val) => {
         }
     } else if (s.includes(',')) {
         // Nếu chỉ có phẩy (VD: 99,5) -> Đổi thành chấm
-        s = s.replace(/,/g, '.');
+        // NHẬN DIỆN SỐ 10,095 -> Biến thành 10095
+        if (s.match(/^[-+]?\d+,\d{3}$/)) {
+            s = s.replace(/,/g, ''); 
+        } else {
+            s = s.replace(/,/g, '.'); 
+        }
     }
     
     // Chỉ giữ lại số, dấu chấm và dấu trừ
@@ -796,39 +801,61 @@ exports.handleImportData = async (req, res) => {
             let rawData = xlsx.utils.sheet_to_json(sheet, { header: 1, blankrows: true });
             if (rawData.length === 0) continue;
 
+            // Xử lý CSV nếu file bị gộp chung vào 1 cột duy nhất bằng dấu chấm phẩy ; hoặc phẩy ,
+            if (rawData.length > 0 && rawData[0].length === 1) {
+                let text = String(rawData[0][0]);
+                if (text.includes(';') || text.includes(',')) {
+                    let csvString = file.buffer.toString('utf8');
+                    let lines = csvString.split(/\r?\n/);
+                    rawData = [];
+                    let separator = lines[0].includes(';') ? ';' : ',';
+                    lines.forEach(line => {
+                        if (line.trim() !== '') {
+                            let row = []; let inQuotes = false; let currentVal = '';
+                            for(let i=0; i<line.length; i++) {
+                                let c = line[i];
+                                if (c === '"') inQuotes = !inQuotes;
+                                else if (c === separator && !inQuotes) { row.push(currentVal); currentVal = ''; } 
+                                else currentVal += c;
+                            }
+                            row.push(currentVal);
+                            rawData.push(row);
+                        }
+                    });
+                }
+            }
+
             let dataStartIdx = -1;
             let colMapping = [];
-            let isDirectIndexMapping = false;
 
             // [CHIẾN LƯỢC MỚI]: MAPPING TRỰC TIẾP THEO INDEX CỘT CHO BẢNG QOE VÀ QOS
+            // Lấy dữ liệu bắt đầu chính xác từ Hàng 8 (Index = 7)
             if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
-                isDirectIndexMapping = true;
+                dataStartIdx = 7; 
+
+                // Tuy nhiên, đối với file CSV export từ hệ thống (nếu có), cấu trúc có thể bị thay đổi. 
+                // Vậy nên vẫn cần đoạn mã tự vệ này để tự dò dòng dữ liệu nếu Index 7 không chứa Cell Name
+                let checkRow = rawData[dataStartIdx] || [];
+                let hasCellData = String(checkRow[5] || '').toUpperCase().match(/^(3G|4G|5G)/) || String(checkRow[0] || '').toUpperCase() === 'THA';
                 
-                // Xác định dòng bắt đầu dữ liệu (dòng có chứa tên trạm 3G/4G/5G ở cột F hoặc mã tỉnh ở cột A)
-                for (let i = 0; i < rawData.length; i++) {
-                    const row = rawData[i];
-                    if (!row || row.length < 6) continue; // Phải có ít nhất dữ liệu ở cột F
-                    
-                    let colF = String(row[5] || '').trim().toUpperCase(); // Index 5 là cột F
-                    let colA = String(row[0] || '').trim().toUpperCase(); // Index 0 là cột A
-                    
-                    // Dấu hiệu nhận biết dòng dữ liệu: Cột F chứa mã trạm hoặc Cột A chứa mã tỉnh
-                    if (colF.match(/^(3G|4G|5G)/) || (colA.length === 3 && colA !== 'STT' && colA !== 'MÃ')) {
-                        // Loại trừ các dòng header
-                        if (!colF.includes('CELL') && !colF.includes('SITE')) {
-                            dataStartIdx = i;
-                            break;
+                if (!hasCellData) {
+                    for (let i = 0; i < Math.min(20, rawData.length); i++) {
+                        const row = rawData[i];
+                        if (!row || row.length < 6) continue; 
+                        let colF = String(row[5] || '').trim().toUpperCase(); 
+                        let colA = String(row[0] || '').trim().toUpperCase(); 
+                        
+                        if (colF.match(/^(3G|4G|5G)/) || (colA.length === 3 && colA !== 'STT' && colA !== 'MÃ')) {
+                            // Loại trừ các dòng header
+                            if (!colF.includes('CELL') && !colF.includes('SITE')) {
+                                dataStartIdx = i;
+                                break;
+                            }
                         }
                     }
                 }
 
-                if (dataStartIdx === -1) {
-                    console.log("Không tìm thấy dòng bắt đầu dữ liệu cho file QoE/QoS.");
-                    continue;
-                }
-
-                // Thiết lập Mapping tĩnh dựa trên hình ảnh cung cấp
-                // Ánh xạ Cột (A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10, L=11, M=12, N=13, O=14, P=15, Q=16, R=17, S=18, T=19, U=20, V=21, W=22, X=23, Y=24, Z=25, AA=26, AB=27, AC=28)
+                // Bảng Mapping Tĩnh (Ánh xạ chính xác theo ký tự A, B, C...)
                 colMapping = [
                     { excelIdx: 0, dbCol: 'Ma_Tinh' },    // Cột A
                     { excelIdx: 1, dbCol: 'Don_Vi' },     // Cột B
@@ -895,7 +922,9 @@ exports.handleImportData = async (req, res) => {
                 colMapping = colMapping.filter(m => dbCols.some(c => c.original.toLowerCase() === m.dbCol.toLowerCase()));
             } 
             else {
-                // [GIỮ NGUYÊN LOGIC CŨ CHO CÁC BẢNG KHÁC (KPI, RF, CSHT...)]
+                // ---------------------------------------------------------
+                // MAPPING ĐỘNG CHO CÁC BẢNG KHÁC (KPI, RF, CSHT...)
+                // ---------------------------------------------------------
                 let headerRowIdx = -1;
                 for (let i = 0; i < Math.min(30, rawData.length); i++) {
                     if (!rawData[i]) continue;
@@ -1077,6 +1106,10 @@ exports.handleImportData = async (req, res) => {
 
             if (colMapping.length === 0) continue;
 
+            // XỬ LÝ LỖI NGÀY: Tiến hành xóa dữ liệu 1 ngày được chỉ định trước khi Insert (Chỉ áp dụng cho KPI 3G/4G/5G)
+            const isDailyKpi = networkType === 'kpi_3g' || networkType === 'kpi_4g' || networkType === 'kpi_5g';
+            let uniqueDatesToClear = new Set();
+            
             let hasTuanCol = weekPrefix ? dbCols.some(c => c.original.toLowerCase() === 'tuan') : false;
             let lastValidDate = null; 
             const insertData = [];
@@ -1125,7 +1158,13 @@ exports.handleImportData = async (req, res) => {
                     if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
                         if (val !== null && val !== '') {
                             val = formatExcelDate(val);
-                            if (typeof val === 'string' && val.includes(' ')) val = val.split(' ')[0];
+                            if (typeof val === 'string') {
+                                val = val.split(' ')[0].replace(/['"]/g, '');
+                                if (val.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                    let parts = val.split('-');
+                                    val = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                }
+                            }
                             lastValidDate = val; 
                         } else { val = lastValidDate; }
                     }
@@ -1133,14 +1172,19 @@ exports.handleImportData = async (req, res) => {
                     rowObj[map.dbCol] = val;
                     if (val !== null && val !== undefined && val !== '') hasKpiData = true;
 
-                    // Xác thực xem dòng này có chứa Tên Trạm / Tên Cell / ID hợp lệ không
-                    let colNameStr = map.dbCol.toLowerCase();
-                    if (['cell_name', 'site_name', 'cell_id', 'ten_cell', 'ci', 'cell_code', 'site_code', 'ma_csht', 'ma_vt', 'tu_khoa'].includes(colNameStr)) {
-                        let stringVal = String(val).toLowerCase().trim().replace(/['"]/g, '');
-                        if (stringVal) {
-                            if (!stringVal.includes('tên cell') && !stringVal.includes('cell name') && !stringVal.includes('site name') && stringVal !== 'site' && stringVal !== 'cell') {
+                    // Chỉ kiểm tra valid Identifier nếu không phải bảng QoE/QoS (vì QoE/QoS lấy dòng chính xác 100% rồi)
+                    if (networkType !== 'mbb_qoe' && networkType !== 'mbb_qos') {
+                        let colNameStr = map.dbCol.toLowerCase();
+                        if (['cell_name', 'site_name', 'cell_id', 'ten_cell', 'ci', 'cell_code', 'site_code', 'ma_csht', 'ma_vt'].includes(colNameStr)) {
+                            let stringVal = String(val).toLowerCase().trim().replace(/['"]/g, '');
+                            if (stringVal && !stringVal.includes('tên cell') && !stringVal.includes('cell name') && stringVal !== 'site' && stringVal !== 'cell') {
                                 hasValidIdentifier = true;
                             }
+                        }
+                    } else {
+                        // Đối với QoE/QoS, chỉ cần có dữ liệu ở các cột chính là cho qua
+                        if (map.excelIdx === 4 || map.excelIdx === 5 || map.excelIdx === 6) {
+                            if (val && String(val).trim() !== '') hasValidIdentifier = true;
                         }
                     }
                 });
@@ -1148,20 +1192,33 @@ exports.handleImportData = async (req, res) => {
                 if (hasKpiData && hasValidIdentifier) {
                     if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
                     insertData.push(rowObj);
+                    
+                    // Gom các ngày xuất hiện trong file KPI để Xóa trước khi đè
+                    if (isDailyKpi && rowObj['Thoi_gian']) {
+                        uniqueDatesToClear.add(rowObj['Thoi_gian']);
+                    }
                 }
             }
 
-            if (insertData.length > 0 && (isKpiImported || networkType === 'ta_query')) {
-                const dateCol = isKpiImported ? 'Thoi_gian' : 'Date';
+            // XÓA SẠCH DỮ LIỆU CŨ CỦA CÁC NGÀY NẰM TRONG FILE IMPORT TRƯỚC KHI GHI (Tính năng mới)
+            if (isDailyKpi && uniqueDatesToClear.size > 0) {
+                const datesArray = Array.from(uniqueDatesToClear);
+                const placeholders = datesArray.map(() => '?').join(',');
+                try { 
+                    await db.query(`DELETE FROM ${networkType} WHERE Thoi_gian IN (${placeholders})`, datesArray); 
+                    console.log(`🧹 Đã dọn sạch dữ liệu cũ của các ngày: ${datesArray.join(', ')} trong bảng ${networkType} để nhường chỗ cho dữ liệu mới.`);
+                } catch (e) {
+                    console.error("Lỗi khi xóa đè dữ liệu cũ:", e);
+                }
+            } else if (insertData.length > 0 && networkType === 'ta_query') {
+                // Xóa đè dữ liệu TA_Query (logic cũ)
+                const dateCol = 'Date';
                 const uniqueDates = [...new Set(insertData.map(r => r[dateCol]).filter(Boolean))];
                 if (uniqueDates.length > 0) {
                     const placeholders = uniqueDates.map(() => '?').join(',');
                     try { 
                         await db.query(`DELETE FROM ${networkType} WHERE \`${dateCol}\` IN (${placeholders})`, uniqueDates); 
-                        console.log(`🧹 Đã dọn sạch dữ liệu cũ của ngày: ${uniqueDates.join(', ')} để nhường chỗ cho dữ liệu mới.`);
-                    } catch (e) {
-                        console.error("Lỗi khi xóa đè dữ liệu cũ:", e);
-                    }
+                    } catch (e) {}
                 }
             }
 
@@ -1182,7 +1239,7 @@ exports.handleImportData = async (req, res) => {
                     
                     let sql = `INSERT INTO ${networkType} (${keys.map(k => `\`${k}\``).join(',')}) VALUES ?`;
                     
-                    if (networkType === 'alarm_data' || networkType === 'csht_data' || networkType === 'vat_tu') {
+                    if (['alarm_data', 'csht_data', 'vat_tu'].includes(networkType)) {
                         let updateCols = keys.map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(', ');
                         sql += ` ON DUPLICATE KEY UPDATE ${updateCols}`;
                     }
@@ -1204,7 +1261,7 @@ exports.handleImportData = async (req, res) => {
                 await syncTrafficDown();
                 await syncBadCells();
             }
-            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'kpi_4g') {
+            if (['mbb_qoe', 'mbb_qos', 'kpi_4g'].includes(networkType)) {
                 await syncQoeQosSummary();
             }
             console.log("✅ HOÀN TẤT TOÀN BỘ TIẾN TRÌNH ĐỒNG BỘ CẢNH BÁO VÀ CACHE.");
