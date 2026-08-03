@@ -316,17 +316,41 @@
                 const cellRows = rawData.filter(r => r[cellNameKey] === cellName);
                 
                 const dataPoints = allDates.map(date => {
-                    const row = cellRows.find(r => r.Thoi_gian === date);
-                    // XỬ LÝ LỖI MẤT DATA: Nếu row không tồn tại, trả về 0 để vẽ tuyến nối dưới đáy
-                    if (!row) return 0; 
-                    
-                    let rawVal = row[config.key];
-                    if (rawVal === undefined && config.key.includes('Kbps')) rawVal = row[config.key.replace('Kbps', 'kbps')];
-                    
-                    let val = parseFloat(rawVal);
-                    // Ép các giá trị Rỗng/Null từ Database thành 0
-                    return isNaN(val) ? 0 : val; 
-                });
+    const rowsForDate = cellRows.filter(r => r.Thoi_gian === date);
+    if (rowsForDate.length === 0) return null; 
+    
+    let sum = 0;
+    let count = 0;
+    
+    rowsForDate.forEach(row => {
+        let rawVal = row[config.key];
+        if (rawVal === undefined && config.key.includes('Kbps')) {
+            rawVal = row[config.key.replace('Kbps', 'kbps')];
+        }
+        
+        let val = parseFloat(rawVal);
+        if (!isNaN(val)) {
+            sum += val;
+            count++;
+        }
+    });
+    
+    if (count === 0) return null;
+    
+    // [FIX ĐỘC QUYỀN]: 
+    // Traffic / Volume: LUÔN LUÔN CỘNG DỒN (SUM)
+    // Tốc độ (Throughput/CQI): LẤY TRUNG BÌNH (AVERAGE)
+    const isTraffic = config.title.toLowerCase().includes('traffic') || 
+                      config.title.toLowerCase().includes('volume') || 
+                      config.key.toLowerCase().includes('traffic') || 
+                      config.key.toLowerCase().includes('volume');
+                      
+    if (isTraffic) {
+        return sum; // Trả về tổng cả ngày, không chia cho count
+    } else {
+        return sum / count; // Trả về trung bình
+    }
+});
 
                 return {
                     label: cellName,
