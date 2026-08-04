@@ -1048,8 +1048,8 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('celltype')) mappedCol = 'CellType';
                             else if (h.includes('district code')) mappedCol = 'District_code';
                             else if (h.includes('cell name')) mappedCol = 'Cell_name';
-                            else if (h.includes('mimo')) mappedCol = 'MIMO';
-                            else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
+                            else if (h === 'mimo') mappedCol = 'MIMO';
+                            else if (h.includes('thời gian') || h.includes('thoi gian') || h.includes('date')) mappedCol = 'Thoi_gian';
                             
                             // ---------------- VoLTE & HO ----------------
                             else if (h.includes('ul traffic volte')) mappedCol = 'UL_Traffic_VoLTE_GB';
@@ -1069,7 +1069,7 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('user downlink average throughput')) mappedCol = 'User_DL_Avg_Throughput_Kbps';
                             else if (h === 'traffic volume ul (gb)' || h.includes('traffic volume ul')) mappedCol = 'Traffic_Volume_UL_GB';
                             else if (h === 'traffic volumn dl (gb)' || h.includes('traffic volumn dl')) mappedCol = 'Traffic_Volumn_DL_GB';
-                            else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                            else if (h.includes('total data traffic volume')) mappedCol = 'Total_Data_Traffic_Volume_GB';
                             else if (h.includes('total ue')) mappedCol = 'Total_UE';
                             else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
                             else if (h.includes('utilizing rate uplink') || h.includes('untilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
@@ -1208,6 +1208,12 @@ exports.handleImportData = async (req, res) => {
                 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
                 'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
             ];
+
+            // [FIX] Nếu file KPI 4G có dòng tiêu đề nằm ở Index 1 (do Index 0 là "Lọc KPI 4G..."), 
+            // bắt buộc ép Index bắt đầu dữ liệu thành Index 2 (Dòng thứ 3)
+            if (networkType === 'kpi_4g' && headerRowIdx === 1) {
+                dataStartIdx = 2;
+            }
 
             // BẮT BUỘC QUÉT TỪ DÒNG DỮ LIỆU THỰC TẾ
             for (let i = dataStartIdx; i < rawData.length; i++) {
