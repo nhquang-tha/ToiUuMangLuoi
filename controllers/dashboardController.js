@@ -1267,6 +1267,76 @@ exports.handleImportData = async (req, res) => {
                     }
                     
                     rowObj[map.dbCol] = val;
+                    
+                    // BẮT LỖI 1: Chỉ cần giá trị KHÁC rỗng (ngay cả số 0 cũng là Data) thì xác nhận là có dữ liệu KPI
+                    if (val !== null && val !== undefined && val !== '') {
+                        hasKpiData = true;
+                    }
+
+                    // BẮT LỖI 2: MỞ RỘNG BỘ LỌC ĐỊNH DANH (IDENTIFIER)
+                    if (networkType !== 'mbb_qoe' && networkType !== 'mbb_qos') {
+                        let colNameStr = map.dbCol.toLowerCase();
+                        if (['cell_name', 'site_name', 'cell_id', 'ten_cell', 'ci', 'cell_code', 'site_code', 'ma_csht', 'ma_vt'].includes(colNameStr)) {
+                            let stringVal = String(val).toLowerCase().trim().replace(/['"]/g, '');
+                            // Loại trừ trường hợp lấy nhầm chữ "Tên Cell" của dòng Sub-header
+                            if (stringVal && !stringVal.includes('tên cell') && !stringVal.includes('cell name') && stringVal !== 'site' && stringVal !== 'cell') {
+                                hasValidIdentifier = true;
+                            }
+                        }
+                    } else {
+                        // Đối với QoE/QoS, chỉ cần có dữ liệu ở các cột chính là cho qua
+                        if (map.excelIdx === 4 || map.excelIdx === 5 || map.excelIdx === 6) {
+                            if (val && String(val).trim() !== '') hasValidIdentifier = true;
+                        }
+                    }
+                });
+
+                // GHI NHẬN HÀNG DỮ LIỆU NẾU ĐẠT ĐIỀU KIỆN
+                if (hasKpiData && hasValidIdentifier) {
+                    if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
+                    insertData.push(rowObj);
+                    
+                    // Gom các ngày xuất hiện trong file KPI để Xóa trước khi đè
+                    if (isDailyKpi && rowObj['Thoi_gian']) {
+                        uniqueDatesToClear.add(rowObj['Thoi_gian']);
+                    }
+                }
+            }
+                    let val = row[map.excelIdx];
+                    let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
+                    
+                    if (networkType.startsWith('rf_') || networkType === 'csht_data') {
+                        let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height', 'chieu_cao_cot', 'chieu_cao_mat_dat'];
+                        if (!floatRfCols.includes(map.dbCol.toLowerCase())) {
+                            isStrCol = true;
+                        }
+                    }
+
+                    if (!isStrCol) {
+                        if (val === null || val === undefined || val === '' || String(val).trim() === '') {
+                            val = null; 
+                        } else if (typeof val === 'string') {
+                            val = getSafeFloat(val); 
+                        } else if (typeof val === 'number') {
+                            val = isNaN(val) ? null : val;
+                        }
+                    }
+
+                    if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
+                        if (val !== null && val !== '') {
+                            val = formatExcelDate(val);
+                            if (typeof val === 'string') {
+                                val = val.split(' ')[0].replace(/['"]/g, '');
+                                if (val.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                    let parts = val.split('-');
+                                    val = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                }
+                            }
+                            lastValidDate = val; 
+                        } else { val = lastValidDate; }
+                    }
+                    
+                    rowObj[map.dbCol] = val;
                     if (val !== null && val !== undefined && val !== '') hasKpiData = true;
 
                     // Chỉ kiểm tra valid Identifier nếu không phải bảng QoE/QoS (vì QoE/QoS lấy dòng chính xác 100% rồi)
