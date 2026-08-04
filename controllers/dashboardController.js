@@ -944,11 +944,15 @@ exports.handleImportData = async (req, res) => {
                 if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
                 let excelHeaders = rawData[headerRowIdx].map(h => String(h || '').replace(/['"]/g, '').trim());
 
-                if (networkType.startsWith('rf_') || networkType === 'csht_data' || networkType === 'vat_tu' || networkType === 'alarm_data' || networkType === 'ta_query') {
+                if (['rf_3g', 'rf_4g', 'rf_5g', 'csht_data', 'vat_tu', 'alarm_data', 'ta_query'].includes(networkType)) {
                     let isSchemaChanged = false;
                     for (let h of excelHeaders) {
                         let lastWord = h.split('|').pop().trim();
                         if (!lastWord) continue;
+                        
+                        // [FIX] Cập nhật bộ lọc: Bỏ qua cột STT không cho Auto-Migration tạo tự động
+                        if (lastWord.toUpperCase() === 'STT') continue;
+
                         let safeName = createSafeColumnName(lastWord);
                         if (!safeName) continue;
                         let normH = normalizeStr(lastWord);
@@ -984,7 +988,8 @@ exports.handleImportData = async (req, res) => {
                     }
                     else {
                         if (networkType === 'kpi_3g') {
-                            if (h.includes('nhà cung cấp') || h.includes('nha_cung_cap')) mappedCol = 'Nha_cung_cap';
+                            if (h === 'stt') mappedCol = null;
+                            else if (h.includes('nhà cung cấp') || h.includes('nha_cung_cap')) mappedCol = 'Nha_cung_cap';
                             else if (h.includes('tỉnh') || h.includes('tinh')) mappedCol = 'Tinh';
                             else if (h.includes('tên rnc') || h.includes('ten rnc')) mappedCol = 'Ten_RNC';
                             else if (h.includes('tên cell') || h.includes('cell name') || h.includes('ten_cell')) mappedCol = 'Ten_CELL';
