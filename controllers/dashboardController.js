@@ -923,11 +923,13 @@ exports.handleImportData = async (req, res) => {
                 // MAPPING ĐỘNG CHO CÁC BẢNG KHÁC (KPI, RF, CSHT...)
                 // ---------------------------------------------------------
                 let headerRowIdx = -1;
+                let dataStartIdx = -1; // Cần khởi tạo lại nếu chưa có
+                
                 for (let i = 0; i < Math.min(30, rawData.length); i++) {
                     if (!rawData[i]) continue;
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
                     // [FIX] Bổ sung th?i gian để tránh lỗi font chữ tiếng Việt của file xuất hệ thống
-                    if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') || rowStr.includes('th?i gian') ||
+                    if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') || rowStr.includes('th?i gian') || rowStr.includes('date') ||
                         rowStr.includes('tên cell') || rowStr.includes('cell name') ||
                         rowStr.includes('site name') || rowStr.includes('cell_code') || 
                         rowStr.includes('cell code') || rowStr.includes('enodeb name') || rowStr.includes('index 0') ||
@@ -935,8 +937,34 @@ exports.handleImportData = async (req, res) => {
                         rowStr.includes('poi') || rowStr.includes('mã csht') ||
                         rowStr.includes('từ khóa chính') || rowStr.includes('nguyên nhân') ||
                         rowStr.includes('mã thiết bị') || rowStr.includes('loại card') || rowStr.includes('mã vt') || rowStr.includes('part number')) {
-                        headerRowIdx = i; dataStartIdx = i + 1; break;
+                        
+                        headerRowIdx = i;
+                        dataStartIdx = i + 1; // Mặc định dữ liệu sẽ nằm ngay dưới dòng tiêu đề
+                        
+                        // [GIẢI PHÁP MỚI]: BỎ HOÀN TOÀN CÁCH QUÉT SUB-HEADER CỨNG NHẮC CŨ
+                        // Thay vào đó, quét liên tục 5 dòng tiếp theo, dòng nào chứa ID Trạm (Bắt đầu bằng 3G, 4G, 5G hoặc là Số) thì chốt dòng đó là dòng dữ liệu
+                        for(let j = i + 1; j < Math.min(i + 6, rawData.length); j++) {
+                            if(!rawData[j] || rawData[j].length === 0) continue;
+                            
+                            // Lấy mẫu 5 cột đầu tiên để kiểm tra
+                            let c1 = String(rawData[j][0] || '').trim(); 
+                            let c2 = String(rawData[j][1] || '').trim();
+                            let c3 = String(rawData[j][2] || '').trim(); 
+                            let c4 = String(rawData[j][3] || '').trim(); 
+                            let c5 = String(rawData[j][4] || '').trim();
+                            
+                            // Điều kiện nhận diện một dòng chứa dữ liệu thực: Có tên Cell/Site (Bắt đầu bằng 3G/4G/5G) hoặc có chứa số (như ID/STT)
+                            if (c1 === '1' || c1 === '01' || 
+                                c1.match(/^(3G|4G|5G)/i) || c2.match(/^(3G|4G|5G)/i) || c3.match(/^(3G|4G|5G)/i) || c4.match(/^(3G|4G|5G)/i) || c5.match(/^(3G|4G|5G)/i) ||
+                                c1.match(/^\d{2}\/\d{2}\/\d{4}/) || c2.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+                                dataStartIdx = j;
+                                break;
+                            }
+                        }
+                        
+                        break; // Đã tìm thấy Header, ngưng vòng lặp
                     }
+                }
                 }
                 
                 if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
