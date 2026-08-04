@@ -6,31 +6,27 @@ const getSafeFloat = (val) => {
     if (val === undefined || val === null || val === '') return 0;
     if (typeof val === 'number') return isNaN(val) ? 0 : val;
     
-    // Loại bỏ dấu nháy kép/nháy đơn nếu có từ file CSV
     let s = String(val).trim().replace(/['"]/g, '');
-    
+    if (s === '') return 0;
+
     if (s.includes('.') && s.includes(',')) {
-        let lastDot = s.lastIndexOf('.');
-        let lastComma = s.lastIndexOf(',');
-        if (lastComma > lastDot) {
-            // Định dạng VN: 1.234,56 -> Xóa chấm, đổi phẩy thành chấm
+        if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
             s = s.replace(/\./g, '').replace(/,/g, '.');
         } else {
-            // Định dạng US: 1,234.56 -> Xóa phẩy
             s = s.replace(/,/g, '');
         }
     } else if (s.includes(',')) {
-        // Nếu chỉ có phẩy (VD: 99,5) -> Đổi thành chấm
-        // NHẬN DIỆN SỐ 10,095 -> Biến thành 10095
-        if (s.match(/^[-+]?\d+,\d{3}$/)) {
-            s = s.replace(/,/g, ''); 
-        } else {
-            s = s.replace(/,/g, '.'); 
-        }
+        s = s.replace(/,/g, '.');
     }
     
-    // Chỉ giữ lại số, dấu chấm và dấu trừ
     s = s.replace(/[^0-9.-]/g, '');
+    let dotIndex = s.indexOf('.');
+    if (dotIndex !== -1) {
+        let firstPart = s.substring(0, dotIndex + 1);
+        let secondPart = s.substring(dotIndex + 1).replace(/\./g, '');
+        s = firstPart + secondPart;
+    }
+    
     const f = parseFloat(s);
     return isNaN(f) ? 0 : f;
 };
@@ -89,6 +85,7 @@ const sortWeeks = (weeksArray) => {
 };
 
 const formatExcelDate = (excelDate) => {
+    if (!excelDate) return null;
     if (typeof excelDate === 'number') {
         const date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
         const d = String(date.getDate()).padStart(2, '0');
@@ -96,7 +93,7 @@ const formatExcelDate = (excelDate) => {
         const y = date.getFullYear();
         return `${d}/${m}/${y}`;
     }
-    return String(excelDate).replace(/['"]/g, ''); 
+    return String(excelDate).replace(/['"]/g, '').trim(); 
 };
 
 const normalizeStr = (str) => {
@@ -1292,70 +1289,6 @@ exports.handleImportData = async (req, res) => {
                 });
 
                 // GHI NHẬN HÀNG DỮ LIỆU NẾU ĐẠT ĐIỀU KIỆN
-                if (hasKpiData && hasValidIdentifier) {
-                    if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
-                    insertData.push(rowObj);
-                    
-                    // Gom các ngày xuất hiện trong file KPI để Xóa trước khi đè
-                    if (isDailyKpi && rowObj['Thoi_gian']) {
-                        uniqueDatesToClear.add(rowObj['Thoi_gian']);
-                    }
-                }
-            }
-                    let val = row[map.excelIdx];
-                    let isStrCol = stringColumns.some(sc => sc.toLowerCase() === map.dbCol.toLowerCase());
-                    
-                    if (networkType.startsWith('rf_') || networkType === 'csht_data') {
-                        let floatRfCols = ['latitude', 'longitude', 'azimuth', 'tilt', 'height', 'ant_height', 'chieu_cao_cot', 'chieu_cao_mat_dat'];
-                        if (!floatRfCols.includes(map.dbCol.toLowerCase())) {
-                            isStrCol = true;
-                        }
-                    }
-
-                    if (!isStrCol) {
-                        if (val === null || val === undefined || val === '' || String(val).trim() === '') {
-                            val = null; 
-                        } else if (typeof val === 'string') {
-                            val = getSafeFloat(val); 
-                        } else if (typeof val === 'number') {
-                            val = isNaN(val) ? null : val;
-                        }
-                    }
-
-                    if (map.dbCol === 'Thoi_gian' || map.dbCol === 'Date') {
-                        if (val !== null && val !== '') {
-                            val = formatExcelDate(val);
-                            if (typeof val === 'string') {
-                                val = val.split(' ')[0].replace(/['"]/g, '');
-                                if (val.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                                    let parts = val.split('-');
-                                    val = `${parts[2]}/${parts[1]}/${parts[0]}`;
-                                }
-                            }
-                            lastValidDate = val; 
-                        } else { val = lastValidDate; }
-                    }
-                    
-                    rowObj[map.dbCol] = val;
-                    if (val !== null && val !== undefined && val !== '') hasKpiData = true;
-
-                    // Chỉ kiểm tra valid Identifier nếu không phải bảng QoE/QoS (vì QoE/QoS lấy dòng chính xác 100% rồi)
-                    if (networkType !== 'mbb_qoe' && networkType !== 'mbb_qos') {
-                        let colNameStr = map.dbCol.toLowerCase();
-                        if (['cell_name', 'site_name', 'cell_id', 'ten_cell', 'ci', 'cell_code', 'site_code', 'ma_csht', 'ma_vt'].includes(colNameStr)) {
-                            let stringVal = String(val).toLowerCase().trim().replace(/['"]/g, '');
-                            if (stringVal && !stringVal.includes('tên cell') && !stringVal.includes('cell name') && stringVal !== 'site' && stringVal !== 'cell') {
-                                hasValidIdentifier = true;
-                            }
-                        }
-                    } else {
-                        // Đối với QoE/QoS, chỉ cần có dữ liệu ở các cột chính là cho qua
-                        if (map.excelIdx === 4 || map.excelIdx === 5 || map.excelIdx === 6) {
-                            if (val && String(val).trim() !== '') hasValidIdentifier = true;
-                        }
-                    }
-                });
-
                 if (hasKpiData && hasValidIdentifier) {
                     if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
                     insertData.push(rowObj);
