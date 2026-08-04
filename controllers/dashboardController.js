@@ -965,7 +965,6 @@ exports.handleImportData = async (req, res) => {
                         break; // Đã tìm thấy Header, ngưng vòng lặp
                     }
                 }
-                }
                 
                 if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
                 let excelHeaders = rawData[headerRowIdx].map(h => String(h || '').replace(/['"]/g, '').trim());
@@ -1044,8 +1043,12 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('ps_hsdpa cell throughput (kbps)') || h.includes('ps_hsdpa cell throughput')) mappedCol = 'PSHSDPATPKBPS';
                             else if (h.includes('cs_soft/softer handover success rate')) mappedCol = 'SOFTHOSR';
                             else if (h.includes('ps_r99 up link traffic (gb)') || h.includes('ps_r99 up link traffic')) mappedCol = 'PSR99UPLINKTRAFFICGB';
+                            
+                            // [QUAN TRỌNG]: Đã đặt điều kiện bắt "cs_total active set traffic" LÊN TRƯỚC "cs_total traffic"
                             else if (h.includes('cs_total active set traffic')) mappedCol = 'TRAFFICACTIVESETCS64';
+                            // Cột Traffic giờ đây chỉ bắt khi khớp CHÍNH XÁC chuỗi, tránh bắt nhầm các cột khác có chứa chữ traffic
                             else if (h === 'cs_total traffic' || h === 'traffic' || h === 'cs total traffic') mappedCol = 'TRAFFIC';
+                            
                             else if (h.includes('ps_total traffic (gb)') || h === 'ps_total traffic') mappedCol = 'PSTRAFFIC';
                             else if (h.includes('ps_r99 traffic (gb)') || h.includes('ps_r99 traffic')) mappedCol = 'PSR99TRAFFICGB';
                             else if (h.includes('cs_voice call volume')) mappedCol = 'CALLVOLUME';
@@ -1237,12 +1240,6 @@ exports.handleImportData = async (req, res) => {
                 'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
             ];
 
-            // [FIX] Nếu file KPI 4G có dòng tiêu đề nằm ở Index 1 (do Index 0 là "Lọc KPI 4G..."), 
-            // bắt buộc ép Index bắt đầu dữ liệu thành Index 2 (Dòng thứ 3)
-            if (networkType === 'kpi_4g' && headerRowIdx === 1) {
-                dataStartIdx = 2;
-            }
-
             // BẮT BUỘC QUÉT TỪ DÒNG DỮ LIỆU THỰC TẾ
             for (let i = dataStartIdx; i < rawData.length; i++) {
                 const row = rawData[i];
@@ -1298,7 +1295,7 @@ exports.handleImportData = async (req, res) => {
                         hasKpiData = true;
                     }
 
-                    // BẮT LỖI 2: MỞ RỘNG BỘ LỌC ĐỊNH DANH (IDENTIFIER)
+                    // BẮT LỖI 2: MỞ RỘNG BỘ LỌC ĐỊNH DANH (IDENTIFIER) ĐỂ ĐÓN ĐƯỢC TẤT CẢ FILE CỦA HỆ THỐNG
                     if (networkType !== 'mbb_qoe' && networkType !== 'mbb_qos') {
                         let colNameStr = map.dbCol.toLowerCase();
                         if (['cell_name', 'site_name', 'cell_id', 'ten_cell', 'ci', 'cell_code', 'site_code', 'ma_csht', 'ma_vt'].includes(colNameStr)) {
