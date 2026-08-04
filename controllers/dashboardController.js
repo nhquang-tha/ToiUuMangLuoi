@@ -1008,9 +1008,7 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('v2_dl traffic ps')) mappedCol = 'DLTRAFFICPS';
                             else if (h.includes('cs_inter-rat handover success rate weight')) mappedCol = 'CSIRATHOSRWEIGHT';
                             else if (h.includes('ps_hspa call drop rate')) mappedCol = 'PSHSPACALLDROPRATE';
-                            else if (h.includes('cs_total traffic') || (h.includes('traffic') && h.includes('cs_'))) mappedCol = 'TRAFFIC';
                             else if (h.includes('cs_video drop call rate')) mappedCol = 'CSVIDEODROPCALLRATE';
-                            else if (h.includes('ps_total traffic (gb)') || h === 'ps_total traffic') mappedCol = 'PSTRAFFIC';
                             else if (h.includes('cs_inter-freq handover success rate')) mappedCol = 'CSINTERFREQHOSR';
                             else if (h.includes('v2_ul traffic ps')) mappedCol = 'ULTRAFFICPS';
                             else if (h.includes('cs_video traffic')) mappedCol = 'CSVIDEOTRAFFIC';
@@ -1020,6 +1018,8 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('cs_soft/softer handover success rate')) mappedCol = 'SOFTHOSR';
                             else if (h.includes('ps_r99 up link traffic (gb)') || h.includes('ps_r99 up link traffic')) mappedCol = 'PSR99UPLINKTRAFFICGB';
                             else if (h.includes('cs_total active set traffic')) mappedCol = 'TRAFFICACTIVESETCS64';
+                            else if (h === 'cs_total traffic' || h === 'traffic' || h.includes('cs_total traffic')) mappedCol = 'TRAFFIC';
+                            else if (h.includes('ps_total traffic (gb)') || h === 'ps_total traffic') mappedCol = 'PSTRAFFIC';
                             else if (h.includes('ps_r99 traffic (gb)') || h.includes('ps_r99 traffic')) mappedCol = 'PSR99TRAFFICGB';
                             else if (h.includes('cs_voice call volume')) mappedCol = 'CALLVOLUME';
                             else if (h.includes('ps_hspa traffic (gb)') || h.includes('ps_hspa traffic')) mappedCol = 'PSHSPATRAFFICGB';
