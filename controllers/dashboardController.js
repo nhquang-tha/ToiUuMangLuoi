@@ -929,7 +929,8 @@ exports.handleImportData = async (req, res) => {
                 for (let i = 0; i < Math.min(30, rawData.length); i++) {
                     if (!rawData[i]) continue;
                     const rowStr = JSON.stringify(rawData[i]).toLowerCase();
-                    if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') ||
+                    // [FIX] Bổ sung th?i gian để tránh lỗi font chữ tiếng Việt của file xuất hệ thống
+                    if (rowStr.includes('thoi gian') || rowStr.includes('thời gian') || rowStr.includes('th?i gian') ||
                         rowStr.includes('tên cell') || rowStr.includes('cell name') ||
                         rowStr.includes('site name') || rowStr.includes('cell_code') || 
                         rowStr.includes('cell code') || rowStr.includes('enodeb name') || rowStr.includes('index 0') ||
@@ -974,7 +975,8 @@ exports.handleImportData = async (req, res) => {
                 excelHeaders.forEach((exHeader, idx) => {
                     if (!exHeader) return;
                     
-                    let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').trim();
+                    // [FIX] Cực kỳ quan trọng: Bắt lỗi khoảng trắng kép do dấu \n ẩn trong Excel sinh ra
+                    let h = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
                     let mappedCol = null;
 
                     // 1. Dò tìm trực tiếp với Database
@@ -1018,7 +1020,7 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('cs_soft/softer handover success rate')) mappedCol = 'SOFTHOSR';
                             else if (h.includes('ps_r99 up link traffic (gb)') || h.includes('ps_r99 up link traffic')) mappedCol = 'PSR99UPLINKTRAFFICGB';
                             else if (h.includes('cs_total active set traffic')) mappedCol = 'TRAFFICACTIVESETCS64';
-                            else if (h === 'cs_total traffic' || h === 'traffic' || h.includes('cs_total traffic')) mappedCol = 'TRAFFIC';
+                            else if (h === 'cs_total traffic' || h === 'traffic' || h === 'cs total traffic') mappedCol = 'TRAFFIC';
                             else if (h.includes('ps_total traffic (gb)') || h === 'ps_total traffic') mappedCol = 'PSTRAFFIC';
                             else if (h.includes('ps_r99 traffic (gb)') || h.includes('ps_r99 traffic')) mappedCol = 'PSR99TRAFFICGB';
                             else if (h.includes('cs_voice call volume')) mappedCol = 'CALLVOLUME';
@@ -1049,55 +1051,56 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('district code')) mappedCol = 'District_code';
                             else if (h.includes('cell name')) mappedCol = 'Cell_name';
                             else if (h === 'mimo') mappedCol = 'MIMO';
-                            else if (h.includes('thời gian') || h.includes('thoi gian') || h.includes('date')) mappedCol = 'Thoi_gian';
+                            // [FIX] Bắt chuẩn xác cả 3 trường hợp ngày tháng lỗi
+                            else if (h.includes('thời gian') || h.includes('thoi gian') || h.includes('date') || h.match(/th.*i gian/)) mappedCol = 'Thoi_gian';
                             
                             // ---------------- VoLTE & HO ----------------
                             else if (h.includes('ul traffic volte')) mappedCol = 'UL_Traffic_VoLTE_GB';
-                            else if (h.includes('average ul throughput of services with a qci of 1')) mappedCol = 'Avg_UL_throughput_QCI_1';
-                            else if (h.includes('volte traffic (erl)')) mappedCol = 'VoLTE_Traffic_Erl';
+                            else if (h.includes('average ul throughput')) mappedCol = 'Avg_UL_throughput_QCI_1';
+                            else if (h.includes('volte traffic')) mappedCol = 'VoLTE_Traffic_Erl';
                             else if (h.includes('total traffic volte')) mappedCol = 'Total_Traffic_VoLTE_GB';
-                            else if (h.includes('volte e-rab call setup success rate')) mappedCol = 'VoLTE_ERAB_Call_Setup_SR';
-                            else if (h.includes('intra-frequency ho success rates (volte)')) mappedCol = 'Intra_freq_HO_SR_VoLTE';
-                            else if (h.includes('inter-frequency ho success rates (volte)')) mappedCol = 'Inter_freq_HO_SR_VoLTE';
+                            else if (h.includes('volte e-rab')) mappedCol = 'VoLTE_ERAB_Call_Setup_SR';
+                            else if (h.includes('intra-frequency ho success rates') || h.includes('intra_freq_ho_sr_volte')) mappedCol = 'Intra_freq_HO_SR_VoLTE';
+                            else if (h.includes('inter-frequency ho success rates') || h.includes('inter_freq_ho_sr_volte')) mappedCol = 'Inter_freq_HO_SR_VoLTE';
                             else if (h.includes('dl traffic volte')) mappedCol = 'DL_Traffic_VoLTE_GB';
-                            else if (h.includes('average dl throughput of services with a qci of 1')) mappedCol = 'Avg_DL_throughput_QCI_1';
-                            else if (h.includes('call drop rate (volte)')) mappedCol = 'Call_Drop_Rate_VoLTE';
-                            else if (h.includes('srvcc success rate (lte to wcdma)')) mappedCol = 'SRVCC_SR_LTE_to_WCDMA';
+                            else if (h.includes('average dl throughput')) mappedCol = 'Avg_DL_throughput_QCI_1';
+                            else if (h.includes('call drop rate (volte)') || h.includes('volte call drop')) mappedCol = 'Call_Drop_Rate_VoLTE';
+                            else if (h.includes('srvcc')) mappedCol = 'SRVCC_SR_LTE_to_WCDMA';
                             
                             // ---------------- Data 4G Tốc Độ & PRB ----------------
                             else if (h.includes('user uplink average throughput')) mappedCol = 'User_UL_Avg_Throughput_Kbps';
                             else if (h.includes('user downlink average throughput')) mappedCol = 'User_DL_Avg_Throughput_Kbps';
-                            else if (h === 'traffic volume ul (gb)' || h.includes('traffic volume ul')) mappedCol = 'Traffic_Volume_UL_GB';
-                            else if (h === 'traffic volumn dl (gb)' || h.includes('traffic volumn dl')) mappedCol = 'Traffic_Volumn_DL_GB';
-                            else if (h.includes('total data traffic volume')) mappedCol = 'Total_Data_Traffic_Volume_GB';
+                            else if (h.includes('traffic volume ul')) mappedCol = 'Traffic_Volume_UL_GB';
+                            else if (h.includes('traffic volumn dl') || h.includes('traffic volume dl')) mappedCol = 'Traffic_Volumn_DL_GB';
+                            else if (h.includes('total data traffic')) mappedCol = 'Total_Data_Traffic_Volume_GB';
                             else if (h.includes('total ue')) mappedCol = 'Total_UE';
                             else if (h.includes('service drop')) mappedCol = 'Service_Drop_all';
-                            else if (h.includes('utilizing rate uplink') || h.includes('untilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
-                            else if (h.includes('utilizing rate downlink') || h.includes('untilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
+                            else if (h.includes('untilizing rate uplink') || h.includes('utilizing rate uplink')) mappedCol = 'RB_Util_Rate_UL';
+                            else if (h.includes('untilizing rate downlink') || h.includes('utilizing rate downlink')) mappedCol = 'RB_Util_Rate_DL';
                             
                             // ---------------- Handover & Thiết Lập ----------------
                             else if (h.includes('intra_hosr_att') || h.includes('attemp intra hosr')) mappedCol = 'INTRA_HOSR_ATT';
-                            else if (h.includes('intra-frequency ho (%)') || h.includes('intra-frequency ho')) mappedCol = 'Intra_frequency_HO';
-                            else if (h.includes('intra enb ho sr total')) mappedCol = 'Intra_eNB_HO_SR_total';
-                            else if (h.includes('inter-frequency ho (%)') || h.includes('inter-frequency ho')) mappedCol = 'Inter_frequency_HO';
+                            else if (h.includes('intra-frequency ho') && !h.includes('rates')) mappedCol = 'Intra_frequency_HO';
+                            else if (h.includes('intra enb ho sr')) mappedCol = 'Intra_eNB_HO_SR_total';
+                            else if (h.includes('inter-frequency ho') && !h.includes('rates')) mappedCol = 'Inter_frequency_HO';
                             else if (h.includes('inter rat total ho sr')) mappedCol = 'Inter_RAT_Total_HO_SR';
-                            else if (h.includes('inter rat ho preparation success ratio')) mappedCol = 'Inter_RAT_HO_Prep_SR';
-                            else if (h.includes('inter-rat hosr (lte to wcdma)')) mappedCol = 'Inter_RAT_HOSR_LTE_to_WCDMA';
-                            else if (h.includes('inter rat ho sr (execution phase)')) mappedCol = 'Inter_RAT_HO_SR_Exec';
+                            else if (h.includes('inter rat ho preparation')) mappedCol = 'Inter_RAT_HO_Prep_SR';
+                            else if (h.includes('inter-rat hosr') || h.includes('inter rat hosr')) mappedCol = 'Inter_RAT_HOSR_LTE_to_WCDMA';
+                            else if (h.includes('inter rat ho sr (execution')) mappedCol = 'Inter_RAT_HO_SR_Exec';
                             else if (h.includes('erab setup success rate')) mappedCol = 'eRAB_Setup_SR_All';
                             else if (h.includes('cs call setup success rate max test')) mappedCol = 'CS_Call_Setup_SR_Max';
                             else if (h.includes('downlink latency')) mappedCol = 'Downlink_Latency';
-                            else if (h === 'call setup success rate') mappedCol = 'Call_Setup_SR';
-                            else if (h.includes('e-utran initial context setup success ratio')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
+                            else if (h.includes('call setup success rate') && !h.includes('erab') && !h.includes('cs ')) mappedCol = 'Call_Setup_SR';
+                            else if (h.includes('e-utran initial context setup')) mappedCol = 'E_UTRAN_Init_Context_Setup_SR_CSFB';
                             else if (h.includes('csfb_att')) mappedCol = 'CSFB_ATT';
-                            else if (h.includes('cqi_4g') || h.includes('cqi 4g') || h.match(/\bcqi\b/)) mappedCol = 'CQI_4G';
+                            else if (h.includes('cqi_4g') || h.match(/\bcqi\b/)) mappedCol = 'CQI_4G';
                             
                             // ---------------- Cột Dự Phòng Đuôi ----------------
                             else if (h.includes('cell uplink max throughput')) mappedCol = 'Col42';
                             else if (h.includes('cell pdcp uplink average throughput')) mappedCol = 'Col43';
                             else if (h.includes('cell downlink max throughput')) mappedCol = 'Col44';
                             else if (h.includes('cell pdcp downlink average throughput')) mappedCol = 'Col45';
-                            else if (h.includes('average ue distance to base station')) mappedCol = 'Col46';
+                            else if (h.includes('average ue distance')) mappedCol = 'Col46';
                             else if (h.includes('avaiable')) mappedCol = 'Col47';
                         } 
                         else if (networkType === 'kpi_5g') {
