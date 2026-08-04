@@ -984,16 +984,59 @@ exports.handleImportData = async (req, res) => {
                     }
                     else {
                         if (networkType === 'kpi_3g') {
-                            if (h.includes('tên cell') || h.includes('cell name') || h.includes('ten_cell')) mappedCol = 'Ten_CELL';
+                            if (h.includes('nhà cung cấp') || h.includes('nha_cung_cap')) mappedCol = 'Nha_cung_cap';
+                            else if (h.includes('tỉnh') || h.includes('tinh')) mappedCol = 'Tinh';
+                            else if (h.includes('tên rnc') || h.includes('ten rnc')) mappedCol = 'Ten_RNC';
+                            else if (h.includes('tên cell') || h.includes('cell name') || h.includes('ten_cell')) mappedCol = 'Ten_CELL';
+                            else if (h.includes('mã vnp') || h.includes('ma vnp')) mappedCol = 'Ma_VNP';
+                            else if (h.includes('loại ne') || h.includes('loai ne')) mappedCol = 'Loai_NE';
+                            else if (h === 'lac') mappedCol = 'LAC';
                             else if (h === 'ci' || h === 'cell id') mappedCol = 'CI';
                             else if (h.includes('thời gian') || h.includes('thoi gian')) mappedCol = 'Thoi_gian';
                             else if (h.includes('cs_so_att')) mappedCol = 'CS_SO_ATT';
+                            else if (h.includes('cs_if_att')) mappedCol = 'CS_IF_ATT';
+                            else if (h.includes('cs_ir_att')) mappedCol = 'CS_IR_ATT';
+                            else if (h.includes('ps_if_att')) mappedCol = 'PS_IF_ATT';
+                            else if (h.includes('ps_ir_att')) mappedCol = 'PS_IR_ATT';
                             else if (h.includes('ps_so_att')) mappedCol = 'PS_SO_ATT';
-                            else if (h.includes('cs_rab congestion')) mappedCol = 'CSCONGES';
-                            else if (h.includes('ps_rab congestion')) mappedCol = 'PSCONGES';
-                            else if (h.includes('cs_total traffic') || h.includes('traffic')) mappedCol = 'TRAFFIC';
-                            else if (h.includes('cs_call setup success')) mappedCol = 'CSSR';
-                            else if (h.includes('cs_drop call')) mappedCol = 'DCR';
+                            else if (h.includes('cs_voice call setup success rate')) mappedCol = 'CSVOICECSSR';
+                            else if (h.includes('v2_dl traffic ps')) mappedCol = 'DLTRAFFICPS';
+                            else if (h.includes('cs_inter-rat handover success rate weight')) mappedCol = 'CSIRATHOSRWEIGHT';
+                            else if (h.includes('ps_hspa call drop rate')) mappedCol = 'PSHSPACALLDROPRATE';
+                            else if (h.includes('cs_total traffic') || (h.includes('traffic') && h.includes('cs_'))) mappedCol = 'TRAFFIC';
+                            else if (h.includes('cs_video drop call rate')) mappedCol = 'CSVIDEODROPCALLRATE';
+                            else if (h.includes('ps_total traffic (gb)') || h === 'ps_total traffic') mappedCol = 'PSTRAFFIC';
+                            else if (h.includes('cs_inter-freq handover success rate')) mappedCol = 'CSINTERFREQHOSR';
+                            else if (h.includes('v2_ul traffic ps')) mappedCol = 'ULTRAFFICPS';
+                            else if (h.includes('cs_video traffic')) mappedCol = 'CSVIDEOTRAFFIC';
+                            else if (h.includes('ps_r99 call setup success rate')) mappedCol = 'PSR99CALLSETUPSR';
+                            else if (h.includes('cs_voice drop call rate')) mappedCol = 'CSVOICEDROPCALLRATE';
+                            else if (h.includes('ps_hsdpa cell throughput (kbps)') || h.includes('ps_hsdpa cell throughput')) mappedCol = 'PSHSDPATPKBPS';
+                            else if (h.includes('cs_soft/softer handover success rate')) mappedCol = 'SOFTHOSR';
+                            else if (h.includes('ps_r99 up link traffic (gb)') || h.includes('ps_r99 up link traffic')) mappedCol = 'PSR99UPLINKTRAFFICGB';
+                            else if (h.includes('cs_total active set traffic')) mappedCol = 'TRAFFICACTIVESETCS64';
+                            else if (h.includes('ps_r99 traffic (gb)') || h.includes('ps_r99 traffic')) mappedCol = 'PSR99TRAFFICGB';
+                            else if (h.includes('cs_voice call volume')) mappedCol = 'CALLVOLUME';
+                            else if (h.includes('ps_hspa traffic (gb)') || h.includes('ps_hspa traffic')) mappedCol = 'PSHSPATRAFFICGB';
+                            else if (h.includes('ps_rab congestion rate') || h.includes('ps_rab congestion')) mappedCol = 'PSCONGES';
+                            else if (h.includes('cs_drop call rate') || h.includes('cs_drop call')) mappedCol = 'DCR';
+                            else if (h.includes('ps_call setup success rate')) mappedCol = 'PSCSSR';
+                            else if (h.includes('cs_call setup success rate') || h.includes('cs_call setup success')) mappedCol = 'CSSR';
+                            else if (h.includes('cs_inter-rat handover success rate') && !h.includes('weight')) mappedCol = 'IRATHOSR';
+                            else if (h.includes('ps_r99_hspa_d_r')) mappedCol = 'PSDCR';
+                            else if (h.includes('cs_video call setup success rate')) mappedCol = 'CSSRVIDEOPHONE';
+                            else if (h.includes('ps_inter-rat handover success rate')) mappedCol = 'PSIRATHOSR';
+                            else if (h.includes('ps_soft/softer handover success rate')) mappedCol = 'SOFTHOSRPS';
+                            else if (h.includes('cs_rab congestion rate') || h.includes('cs_rab congestion')) mappedCol = 'CSCONGES';
+                            else if (h.includes('ps_inter-freq handover success rate')) mappedCol = 'V2INTERFREQHOSRPS';
+                            else if (h.includes('ps_r99 cell down link throughput (kbps)') || h.includes('ps_r99 cell down link throughput')) mappedCol = 'R99DLTHROUGHPUT';
+                            else if (h.includes('ps_r99 call drop rate')) mappedCol = 'PSR99CALLDROPRATE';
+                            else if (h.includes('ps_hsupa cell throughput (kbps)') || h.includes('ps_hsupa cell throughput')) mappedCol = 'PSHSUPATPKBPS';
+                            else if (h.includes('ps_r99 down link traffic (gb)') || h.includes('ps_r99 down link traffic')) mappedCol = 'PSR99DLTRAFFICGB';
+                            else if (h.includes('ps_hsupa traffic (gb)') || h.includes('ps_hsupa traffic')) mappedCol = 'PSHSUPATRAFFICGB';
+                            else if (h.includes('ps_hsdpa traffic (gb)') || h.includes('ps_hsdpa traffic')) mappedCol = 'PSHSDPATRAFFICGB';
+                            else if (h.includes('ps_hspa call setup success rate')) mappedCol = 'PSHSPACSSR';
+                            else if (h.includes('ps_r99 cell up link throughput (kbps)') || h.includes('ps_r99 cell up link throughput')) mappedCol = 'R99ULTHROUGHPUT';
                         } 
                         else if (networkType === 'kpi_4g') {
                             if (h.includes('site name')) mappedCol = 'Site_name';
