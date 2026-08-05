@@ -1132,33 +1132,39 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('avaiable')) mappedCol = 'Col47';
                         } 
                         else if (networkType === 'kpi_5g') {
-                    if (h.includes('nhà cung cấp') || h === 'nha_cung_cap') mappedCol = 'Nha_cung_cap';
-                    else if (h.includes('tỉnh') || h === 'tinh') mappedCol = 'Tinh';
-                    else if (h.includes('tên gnodeb') || h === 'ten_gnodeb' || h === 'gnodeb name' || h === 'site name' || h === 'ne name' || h === 'site') mappedCol = 'Ten_GNODEB';
-                    else if (h.includes('tên cell') || h === 'ten_cell' || h.includes('cell name') || h === 'cell') mappedCol = 'Ten_CELL';
-                    else if (h.includes('mã vnp') || h === 'ma_vnp') mappedCol = 'Ma_VNP';
-                    else if (h.includes('loại ne') || h === 'loai_ne') mappedCol = 'Loai_NE';
-                    else if (h.includes('gnodeb_id') || h.includes('gnodeb id')) mappedCol = 'GNODEB_ID';
-                    else if (h.includes('cell_id') || h.includes('cell id') || h === 'localcell id') mappedCol = 'CELL_ID';
-                    else if (h.includes('thời gian') || h.includes('thoi gian') || h === 'date' || h === 'start time' || h === 'time') mappedCol = 'Thoi_gian';
-                    else if (h.includes('user_dl_avg_throughput') || h.includes('a user downlink average') || h.includes('dl thput') || h.includes('dl_thput')) mappedCol = 'A_User_DL_Avg_Throughput';
-                    else if (h.includes('user_ul_avg_throughput') || h.includes('a user uplink average') || h.includes('ul thput') || h.includes('ul_thput')) mappedCol = 'A_User_UL_Avg_Throughput';
-                    else if (h === 'traffic' || h.includes('total data traffic') || h === 'payload') mappedCol = 'Total_Data_Traffic_Volume_GB';
-                    else if (h.includes('cqi_5g') || h.includes('cqi 5g') || h === 'cqi' || h.includes('cqi')) mappedCol = 'CQI_5G';
-                    else if (h.includes('intra_sgnb_ps_change') || h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
-                    else if (h.includes('user_avg_number') || h.includes('average user number')) mappedCol = 'Average_User_Number';
-                    else if (h.includes('dlink_res_blk_ult') || h.includes('downlink resource block')) mappedCol = 'DL_RB_Ultilization';
-                    else if (h.includes('ulink_res_blk_ult') || h.includes('uplink resource block')) mappedCol = 'UL_RB_Ultilization';
-                    else if (h.includes('cell_avaibility_rate') || h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
-                    else if (h.includes('user_max_number') || h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
-                    else if (h.includes('ul_traffic_volume') || h.includes('ul traffic volume') || h.includes('traffic volume ul') || h.includes('uplink traffic') || h.includes('traffic_volume_ul')) mappedCol = 'UL_Traffic_Volume_GB';
-                    else if (h.includes('dl_traffic_volume') || h.includes('dl traffic volume') || h.includes('traffic volume dl') || h.includes('traffic volumn dl') || h.includes('downlink traffic') || h.includes('traffic_volume_dl')) mappedCol = 'DL_Traffic_Volume_GB';
-                    else if (h.includes('cell_ul_avg_throughput') || h.includes('cell uplink average')) mappedCol = 'Cell_UL_Avg_Throughput';
-                    else if (h.includes('cell_dl_avg_throughput') || h.includes('cell downlink average')) mappedCol = 'Cell_DL_Avg_Throughput';
-                    else if (h.includes('sgnb_abn_release_rate') || h.includes('abnormal release rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
-                    else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
-                    else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
-                } 
+                            if (h.includes('nhà cung cấp') || h.includes('nha cung cap') || h.includes('nha_cung_cap') || h.includes('vendor')) mappedCol = 'Nha_cung_cap';
+                            else if (h.includes('tỉnh') || h.includes('tinh') || h.includes('province')) mappedCol = 'Tinh';
+                            else if (h.includes('tên gnodeb') || h.includes('ten gnodeb') || h.includes('ten_gnodeb') || h.includes('site name') || h.includes('gnodeb name')) mappedCol = 'Ten_GNODEB';
+                            else if (h.includes('tên cell') || h.includes('ten cell') || h.includes('ten_cell') || h.includes('cell name')) mappedCol = 'Ten_CELL';
+                            else if (h.includes('mã vnp') || h.includes('ma vnp') || h.includes('ma_vnp')) mappedCol = 'Ma_VNP';
+                            else if (h.includes('loại ne') || h.includes('loai ne') || h.includes('loai_ne') || h.includes('ne type')) mappedCol = 'Loai_NE';
+                            else if (h.includes('gnodeb_id') || h.includes('gnodeb id')) mappedCol = 'GNODEB_ID';
+                            else if (h.includes('cell_id') || h.includes('cell id') || h.includes('localcell id')) mappedCol = 'CELL_ID';
+                            else if (h.includes('thời gian') || h.includes('thoi gian') || h.includes('date') || h.match(/th.*i gian/)) mappedCol = 'Thoi_gian';
+                            
+                            // [QUAN TRỌNG]: ĐƯA UL VÀ DL TRAFFIC LÊN TRƯỚC ĐỂ TRÁNH BỊ "CHỘP" NHẦM
+                            else if (h.includes('ul_traffic_volume') || h.includes('ul traffic volume') || h.includes('traffic volume ul') || h.includes('uplink traffic') || h.includes('ul traffic')) mappedCol = 'UL_Traffic_Volume_GB';
+                            else if (h.includes('dl_traffic_volume') || h.includes('dl traffic volume') || h.includes('traffic volume dl') || h.includes('traffic volumn dl') || h.includes('downlink traffic') || h.includes('dl traffic')) mappedCol = 'DL_Traffic_Volume_GB';
+                            
+                            else if (h.includes('user_dl_avg_throughput') || h.includes('user downlink average') || h.includes('dl thput')) mappedCol = 'A_User_DL_Avg_Throughput';
+                            else if (h.includes('user_ul_avg_throughput') || h.includes('user uplink average') || h.includes('ul thput')) mappedCol = 'A_User_UL_Avg_Throughput';
+                            
+                            // SIẾT CHẶT ĐIỀU KIỆN TOTAL TRAFFIC
+                            else if (h === 'traffic' || h.includes('total data traffic') || h === 'payload (gb)' || h === 'payload') mappedCol = 'Total_Data_Traffic_Volume_GB';
+                            
+                            else if (h.includes('cqi_5g') || h.includes('cqi 5g') || h === 'cqi' || h.includes('average cqi')) mappedCol = 'CQI_5G';
+                            else if (h.includes('intra_sgnb_ps_change') || h.includes('intra-sgnb pscell change')) mappedCol = 'Intra_SgNB_PScell_Change';
+                            else if (h.includes('user_avg_number') || h.includes('average user number')) mappedCol = 'Average_User_Number';
+                            else if (h.includes('dlink_res_blk_ult') || h.includes('downlink resource block') || h.includes('dl prb')) mappedCol = 'DL_RB_Ultilization';
+                            else if (h.includes('ulink_res_blk_ult') || h.includes('uplink resource block') || h.includes('ul prb')) mappedCol = 'UL_RB_Ultilization';
+                            else if (h.includes('cell_avaibility_rate') || h.includes('cell avaibility') || h.includes('cell availability')) mappedCol = 'Cell_avaibility_rate';
+                            else if (h.includes('user_max_number') || h.includes('maximum user number')) mappedCol = 'Maximum_User_Number';
+                            else if (h.includes('cell_ul_avg_throughput') || h.includes('cell uplink average')) mappedCol = 'Cell_UL_Avg_Throughput';
+                            else if (h.includes('cell_dl_avg_throughput') || h.includes('cell downlink average')) mappedCol = 'Cell_DL_Avg_Throughput';
+                            else if (h.includes('sgnb_abn_release_rate') || h.includes('abnormal release rate') || h.includes('drop rate')) mappedCol = 'SgNB_Abnormal_Release_Rate';
+                            else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
+                            else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
+                        } 
                         else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
                             if (h.includes('cell_code') || h.includes('cell code')) mappedCol = 'Cell_Code';
                             else if (h.includes('site_code') || h.includes('site code')) mappedCol = 'Site_Code';
@@ -1237,7 +1243,8 @@ exports.handleImportData = async (req, res) => {
                 'Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 
                 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 
                 'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
-                'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
+                'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name',
+                'Nha_cung_cap', 'Tinh', 'Loai_NE', 'Ma_VNP', 'GNODEB_ID'
             ];
 
             // BẮT BUỘC QUÉT TỪ DÒNG DỮ LIỆU THỰC TẾ
