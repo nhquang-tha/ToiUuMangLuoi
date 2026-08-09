@@ -426,7 +426,10 @@ async function syncTrafficDown() {
                 const c = cellMap[cell];
                 if (!c.has_data) continue;
                 
-                const v0 = c[t0] !== undefined ? c[t0] : 0; 
+                // [FIX 1/2]: CHẶN CELL KHÔNG CÓ TRONG NGÀY T0
+                if (c[t0] === undefined) continue; 
+                const v0 = c[t0];
+                
                 const v1 = targetDates[1] ? (c[targetDates[1]] || 0) : 0;
                 const v2 = targetDates[2] ? (c[targetDates[2]] || 0) : 0;
                 const v3 = targetDates[3] ? (c[targetDates[3]] || 0) : 0;
@@ -485,8 +488,11 @@ async function syncTrafficDown() {
                 const p = poiTrafficMap[poi];
                 if (!p.has_data) continue;
                 
+                // [FIX 2/2]: CHẶN POI KHÔNG CÓ DỮ LIỆU TRONG NGÀY T0
+                if (p[t0_poi] === undefined) continue;
+
                 if (masterDates4g5g.length >= 8) {
-                    const v0 = p[t0_poi] !== undefined ? p[t0_poi] : 0; 
+                    const v0 = p[t0_poi];
                     const v7 = p[masterDates4g5g[7]] !== undefined ? p[masterDates4g5g[7]] : 0; 
 
                     if (masterDates4g5g.length >= 10) {
