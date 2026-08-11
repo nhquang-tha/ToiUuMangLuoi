@@ -354,7 +354,6 @@ async function syncTrafficDown() {
 
         await db.query('TRUNCATE TABLE traffic_down');
         
-        // Lấy ngày tháng trực tiếp từ Database (Đảm bảo T0 luôn là ngày cao nhất hiện có trên hệ thống)
         const [dates3gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
         const [dates4gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
         const [dates5gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
@@ -402,9 +401,31 @@ async function syncTrafficDown() {
         let droppedTrafficPOIs = [];
         let poiTrafficMap = {}; 
 
+        // Hàm hỗ trợ: Tính chính xác ngày lùi lại (T-offset)
+        const getOffsetDateStr = (dateStr, offsetDays) => {
+            if (!dateStr) return null;
+            let parts = dateStr.split('/');
+            if (parts.length !== 3) return null;
+            let d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            d.setDate(d.getDate() - offsetDays);
+            let dd = String(d.getDate()).padStart(2, '0');
+            let mm = String(d.getMonth() + 1).padStart(2, '0');
+            let yyyy = d.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+        };
+
         const analyzeData = (dataArray, network, targetDates) => {
             if (targetDates.length === 0) return;
-            const t0 = targetDates[0];
+            const t0 = targetDates[0]; // Ngày mới nhất trong DB (Đã được Sort desc)
+            
+            // Tính toán CHÍNH XÁC các ngày trong lịch
+            const t1 = getOffsetDateStr(t0, 1);
+            const t2 = getOffsetDateStr(t0, 2);
+            const t3 = getOffsetDateStr(t0, 3);
+            const t7 = getOffsetDateStr(t0, 7); // Cùng kỳ tuần trước
+            const t8 = getOffsetDateStr(t0, 8); // T-1 của cùng kỳ tuần trước
+            const t9 = getOffsetDateStr(t0, 9); // T-2 của cùng kỳ tuần trước
+
             const cellMap = {};
             
             dataArray.forEach(row => {
@@ -431,43 +452,49 @@ async function syncTrafficDown() {
             for (let cell in cellMap) {
                 const c = cellMap[cell];
                 
-                // [CHẶN TUYỆT ĐỐI KHÔNG BỎ SÓT LỖI]: Thay vì dùng cờ in_t0 dễ sai lệch khi lệch ngày,
-                // ta kiểm tra trực tiếp c[t0]. Nếu undefined -> Cell này KHÔNG TỒN TẠI trong file ngày T0.
+                // CHẶN TUYỆT ĐỐI KHÔNG BỎ SÓT LỖI: Chỉ đánh giá các cell xuất hiện ở T0 (Ngày mới nhất của hệ thống)
                 if (c[t0] === undefined) continue; 
                 
-                const v0 = c[t0]; // Đã chắc chắn có tồn tại (dù là 0 hay >0)
+                const v0 = c[t0]; 
                 
-                let sumPast1 = 0, countPast1 = 0;
-                if (targetDates[1] && c[targetDates[1]] !== undefined) { sumPast1 = c[targetDates[1]]; countPast1 = 1; }
-                let avgPast1 = countPast1 > 0 ? sumPast1/countPast1 : 0;
+                // Tính trung bình 1, 3, 7 ngày trước đó (Lùi chuẩn theo ngày dương lịch)
+                let avgPast1 = c[t1] !== undefined ? c[t1] : 0;
 
                 let sumPast3 = 0, countPast3 = 0;
-                for(let i=3; i<=5; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast3 += c[targetDates[i]]; countPast3++; }
+                for(let i=1; i<=3; i++) { 
+                    let dStr = getOffsetDateStr(t0, i);
+                    if(c[dStr] !== undefined) { sumPast3 += c[dStr]; countPast3++; } 
+                }
                 let avgPast3 = countPast3 > 0 ? sumPast3/countPast3 : 0;
 
                 let sumPast7 = 0, countPast7 = 0;
-                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast7 += c[targetDates[i]]; countPast7++; }
+                for(let i=1; i<=7; i++) { 
+                    let dStr = getOffsetDateStr(t0, i);
+                    if(c[dStr] !== undefined) { sumPast7 += c[dStr]; countPast7++; } 
+                }
                 let avgPast7 = countPast7 > 0 ? sumPast7/countPast7 : 0;
 
-                if (targetDates.length >= 8 && v0 < 0.1 && avgPast7 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast7, date_t0: t0, date_t7: targetDates[7] });
+                // TIÊU CHÍ ZERO TRAFFIC (T0 < 0.1 và TB quá khứ > 2)
+                if (v0 < 0.1 && avgPast7 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast7, date_t0: t0, date_t7: t7 });
                 }
-                else if (targetDates.length >= 4 && v0 < 0.1 && avgPast3 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast3, date_t0: t0, date_t7: targetDates[3] });
+                else if (v0 < 0.1 && avgPast3 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast3, date_t0: t0, date_t7: t3 });
                 }
-                else if (targetDates.length >= 2 && v0 < 0.1 && avgPast1 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast1, date_t0: t0, date_t7: targetDates[1] });
+                else if (v0 < 0.1 && avgPast1 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast1, date_t0: t0, date_t7: t1 });
                 }
 
-                if ((network === '4g' || network === '5g') && targetDates.length >= 10) {
-                    const v1 = c[targetDates[1]] !== undefined ? c[targetDates[1]] : 0;
-                    const v2 = c[targetDates[2]] !== undefined ? c[targetDates[2]] : 0;
-                    const v7 = c[targetDates[7]] !== undefined ? c[targetDates[7]] : 0; 
-                    const v8 = c[targetDates[8]] !== undefined ? c[targetDates[8]] : 0;
-                    const v9 = c[targetDates[9]] !== undefined ? c[targetDates[9]] : 0;
+                // TIÊU CHÍ DROPPED CELL: Giảm 3 ngày liên tiếp so với cùng thứ tuần trước
+                if (network === '4g' || network === '5g') {
+                    const v1 = c[t1] !== undefined ? c[t1] : 0;
+                    const v2 = c[t2] !== undefined ? c[t2] : 0;
+                    const v7 = c[t7] !== undefined ? c[t7] : 0; 
+                    const v8 = c[t8] !== undefined ? c[t8] : 0;
+                    const v9 = c[t9] !== undefined ? c[t9] : 0;
                     
                     if (v0 < 0.7 * v7 && v7 > 1 && v1 < v8 && v2 < v9) {
-                        droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
+                        droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: t7 });
                     }
                 }
             }
@@ -480,24 +507,28 @@ async function syncTrafficDown() {
         const masterDates4g5g = dates4g.length > dates5g.length ? dates4g : dates5g;
         if (masterDates4g5g.length > 0) {
             const t0_poi = masterDates4g5g[0];
+            const t1_poi = getOffsetDateStr(t0_poi, 1);
+            const t2_poi = getOffsetDateStr(t0_poi, 2);
+            const t7_poi = getOffsetDateStr(t0_poi, 7);
+            const t8_poi = getOffsetDateStr(t0_poi, 8);
+            const t9_poi = getOffsetDateStr(t0_poi, 9);
+            
             for (let poi in poiTrafficMap) {
                 const p = poiTrafficMap[poi];
                 if (!p.has_data) continue;
                 
-                // [FIX]: Chặn tuyệt đối nếu POI không có dữ liệu trong ngày T0 (Ngày mới nhất)
                 if (p[t0_poi] === undefined) continue;
                 
-                if (masterDates4g5g.length >= 10) {
-                    const v0 = p[t0_poi]; 
-                    const v1 = p[masterDates4g5g[1]] !== undefined ? p[masterDates4g5g[1]] : 0; 
-                    const v2 = p[masterDates4g5g[2]] !== undefined ? p[masterDates4g5g[2]] : 0;
-                    const v7 = p[masterDates4g5g[7]] !== undefined ? p[masterDates4g5g[7]] : 0; 
-                    const v8 = p[masterDates4g5g[8]] !== undefined ? p[masterDates4g5g[8]] : 0; 
-                    const v9 = p[masterDates4g5g[9]] !== undefined ? p[masterDates4g5g[9]] : 0;
-                    
-                    if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
-                        droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
-                    }
+                const v0 = p[t0_poi]; 
+                const v1 = p[t1_poi] !== undefined ? p[t1_poi] : 0; 
+                const v2 = p[t2_poi] !== undefined ? p[t2_poi] : 0;
+                const v7 = p[t7_poi] !== undefined ? p[t7_poi] : 0; 
+                const v8 = p[t8_poi] !== undefined ? p[t8_poi] : 0; 
+                const v9 = p[t9_poi] !== undefined ? p[t9_poi] : 0;
+                
+                // TIÊU CHÍ DROPPED POI: Tổng T0 < 70% T7 và 3 ngày liên tiếp đều giảm
+                if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
+                    droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: t7_poi });
                 }
             }
         }
