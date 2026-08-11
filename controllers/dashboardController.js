@@ -354,6 +354,7 @@ async function syncTrafficDown() {
 
         await db.query('TRUNCATE TABLE traffic_down');
         
+        // Lấy ngày tháng trực tiếp từ Database (Đảm bảo T0 luôn là ngày cao nhất hiện có trên hệ thống)
         const [dates3gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_3g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
         const [dates4gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
         const [dates5gRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`).catch(()=>[[]]);
@@ -426,52 +427,36 @@ async function syncTrafficDown() {
                 const c = cellMap[cell];
                 if (!c.has_data) continue;
                 
-                // [FIX 1/2]: CHẶN CELL KHÔNG CÓ TRONG NGÀY T0
+                // CHẶN CELL KHÔNG CÓ TRONG NGÀY MỚI NHẤT CỦA DATABASE
                 if (c[t0] === undefined) continue; 
-                const v0 = c[t0];
                 
-                const v1 = targetDates[1] ? (c[targetDates[1]] || 0) : 0;
-                const v2 = targetDates[2] ? (c[targetDates[2]] || 0) : 0;
-                const v3 = targetDates[3] ? (c[targetDates[3]] || 0) : 0;
-                const v4 = targetDates[4] ? (c[targetDates[4]] || 0) : 0;
-                const v5 = targetDates[5] ? (c[targetDates[5]] || 0) : 0;
-                const v6 = targetDates[6] ? (c[targetDates[6]] || 0) : 0;
+                const v0 = c[t0]; // Traffic ngày T0
                 
-                let sumPast1 = 0, countPast1 = 0;
-                if (targetDates[1] && c[targetDates[1]] !== undefined) { sumPast1 = c[targetDates[1]]; countPast1 = 1; }
-                let avgPast1 = countPast1 > 0 ? sumPast1/countPast1 : 0;
-
-                let sumPast3 = 0, countPast3 = 0;
-                for(let i=3; i<=5; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast3 += c[targetDates[i]]; countPast3++; }
-                let avgPast3 = countPast3 > 0 ? sumPast3/countPast3 : 0;
-
                 let sumPast7 = 0, countPast7 = 0;
-                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast7 += c[targetDates[i]]; countPast7++; }
+                for(let i=1; i<=7; i++) {
+                    if(targetDates[i] && c[targetDates[i]] !== undefined) { 
+                        sumPast7 += c[targetDates[i]]; 
+                        countPast7++; 
+                    }
+                }
                 let avgPast7 = countPast7 > 0 ? sumPast7/countPast7 : 0;
 
-                if (targetDates.length >= 8 && v0===0 && v1===0 && v2===0 && v3===0 && v4===0 && v5===0 && v6===0 && avgPast7 > 0) {
-                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast7, date_t0: t0, date_t7: targetDates[7] });
-                }
-                else if (targetDates.length >= 4 && v0===0 && v1===0 && v2===0 && avgPast3 > 0) {
-                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast3, date_t0: t0, date_t7: targetDates[3] });
-                }
-                else if (targetDates.length >= 2 && v0 === 0 && avgPast1 > 0) {
-                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1, date_t0: t0, date_t7: targetDates[1] });
+                // 1. ĐIỀU KIỆN LỌC ZERO TRAFFIC: T0 < 0.1 GB và Trung bình 7 ngày trước đó > 2 GB
+                if (v0 < 0.1 && avgPast7 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast7, date_t0: t0, date_t7: targetDates[1] || 'N/A' });
                 }
 
-                if ((network === '4g' || network === '5g') && targetDates.length >= 8) {
+                // 2. ĐIỀU KIỆN LỌC CELL SUY GIẢM: T0 < 70% T7 VÀ T7 > 1 GB VÀ BẮT BUỘC GIẢM 3 NGÀY LIÊN TIẾP
+                if ((network === '4g' || network === '5g') && targetDates.length >= 10) {
+                    const v1 = c[targetDates[1]] !== undefined ? c[targetDates[1]] : 0;
+                    const v2 = c[targetDates[2]] !== undefined ? c[targetDates[2]] : 0;
                     const v7 = c[targetDates[7]] !== undefined ? c[targetDates[7]] : 0; 
+                    const v8 = c[targetDates[8]] !== undefined ? c[targetDates[8]] : 0;
+                    const v9 = c[targetDates[9]] !== undefined ? c[targetDates[9]] : 0;
                     
-                    if (targetDates.length >= 10) {
-                        const v8 = c[targetDates[8]] !== undefined ? c[targetDates[8]] : 0; 
-                        const v9 = c[targetDates[9]] !== undefined ? c[targetDates[9]] : 0;
-                        if (v0 < 0.7 * v7 && v7 > 5 && v1 < v8 && v2 < v9) {
-                            droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
-                        }
-                    } else {
-                        if (v0 < 0.7 * v7 && v7 > 5) {
-                            droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
-                        }
+                    // So sánh 3 cặp ngày tương ứng: (T0 vs T7), (T1 vs T8), (T2 vs T9)
+                    if (v0 < 0.7 * v7 && v7 > 1 && v1 < v8 && v2 < v9) {
+                        droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
                     }
                 }
             }
@@ -488,25 +473,21 @@ async function syncTrafficDown() {
                 const p = poiTrafficMap[poi];
                 if (!p.has_data) continue;
                 
-                // [FIX 2/2]: CHẶN POI KHÔNG CÓ DỮ LIỆU TRONG NGÀY T0
+                // CHẶN POI KHÔNG CÓ TRONG NGÀY MỚI NHẤT
                 if (p[t0_poi] === undefined) continue;
 
-                if (masterDates4g5g.length >= 8) {
-                    const v0 = p[t0_poi];
+                // 3. ĐIỀU KIỆN LỌC POI SUY GIẢM: T0 < 70% T7 VÀ BẮT BUỘC GIẢM 3 NGÀY LIÊN TIẾP
+                if (masterDates4g5g.length >= 10) {
+                    const v0 = p[t0_poi]; 
+                    const v1 = p[masterDates4g5g[1]] !== undefined ? p[masterDates4g5g[1]] : 0; 
+                    const v2 = p[masterDates4g5g[2]] !== undefined ? p[masterDates4g5g[2]] : 0;
                     const v7 = p[masterDates4g5g[7]] !== undefined ? p[masterDates4g5g[7]] : 0; 
+                    const v8 = p[masterDates4g5g[8]] !== undefined ? p[masterDates4g5g[8]] : 0; 
+                    const v9 = p[masterDates4g5g[9]] !== undefined ? p[masterDates4g5g[9]] : 0;
 
-                    if (masterDates4g5g.length >= 10) {
-                        const v1 = p[masterDates4g5g[1]] !== undefined ? p[masterDates4g5g[1]] : 0; 
-                        const v2 = p[masterDates4g5g[2]] !== undefined ? p[masterDates4g5g[2]] : 0;
-                        const v8 = p[masterDates4g5g[8]] !== undefined ? p[masterDates4g5g[8]] : 0; 
-                        const v9 = p[masterDates4g5g[9]] !== undefined ? p[masterDates4g5g[9]] : 0;
-                        if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
-                            droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
-                        }
-                    } else {
-                        if (v7 > 0 && v0 < 0.7 * v7) {
-                            droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
-                        }
+                    // T0 < T7, T1 < T8, T2 < T9
+                    if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
+                        droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
                     }
                 }
             }
