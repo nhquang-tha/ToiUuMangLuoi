@@ -408,16 +408,21 @@ async function syncTrafficDown() {
             const cellMap = {};
             
             dataArray.forEach(row => {
-                if (!cellMap[row.Cell_name]) cellMap[row.Cell_name] = { has_data: false };
-                cellMap[row.Cell_name][row.Thoi_gian] = parseFloat(row.traffic) || 0;
-                cellMap[row.Cell_name].has_data = true;
+                let cellName = String(row.Cell_name || '').trim();
+                let dateStr = String(row.Thoi_gian || '').trim();
+                if (!cellName || !dateStr) return;
+
+                if (!cellMap[cellName]) cellMap[cellName] = { has_data: false };
+                let tVal = parseFloat(row.traffic);
+                cellMap[cellName][dateStr] = isNaN(tVal) ? 0 : tVal;
+                cellMap[cellName].has_data = true;
                 
                 if (network === '4g' || network === '5g') {
-                    let poi = cellToPoi[row.Cell_name];
+                    let poi = cellToPoi[cellName];
                     if (poi) {
                         if (!poiTrafficMap[poi]) poiTrafficMap[poi] = { has_data: false };
-                        if (poiTrafficMap[poi][row.Thoi_gian] === undefined) poiTrafficMap[poi][row.Thoi_gian] = 0;
-                        poiTrafficMap[poi][row.Thoi_gian] += parseFloat(row.traffic) || 0;
+                        if (poiTrafficMap[poi][dateStr] === undefined) poiTrafficMap[poi][dateStr] = 0;
+                        poiTrafficMap[poi][dateStr] += (isNaN(tVal) ? 0 : tVal);
                         poiTrafficMap[poi].has_data = true;
                     }
                 }
@@ -425,28 +430,35 @@ async function syncTrafficDown() {
 
             for (let cell in cellMap) {
                 const c = cellMap[cell];
-                if (!c.has_data) continue;
                 
-                // CHẶN CELL KHÔNG CÓ TRONG NGÀY MỚI NHẤT CỦA DATABASE
+                // [CHẶN TUYỆT ĐỐI KHÔNG BỎ SÓT LỖI]: Thay vì dùng cờ in_t0 dễ sai lệch khi lệch ngày,
+                // ta kiểm tra trực tiếp c[t0]. Nếu undefined -> Cell này KHÔNG TỒN TẠI trong file ngày T0.
                 if (c[t0] === undefined) continue; 
                 
-                const v0 = c[t0]; // Traffic ngày T0
+                const v0 = c[t0]; // Đã chắc chắn có tồn tại (dù là 0 hay >0)
                 
+                let sumPast1 = 0, countPast1 = 0;
+                if (targetDates[1] && c[targetDates[1]] !== undefined) { sumPast1 = c[targetDates[1]]; countPast1 = 1; }
+                let avgPast1 = countPast1 > 0 ? sumPast1/countPast1 : 0;
+
+                let sumPast3 = 0, countPast3 = 0;
+                for(let i=3; i<=5; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast3 += c[targetDates[i]]; countPast3++; }
+                let avgPast3 = countPast3 > 0 ? sumPast3/countPast3 : 0;
+
                 let sumPast7 = 0, countPast7 = 0;
-                for(let i=1; i<=7; i++) {
-                    if(targetDates[i] && c[targetDates[i]] !== undefined) { 
-                        sumPast7 += c[targetDates[i]]; 
-                        countPast7++; 
-                    }
-                }
+                for(let i=7; i<=13; i++) if(targetDates[i] && c[targetDates[i]] !== undefined) { sumPast7 += c[targetDates[i]]; countPast7++; }
                 let avgPast7 = countPast7 > 0 ? sumPast7/countPast7 : 0;
 
-                // 1. ĐIỀU KIỆN LỌC ZERO TRAFFIC: T0 < 0.1 GB và Trung bình 7 ngày trước đó > 2 GB
-                if (v0 < 0.1 && avgPast7 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast7, date_t0: t0, date_t7: targetDates[1] || 'N/A' });
+                if (targetDates.length >= 8 && v0 < 0.1 && avgPast7 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast7, date_t0: t0, date_t7: targetDates[7] });
+                }
+                else if (targetDates.length >= 4 && v0 < 0.1 && avgPast3 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast3, date_t0: t0, date_t7: targetDates[3] });
+                }
+                else if (targetDates.length >= 2 && v0 < 0.1 && avgPast1 > 2) {
+                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast1, date_t0: t0, date_t7: targetDates[1] });
                 }
 
-                // 2. ĐIỀU KIỆN LỌC CELL SUY GIẢM: T0 < 70% T7 VÀ T7 > 1 GB VÀ BẮT BUỘC GIẢM 3 NGÀY LIÊN TIẾP
                 if ((network === '4g' || network === '5g') && targetDates.length >= 10) {
                     const v1 = c[targetDates[1]] !== undefined ? c[targetDates[1]] : 0;
                     const v2 = c[targetDates[2]] !== undefined ? c[targetDates[2]] : 0;
@@ -454,7 +466,6 @@ async function syncTrafficDown() {
                     const v8 = c[targetDates[8]] !== undefined ? c[targetDates[8]] : 0;
                     const v9 = c[targetDates[9]] !== undefined ? c[targetDates[9]] : 0;
                     
-                    // So sánh 3 cặp ngày tương ứng: (T0 vs T7), (T1 vs T8), (T2 vs T9)
                     if (v0 < 0.7 * v7 && v7 > 1 && v1 < v8 && v2 < v9) {
                         droppedTrafficCells.push({ Cell_name: cell, network: network, t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0, date_t7: targetDates[7] });
                     }
@@ -473,10 +484,9 @@ async function syncTrafficDown() {
                 const p = poiTrafficMap[poi];
                 if (!p.has_data) continue;
                 
-                // CHẶN POI KHÔNG CÓ TRONG NGÀY MỚI NHẤT
+                // [FIX]: Chặn tuyệt đối nếu POI không có dữ liệu trong ngày T0 (Ngày mới nhất)
                 if (p[t0_poi] === undefined) continue;
-
-                // 3. ĐIỀU KIỆN LỌC POI SUY GIẢM: T0 < 70% T7 VÀ BẮT BUỘC GIẢM 3 NGÀY LIÊN TIẾP
+                
                 if (masterDates4g5g.length >= 10) {
                     const v0 = p[t0_poi]; 
                     const v1 = p[masterDates4g5g[1]] !== undefined ? p[masterDates4g5g[1]] : 0; 
@@ -484,8 +494,7 @@ async function syncTrafficDown() {
                     const v7 = p[masterDates4g5g[7]] !== undefined ? p[masterDates4g5g[7]] : 0; 
                     const v8 = p[masterDates4g5g[8]] !== undefined ? p[masterDates4g5g[8]] : 0; 
                     const v9 = p[masterDates4g5g[9]] !== undefined ? p[masterDates4g5g[9]] : 0;
-
-                    // T0 < T7, T1 < T8, T2 < T9
+                    
                     if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
                         droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: masterDates4g5g[7] });
                     }
