@@ -853,83 +853,113 @@ exports.handleImportData = async (req, res) => {
             let dataStartIdx = -1;
             let colMapping = [];
 
-            // [CHIẾN LƯỢC MỚI]: XỬ LÝ RIÊNG CHO BẢNG CEM MỚI
+            // [CHIẾN LƯỢC MỚI]: MAPPING ĐỘNG CHO BẢNG CEM
             if (networkType === 'mbb_cem') {
-                headerRowIdx = 3; // Dòng 4 trong Excel chứa Tiêu đề
-                dataStartIdx = 4; // Dòng 5 trong Excel chứa Dữ liệu
+                let headerRowIdx = -1;
+                dataStartIdx = -1;
 
-                let checkRow = rawData[headerRowIdx] || [];
-                let excelHeaders = checkRow.map(h => String(h || '').replace(/['"]/g, '').trim());
-
-                // MAP TĨNH DỮ LIỆU TỪ EXCEL VÀO DATABASE MÀ KHÔNG DÙNG AUTO-MIGRATION
-                excelHeaders.forEach((exHeader, idx) => {
-                    if (!exHeader) return;
-                    // Lấy phần sau dấu | (nếu có) và làm sạch
-                    let cleanHeader = exHeader.split('|').pop().trim();
-                    let lowerHeader = cleanHeader.toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
-                    let mappedCol = null;
-
-                    // 1. Ánh xạ các cột cơ bản
-                    if (lowerHeader === 'tỉnh' || lowerHeader === 'ma_tinh' || lowerHeader === 'ma_tinh_tp') mappedCol = 'Ma_Tinh_TP';
-                    else if (lowerHeader === 'tên tỉnh/tp' || lowerHeader === 'ten_tinh_tp') mappedCol = 'Ten_Tinh_TP';
-                    else if (lowerHeader === 'mã px' || lowerHeader === 'ma_px') mappedCol = 'Ma_PX';
-                    else if (lowerHeader === 'tên px' || lowerHeader === 'ten_px' || lowerHeader === 'phuong_xa') mappedCol = 'Ten_PX';
-                    else if (lowerHeader === 'tên trạm' || lowerHeader === 'ten_tram') mappedCol = 'Ten_tram';
-                    else if (lowerHeader === 'cell' || lowerHeader.includes('cell name') || lowerHeader === 'cell_name' || lowerHeader.includes('tên cell')) mappedCol = 'Cell_Name';
-                    else if (lowerHeader === 'cell_id' || lowerHeader === 'cell id') mappedCol = 'Cell_ID';
-                    else if (lowerHeader === 'cei (1-5)') mappedCol = 'CEI_1_5';
-                    else if (lowerHeader === 'cei (%)') mappedCol = 'CEI_Percent';
-                    // 2. Ánh xạ Nhóm 1: UXI CHUẨN HÓA (1-5) - Norm
-                    else if (lowerHeader === 'chat (success of sending message)') mappedCol = 'Norm_Chat_Success_Sending_Message';
-                    else if (lowerHeader === 'social media (success of sending message)') mappedCol = 'Norm_Social_Media_Success_Sending_Message';
-                    else if (lowerHeader === 'data session completion rate') mappedCol = 'Norm_Data_Session_Completion_Rate';
-                    else if (lowerHeader === 'download packet loss') mappedCol = 'Norm_Download_Packet_Loss';
-                    else if (lowerHeader === 'upload latency') mappedCol = 'Norm_Upload_Latency';
-                    else if (lowerHeader === 'user download throughput') mappedCol = 'Norm_User_Download_Throughput';
-                    else if (lowerHeader === 'video buffering rate') mappedCol = 'Norm_Video_Buffering_Rate';
-                    else if (lowerHeader === 'init buffering time') mappedCol = 'Norm_Init_Buffering_Time';
-                    // 3. Ánh xạ Nhóm 2: ĐIỂM UXI - Point (Bằng cách kiểm tra title group cha trong Excel thực tế nếu có, tạm thời bỏ qua nếu trùng tên cột cuối)
-                    // Lưu ý: Nếu Excel chỉ có 1 hàng tiêu đề cuối và tên bị trùng giữa Norm, Point, Val, bạn cần lấy headerRowIdx sớm hơn để map.
-                    // Giả định file excel có tiền tố rõ ràng trong `exHeader` ban đầu (trước khi split '|').
-                    else if (exHeader.toLowerCase().includes('point')) {
-                        if (lowerHeader.includes('chat')) mappedCol = 'Point_Chat_Success_Sending_Message';
-                        else if (lowerHeader.includes('social media')) mappedCol = 'Point_Social_Media_Success_Sending_Message';
-                        else if (lowerHeader.includes('data session')) mappedCol = 'Point_Data_Session_Completion_Rate';
-                        else if (lowerHeader.includes('packet loss')) mappedCol = 'Point_Download_Packet_Loss';
-                        else if (lowerHeader.includes('latency')) mappedCol = 'Point_Upload_Latency';
-                        else if (lowerHeader.includes('throughput')) mappedCol = 'Point_User_Download_Throughput';
-                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Point_Video_Buffering_Rate';
-                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Point_Init_Buffering_Time';
-                    }
-                    // 4. Ánh xạ Nhóm 3: UXI GIÁ TRỊ THỰC TẾ - Val
-                    else if (exHeader.toLowerCase().includes('val') || exHeader.toLowerCase().includes('giá trị')) {
-                         if (lowerHeader.includes('chat')) mappedCol = 'Val_Chat_Success_Sending_Message';
-                        else if (lowerHeader.includes('social media')) mappedCol = 'Val_Social_Media_Success_Sending_Message';
-                        else if (lowerHeader.includes('data session')) mappedCol = 'Val_Data_Session_Completion_Rate';
-                        else if (lowerHeader.includes('packet loss')) mappedCol = 'Val_Download_Packet_Loss';
-                        else if (lowerHeader.includes('latency')) mappedCol = 'Val_Upload_Latency';
-                        else if (lowerHeader.includes('throughput')) mappedCol = 'Val_User_Download_Throughput';
-                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Val_Video_Buffering_Rate';
-                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Val_Init_Buffering_Time';
-                    } else {
-                        // Thử tìm khớp chính xác với cột db
-                        let safeName = createSafeColumnName(exHeader);
-                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
-                        if (exactMatch) mappedCol = exactMatch.original;
-                    }
-
-                    if (mappedCol) {
-                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
-                        if (dbMatch) {
-                            let existingMap = colMapping.find(m => m.dbCol === dbMatch.original);
-                            if (existingMap) existingMap.excelIdx = idx;
-                            else colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
+                // 1. Quét động tìm dòng Header chứa tên các cột thực tế
+                for (let i = 0; i < Math.min(20, rawData.length); i++) {
+                    if (!rawData[i]) continue;
+                    let rowStr = JSON.stringify(rawData[i]).toLowerCase();
+                    if (rowStr.includes('cell name') || rowStr.includes('tên trạm') || rowStr.includes('mã tỉnh') || rowStr.includes('chat - success')) {
+                        headerRowIdx = i;
+                        dataStartIdx = i + 1;
+                        
+                        // Kiểm tra xem dòng ngay bên dưới có phải là dòng đơn vị (1-5, %, ms, Mbps...) không
+                        if (rawData[i+1]) {
+                            let nextRowStr = JSON.stringify(rawData[i+1]).toLowerCase();
+                            if (nextRowStr.includes('1-5') || nextRowStr.includes('mbps')) {
+                                dataStartIdx = i + 2; // Bỏ qua dòng đơn vị, nhảy tới dòng Data thực sự
+                            }
                         }
+                        break;
                     }
-                });
-            }
-            // Lấy dữ liệu bắt đầu chính xác từ Hàng 8 (Index = 7) đối với QoE/QoS cũ
+                }
+
+                if (headerRowIdx !== -1) {
+                    let excelHeaders = rawData[headerRowIdx].map(h => String(h || '').replace(/['"]/g, '').trim());
+                    
+                    // Bộ đếm thông minh để phân biệt 3 nhóm (Norm, Point, Val) dù tên cột y hệt nhau
+                    let uxiCounters = { chat: 0, social: 0, data: 0, packet: 0, latency: 0, throughput: 0, video: 0, init: 0 };
+
+                    excelHeaders.forEach((exHeader, idx) => {
+                        if (!exHeader) return;
+                        let lowerHeader = String(exHeader).toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
+                        let mappedCol = null;
+
+                        // Các cột cơ bản
+                        if (lowerHeader === 'mã tỉnh/tp' || lowerHeader === 'mã tỉnh' || lowerHeader === 'ma_tinh' || lowerHeader === 'tỉnh') mappedCol = 'Ma_Tinh_TP';
+                        else if (lowerHeader === 'tên tỉnh/tp' || lowerHeader === 'ten_tinh_tp' || lowerHeader === 'tên tỉnh') mappedCol = 'Ten_Tinh_TP';
+                        else if (lowerHeader === 'mã px' || lowerHeader === 'ma_px') mappedCol = 'Ma_PX';
+                        else if (lowerHeader === 'tên px' || lowerHeader === 'ten_px' || lowerHeader === 'phường xã' || lowerHeader === 'phuong_xa') mappedCol = 'Ten_PX';
+                        else if (lowerHeader === 'tên trạm' || lowerHeader === 'ten_tram' || lowerHeader === 'site name') mappedCol = 'Ten_tram';
+                        else if (lowerHeader === 'cell name' || lowerHeader === 'tên cell' || lowerHeader === 'cell_name' || lowerHeader === 'cell') mappedCol = 'Cell_Name';
+                        else if (lowerHeader === 'cell id' || lowerHeader === 'cell_id') mappedCol = 'Cell_ID';
+                        else if (lowerHeader === 'cei' || lowerHeader === 'cei (1-5)') mappedCol = 'CEI_1_5';
+                        else if (lowerHeader === 'cei %' || lowerHeader === 'cei (%)') mappedCol = 'CEI_Percent';
+                        
+                        // Các cột UXI (Phân loại theo thứ tự xuất hiện: 0 -> Norm, 1 -> Point, 2 -> Val)
+                        else if (lowerHeader.includes('chat - success') || lowerHeader.includes('chat success')) {
+                            if (uxiCounters.chat === 0) mappedCol = 'Norm_Chat_Success_Sending_Message';
+                            else if (uxiCounters.chat === 1) mappedCol = 'Point_Chat_Success_Sending_Message';
+                            else if (uxiCounters.chat === 2) mappedCol = 'Val_Chat_Success_Sending_Message';
+                            uxiCounters.chat++;
+                        }
+                        else if (lowerHeader.includes('social media - success') || lowerHeader.includes('social media success')) {
+                            if (uxiCounters.social === 0) mappedCol = 'Norm_Social_Media_Success_Sending_Message';
+                            else if (uxiCounters.social === 1) mappedCol = 'Point_Social_Media_Success_Sending_Message';
+                            else if (uxiCounters.social === 2) mappedCol = 'Val_Social_Media_Success_Sending_Message';
+                            uxiCounters.social++;
+                        }
+                        else if (lowerHeader.includes('data session completion')) {
+                            if (uxiCounters.data === 0) mappedCol = 'Norm_Data_Session_Completion_Rate';
+                            else if (uxiCounters.data === 1) mappedCol = 'Point_Data_Session_Completion_Rate';
+                            else if (uxiCounters.data === 2) mappedCol = 'Val_Data_Session_Completion_Rate';
+                            uxiCounters.data++;
+                        }
+                        else if (lowerHeader.includes('download packet loss') || lowerHeader.includes('downlod packet')) {
+                            if (uxiCounters.packet === 0) mappedCol = 'Norm_Download_Packet_Loss';
+                            else if (uxiCounters.packet === 1) mappedCol = 'Point_Download_Packet_Loss';
+                            else if (uxiCounters.packet === 2) mappedCol = 'Val_Download_Packet_Loss';
+                            uxiCounters.packet++;
+                        }
+                        else if (lowerHeader.includes('upload latency')) {
+                            if (uxiCounters.latency === 0) mappedCol = 'Norm_Upload_Latency';
+                            else if (uxiCounters.latency === 1) mappedCol = 'Point_Upload_Latency';
+                            else if (uxiCounters.latency === 2) mappedCol = 'Val_Upload_Latency';
+                            uxiCounters.latency++;
+                        }
+                        else if (lowerHeader.includes('user download throughput')) {
+                            if (uxiCounters.throughput === 0) mappedCol = 'Norm_User_Download_Throughput';
+                            else if (uxiCounters.throughput === 1) mappedCol = 'Point_User_Download_Throughput';
+                            else if (uxiCounters.throughput === 2) mappedCol = 'Val_User_Download_Throughput';
+                            uxiCounters.throughput++;
+                        }
+                        else if (lowerHeader.includes('video buffering rate')) {
+                            if (uxiCounters.video === 0) mappedCol = 'Norm_Video_Buffering_Rate';
+                            else if (uxiCounters.video === 1) mappedCol = 'Point_Video_Buffering_Rate';
+                            else if (uxiCounters.video === 2) mappedCol = 'Val_Video_Buffering_Rate';
+                            uxiCounters.video++;
+                        }
+                        else if (lowerHeader.includes('init buffering time')) {
+                            if (uxiCounters.init === 0) mappedCol = 'Norm_Init_Buffering_Time';
+                            else if (uxiCounters.init === 1) mappedCol = 'Point_Init_Buffering_Time';
+                            else if (uxiCounters.init === 2) mappedCol = 'Val_Init_Buffering_Time';
+                            uxiCounters.init++;
+                        }
+
+                        if (mappedCol) {
+                            let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                            if (dbMatch) {
+                                colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
+                            }
+                        }
+                    });
+                }
+            } 
             else if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+                // Lấy dữ liệu bắt đầu chính xác từ Hàng 8 (Index = 7)
                 dataStartIdx = 7; 
 
                 // Tuy nhiên, đối với file CSV export từ hệ thống (nếu có), cấu trúc có thể bị thay đổi. 
