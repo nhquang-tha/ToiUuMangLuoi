@@ -95,9 +95,9 @@
                         <form action="/import-data/reset/alarm_data" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ Cẩm nang Alarm?');"><button type="submit" class="btn-sm btn-danger" style="background:#c0392b;">⚠ Reset Alarm</button></form>
                     </div>
 
-                    <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">3. Dữ Liệu Khác (QoE, QoS, TA):</strong>
+                    <strong style="font-size: 13px; display:block; margin-bottom: 5px; color: #34495e;">3. Dữ Liệu Khác (CEM, QoS, TA):</strong>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <form action="/import-data/reset/mbb_qoe" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Trải nghiệm QoE?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoE</button></form>
+                        <form action="/import-data/reset/mbb_cem" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu CEM?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset CEM</button></form>
                         <form action="/import-data/reset/mbb_qos" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Dịch vụ QoS?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoS</button></form>
                         <form action="/import-data/reset/ta_query" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Timing Advance (TA)?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset TA</button></form>
                     </div>
@@ -112,7 +112,7 @@
                         <button class="tab-btn active" onclick="openTab(event, 'tab-rf')">1. Trạm RF</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-kpi')">2. KPI</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-ta')">3. TA</button>
-                        <button class="tab-btn" onclick="openTab(event, 'tab-qoe')">4. QoE/QoS</button>
+                        <button class="tab-btn" onclick="openTab(event, 'tab-qoe')">4. CEM/QoS</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-poi')">5. POI</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-csht')">6. CSHT</button>
                         <button class="tab-btn" onclick="openTab(event, 'tab-alarm')">7. Alarm</button>
@@ -181,21 +181,21 @@
                         </form>
                     </div>
 
-                    <!-- TAB 4: IMPORT QoE / QoS -->
+                    <!-- TAB 4: IMPORT CEM / QoS -->
                     <div id="tab-qoe" class="tab-content">
-                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp QoE / QoS (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Lưu ý: Nếu Import lại một Tuần đã có, dữ liệu cũ của Tuần đó sẽ tự động bị ghi đè.</i></p>
+                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp CEM / QoS (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Lưu ý: Nếu Import lại một Tuần đã có, dữ liệu cũ của Tuần đó sẽ tự động bị ghi đè.</i></p>
                         <form action="/import-data" method="POST" enctype="multipart/form-data">
                             <div class="form-group">
                                 <label>Chọn Loại File:</label>
                                 <select name="networkType" class="form-control" required style="width: 100%; padding: 10px; border-color: #1abc9c; margin-bottom: 15px;">
-                                    <option value="mbb_qoe">Dữ liệu Trải nghiệm QoE</option>
+                                    <option value="mbb_cem">Dữ liệu Báo cáo CEM</option>
                                     <option value="mbb_qos">Dữ liệu Dịch vụ QoS</option>
                                 </select>
                             </div>
 
                             <label style="font-weight:bold; color: #2c3e50;">Chỉ định thời gian (Tuần theo lịch):</label>
                             <div class="week-selector">
-                                <input type="number" name="weekNumber" class="week-input" placeholder="Ví dụ: 14 (Tuần 14)" required min="1" max="53">
+                                <input type="number" name="weekNumber" class="week-input" placeholder="Ví dụ: 32 (Tuần 32)" required min="1" max="53">
                                 <input type="number" name="year" class="week-input" value="2026" placeholder="Năm (Ví dụ: 2026)" required min="2020">
                             </div>
 
@@ -204,7 +204,7 @@
                                     <input type="file" name="dataFiles" accept=".csv, .xlsx, .xls" required multiple>
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #1abc9c; border-color: #1abc9c;">🚀 Import QoE/QoS</button>
+                            <button type="submit" class="btn-primary" style="margin-top: 15px; width: 100%; padding: 12px; background: #1abc9c; border-color: #1abc9c;">🚀 Import CEM/QoS</button>
                         </form>
                     </div>
 
