@@ -149,15 +149,16 @@ async function aggregateDashboardData() {
     try {
         console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
 
+        // [AUTO-CLEANUP]: Tự động dọn dẹp các dòng rác sinh ra do nhập nhầm Header
+        await db.query(`DELETE FROM Dashboard WHERE thoi_gian = 'Thời' OR thoi_gian LIKE '%Thời%' OR thoi_gian LIKE '%Date%' OR thoi_gian = '0'`);
+        await db.query(`DELETE FROM district_dashboard WHERE thoi_gian = 'Thời' OR thoi_gian LIKE '%Thời%' OR thoi_gian LIKE '%Date%' OR thoi_gian = '0'`);
+        await db.query(`DELETE FROM kpi_3g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0'`);
+        await db.query(`DELETE FROM kpi_4g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0'`);
+        await db.query(`DELETE FROM kpi_5g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0'`);
+
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
             SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
-            FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
-            ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
-                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
-                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
-                AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
 
         await db.query(`
@@ -1302,12 +1303,16 @@ exports.handleImportData = async (req, res) => {
                             val = formatExcelDate(val);
                             if (typeof val === 'string') {
                                 val = val.split(' ')[0].replace(/['"]/g, '');
-                                if (val.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                
+                                // [BẮT LỖI]: Ngăn chặn chữ "Thời gian" bị cắt thành "Thời" lọt vào CSDL
+                                if (val.toLowerCase().includes('thời') || val.toLowerCase().includes('thoi') || val.match(/[a-zA-Z]/)) {
+                                    val = null;
+                                } else if (val.match(/^\d{4}-\d{2}-\d{2}$/)) {
                                     let parts = val.split('-');
                                     val = `${parts[2]}/${parts[1]}/${parts[0]}`;
                                 }
                             }
-                            lastValidDate = val; 
+                            if (val) lastValidDate = val; 
                         } else { val = lastValidDate; }
                     }
                     
@@ -1337,6 +1342,11 @@ exports.handleImportData = async (req, res) => {
                 });
 
                 // GHI NHẬN HÀNG DỮ LIỆU NẾU ĐẠT ĐIỀU KIỆN
+                // [CHẶN RÁC]: Nếu là file KPI ngày mà bị rỗng ngày (do là hàng Header) thì vứt bỏ
+                if (isDailyKpi && !rowObj['Thoi_gian']) {
+                    hasKpiData = false;
+                }
+
                 if (hasKpiData && hasValidIdentifier) {
                     if (weekPrefix && hasTuanCol) rowObj['Tuan'] = weekPrefix;
                     insertData.push(rowObj);
