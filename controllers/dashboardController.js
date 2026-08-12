@@ -768,7 +768,7 @@ exports.handleImportData = async (req, res) => {
     let isKpiImported = networkType.startsWith('kpi_');
 
     let weekPrefix = "";
-    if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+    if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem') {
         const wNum = req.body.weekNumber;
         const wYear = req.body.year;
         if(wNum && wYear) weekPrefix = `Tuần ${wNum} (${wYear})`;
@@ -807,7 +807,7 @@ exports.handleImportData = async (req, res) => {
         }
     }
 
-    if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos')) {
+    if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem')) {
         try { await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]); } catch (e) {}
     }
 
@@ -853,9 +853,83 @@ exports.handleImportData = async (req, res) => {
             let dataStartIdx = -1;
             let colMapping = [];
 
-            // [CHIẾN LƯỢC MỚI]: MAPPING TRỰC TIẾP THEO INDEX CỘT CHO BẢNG QOE VÀ QOS
-            // Lấy dữ liệu bắt đầu chính xác từ Hàng 8 (Index = 7)
-            if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
+            // [CHIẾN LƯỢC MỚI]: XỬ LÝ RIÊNG CHO BẢNG CEM MỚI
+            if (networkType === 'mbb_cem') {
+                headerRowIdx = 3; // Dòng 4 trong Excel chứa Tiêu đề
+                dataStartIdx = 4; // Dòng 5 trong Excel chứa Dữ liệu
+
+                let checkRow = rawData[headerRowIdx] || [];
+                let excelHeaders = checkRow.map(h => String(h || '').replace(/['"]/g, '').trim());
+
+                // MAP TĨNH DỮ LIỆU TỪ EXCEL VÀO DATABASE MÀ KHÔNG DÙNG AUTO-MIGRATION
+                excelHeaders.forEach((exHeader, idx) => {
+                    if (!exHeader) return;
+                    // Lấy phần sau dấu | (nếu có) và làm sạch
+                    let cleanHeader = exHeader.split('|').pop().trim();
+                    let lowerHeader = cleanHeader.toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
+                    let mappedCol = null;
+
+                    // 1. Ánh xạ các cột cơ bản
+                    if (lowerHeader === 'tỉnh' || lowerHeader === 'ma_tinh' || lowerHeader === 'ma_tinh_tp') mappedCol = 'Ma_Tinh_TP';
+                    else if (lowerHeader === 'tên tỉnh/tp' || lowerHeader === 'ten_tinh_tp') mappedCol = 'Ten_Tinh_TP';
+                    else if (lowerHeader === 'mã px' || lowerHeader === 'ma_px') mappedCol = 'Ma_PX';
+                    else if (lowerHeader === 'tên px' || lowerHeader === 'ten_px' || lowerHeader === 'phuong_xa') mappedCol = 'Ten_PX';
+                    else if (lowerHeader === 'tên trạm' || lowerHeader === 'ten_tram') mappedCol = 'Ten_tram';
+                    else if (lowerHeader === 'cell' || lowerHeader.includes('cell name') || lowerHeader === 'cell_name' || lowerHeader.includes('tên cell')) mappedCol = 'Cell_Name';
+                    else if (lowerHeader === 'cell_id' || lowerHeader === 'cell id') mappedCol = 'Cell_ID';
+                    else if (lowerHeader === 'cei (1-5)') mappedCol = 'CEI_1_5';
+                    else if (lowerHeader === 'cei (%)') mappedCol = 'CEI_Percent';
+                    // 2. Ánh xạ Nhóm 1: UXI CHUẨN HÓA (1-5) - Norm
+                    else if (lowerHeader === 'chat (success of sending message)') mappedCol = 'Norm_Chat_Success_Sending_Message';
+                    else if (lowerHeader === 'social media (success of sending message)') mappedCol = 'Norm_Social_Media_Success_Sending_Message';
+                    else if (lowerHeader === 'data session completion rate') mappedCol = 'Norm_Data_Session_Completion_Rate';
+                    else if (lowerHeader === 'download packet loss') mappedCol = 'Norm_Download_Packet_Loss';
+                    else if (lowerHeader === 'upload latency') mappedCol = 'Norm_Upload_Latency';
+                    else if (lowerHeader === 'user download throughput') mappedCol = 'Norm_User_Download_Throughput';
+                    else if (lowerHeader === 'video buffering rate') mappedCol = 'Norm_Video_Buffering_Rate';
+                    else if (lowerHeader === 'init buffering time') mappedCol = 'Norm_Init_Buffering_Time';
+                    // 3. Ánh xạ Nhóm 2: ĐIỂM UXI - Point (Bằng cách kiểm tra title group cha trong Excel thực tế nếu có, tạm thời bỏ qua nếu trùng tên cột cuối)
+                    // Lưu ý: Nếu Excel chỉ có 1 hàng tiêu đề cuối và tên bị trùng giữa Norm, Point, Val, bạn cần lấy headerRowIdx sớm hơn để map.
+                    // Giả định file excel có tiền tố rõ ràng trong `exHeader` ban đầu (trước khi split '|').
+                    else if (exHeader.toLowerCase().includes('point')) {
+                        if (lowerHeader.includes('chat')) mappedCol = 'Point_Chat_Success_Sending_Message';
+                        else if (lowerHeader.includes('social media')) mappedCol = 'Point_Social_Media_Success_Sending_Message';
+                        else if (lowerHeader.includes('data session')) mappedCol = 'Point_Data_Session_Completion_Rate';
+                        else if (lowerHeader.includes('packet loss')) mappedCol = 'Point_Download_Packet_Loss';
+                        else if (lowerHeader.includes('latency')) mappedCol = 'Point_Upload_Latency';
+                        else if (lowerHeader.includes('throughput')) mappedCol = 'Point_User_Download_Throughput';
+                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Point_Video_Buffering_Rate';
+                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Point_Init_Buffering_Time';
+                    }
+                    // 4. Ánh xạ Nhóm 3: UXI GIÁ TRỊ THỰC TẾ - Val
+                    else if (exHeader.toLowerCase().includes('val') || exHeader.toLowerCase().includes('giá trị')) {
+                         if (lowerHeader.includes('chat')) mappedCol = 'Val_Chat_Success_Sending_Message';
+                        else if (lowerHeader.includes('social media')) mappedCol = 'Val_Social_Media_Success_Sending_Message';
+                        else if (lowerHeader.includes('data session')) mappedCol = 'Val_Data_Session_Completion_Rate';
+                        else if (lowerHeader.includes('packet loss')) mappedCol = 'Val_Download_Packet_Loss';
+                        else if (lowerHeader.includes('latency')) mappedCol = 'Val_Upload_Latency';
+                        else if (lowerHeader.includes('throughput')) mappedCol = 'Val_User_Download_Throughput';
+                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Val_Video_Buffering_Rate';
+                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Val_Init_Buffering_Time';
+                    } else {
+                        // Thử tìm khớp chính xác với cột db
+                        let safeName = createSafeColumnName(exHeader);
+                        let exactMatch = dbCols.find(c => c.original.toLowerCase() === safeName.toLowerCase());
+                        if (exactMatch) mappedCol = exactMatch.original;
+                    }
+
+                    if (mappedCol) {
+                        let dbMatch = dbCols.find(c => c.original.toLowerCase() === mappedCol.toLowerCase());
+                        if (dbMatch) {
+                            let existingMap = colMapping.find(m => m.dbCol === dbMatch.original);
+                            if (existingMap) existingMap.excelIdx = idx;
+                            else colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
+                        }
+                    }
+                });
+            }
+            // Lấy dữ liệu bắt đầu chính xác từ Hàng 8 (Index = 7) đối với QoE/QoS cũ
+            else if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                 dataStartIdx = 7; 
 
                 // Tuy nhiên, đối với file CSV export từ hệ thống (nếu có), cấu trúc có thể bị thay đổi. 
@@ -1324,7 +1398,7 @@ exports.handleImportData = async (req, res) => {
                     }
 
                     // BẮT LỖI 2: MỞ RỘNG BỘ LỌC ĐỊNH DANH (IDENTIFIER) ĐỂ ĐÓN ĐƯỢC TẤT CẢ FILE CỦA HỆ THỐNG
-                    if (networkType !== 'mbb_qoe' && networkType !== 'mbb_qos') {
+                    if (networkType !== 'mbb_qoe' && networkType !== 'mbb_qos' && networkType !== 'mbb_cem') {
                         let colNameStr = map.dbCol.toLowerCase();
                         if (['cell_name', 'site_name', 'cell_id', 'ten_cell', 'ci', 'cell_code', 'site_code', 'ma_csht', 'ma_vt'].includes(colNameStr)) {
                             let stringVal = String(val).toLowerCase().trim().replace(/['"]/g, '');
@@ -1333,11 +1407,14 @@ exports.handleImportData = async (req, res) => {
                                 hasValidIdentifier = true;
                             }
                         }
-                    } else {
+                    } else if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
                         // Đối với QoE/QoS, chỉ cần có dữ liệu ở các cột chính là cho qua
                         if (map.excelIdx === 4 || map.excelIdx === 5 || map.excelIdx === 6) {
                             if (val && String(val).trim() !== '') hasValidIdentifier = true;
                         }
+                    } else if (networkType === 'mbb_cem') {
+                        // Đối với CEM, nếu có bất kỳ dữ liệu nào hợp lệ thì cho qua
+                        if (val && String(val).trim() !== '') hasValidIdentifier = true;
                     }
                 });
 
@@ -1796,7 +1873,7 @@ exports.resetImportedData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     if (userRole !== 'admin') return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
     const table = req.params.table;
-    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu', 'worst_cells', 'congestion_3g', 'traffic_down', 'bad_cells'];
+    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'mbb_cem', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu', 'worst_cells', 'congestion_3g', 'traffic_down', 'bad_cells'];
     if (!allowedTables.includes(table)) return res.status(400).send("Bảng dữ liệu không hợp lệ.");
 
     try {
