@@ -862,14 +862,14 @@ exports.handleImportData = async (req, res) => {
                 for (let i = 0; i < Math.min(20, rawData.length); i++) {
                     if (!rawData[i]) continue;
                     let rowStr = JSON.stringify(rawData[i]).toLowerCase();
-                    if (rowStr.includes('cell name') || rowStr.includes('tên trạm') || rowStr.includes('mã tỉnh') || rowStr.includes('chat - success')) {
+                    if (rowStr.includes('cell name') || rowStr.includes('tên trạm') || rowStr.includes('mã tỉnh') || rowStr.includes('chat')) {
                         headerRowIdx = i;
                         dataStartIdx = i + 1;
                         
                         // Kiểm tra xem dòng ngay bên dưới có phải là dòng đơn vị (1-5, %, ms, Mbps...) không
                         if (rawData[i+1]) {
                             let nextRowStr = JSON.stringify(rawData[i+1]).toLowerCase();
-                            if (nextRowStr.includes('1-5') || nextRowStr.includes('mbps')) {
+                            if (nextRowStr.includes('1-5') || nextRowStr.includes('mbps') || nextRowStr.includes('ms')) {
                                 dataStartIdx = i + 2; // Bỏ qua dòng đơn vị, nhảy tới dòng Data thực sự
                             }
                         }
@@ -889,60 +889,60 @@ exports.handleImportData = async (req, res) => {
                         let mappedCol = null;
 
                         // Các cột cơ bản
-                        if (lowerHeader === 'mã tỉnh/tp' || lowerHeader === 'mã tỉnh' || lowerHeader === 'ma_tinh' || lowerHeader === 'tỉnh') mappedCol = 'Ma_Tinh_TP';
-                        else if (lowerHeader === 'tên tỉnh/tp' || lowerHeader === 'ten_tinh_tp' || lowerHeader === 'tên tỉnh') mappedCol = 'Ten_Tinh_TP';
+                        if (lowerHeader.includes('mã tỉnh') || lowerHeader.includes('ma_tinh') || lowerHeader === 'tỉnh') mappedCol = 'Ma_Tinh_TP';
+                        else if (lowerHeader.includes('tên tỉnh') || lowerHeader.includes('ten_tinh')) mappedCol = 'Ten_Tinh_TP';
                         else if (lowerHeader === 'mã px' || lowerHeader === 'ma_px') mappedCol = 'Ma_PX';
-                        else if (lowerHeader === 'tên px' || lowerHeader === 'ten_px' || lowerHeader === 'phường xã' || lowerHeader === 'phuong_xa') mappedCol = 'Ten_PX';
-                        else if (lowerHeader === 'tên trạm' || lowerHeader === 'ten_tram' || lowerHeader === 'site name') mappedCol = 'Ten_tram';
-                        else if (lowerHeader === 'cell name' || lowerHeader === 'tên cell' || lowerHeader === 'cell_name' || lowerHeader === 'cell') mappedCol = 'Cell_Name';
-                        else if (lowerHeader === 'cell id' || lowerHeader === 'cell_id') mappedCol = 'Cell_ID';
+                        else if (lowerHeader.includes('tên px') || lowerHeader.includes('ten_px') || lowerHeader.includes('phường xã')) mappedCol = 'Ten_PX';
+                        else if (lowerHeader.includes('tên trạm') || lowerHeader.includes('ten_tram') || lowerHeader.includes('site name')) mappedCol = 'Ten_tram';
+                        else if (lowerHeader.includes('cell name') || lowerHeader.includes('tên cell') || lowerHeader === 'cell') mappedCol = 'Cell_Name';
+                        else if (lowerHeader.includes('cell id') || lowerHeader === 'cell_id') mappedCol = 'Cell_ID';
                         else if (lowerHeader === 'cei' || lowerHeader === 'cei (1-5)') mappedCol = 'CEI_1_5';
-                        else if (lowerHeader === 'cei %' || lowerHeader === 'cei (%)') mappedCol = 'CEI_Percent';
+                        else if (lowerHeader.includes('cei %') || lowerHeader.includes('cei (%)')) mappedCol = 'CEI_Percent';
                         
-                        // Các cột UXI (Phân loại theo thứ tự xuất hiện: 0 -> Norm, 1 -> Point, 2 -> Val)
-                        else if (lowerHeader.includes('chat - success') || lowerHeader.includes('chat success')) {
+                        // Các cột UXI (Rút gọn từ khóa chống lỗi ngắt dòng trong Excel/CSV)
+                        else if (lowerHeader.includes('chat')) {
                             if (uxiCounters.chat === 0) mappedCol = 'Norm_Chat_Success_Sending_Message';
                             else if (uxiCounters.chat === 1) mappedCol = 'Point_Chat_Success_Sending_Message';
                             else if (uxiCounters.chat === 2) mappedCol = 'Val_Chat_Success_Sending_Message';
                             uxiCounters.chat++;
                         }
-                        else if (lowerHeader.includes('social media - success') || lowerHeader.includes('social media success')) {
+                        else if (lowerHeader.includes('social')) {
                             if (uxiCounters.social === 0) mappedCol = 'Norm_Social_Media_Success_Sending_Message';
                             else if (uxiCounters.social === 1) mappedCol = 'Point_Social_Media_Success_Sending_Message';
                             else if (uxiCounters.social === 2) mappedCol = 'Val_Social_Media_Success_Sending_Message';
                             uxiCounters.social++;
                         }
-                        else if (lowerHeader.includes('data session completion')) {
+                        else if (lowerHeader.includes('data session') || lowerHeader.includes('completion')) {
                             if (uxiCounters.data === 0) mappedCol = 'Norm_Data_Session_Completion_Rate';
                             else if (uxiCounters.data === 1) mappedCol = 'Point_Data_Session_Completion_Rate';
                             else if (uxiCounters.data === 2) mappedCol = 'Val_Data_Session_Completion_Rate';
                             uxiCounters.data++;
                         }
-                        else if (lowerHeader.includes('download packet loss') || lowerHeader.includes('downlod packet')) {
+                        else if (lowerHeader.includes('packet')) {
                             if (uxiCounters.packet === 0) mappedCol = 'Norm_Download_Packet_Loss';
                             else if (uxiCounters.packet === 1) mappedCol = 'Point_Download_Packet_Loss';
                             else if (uxiCounters.packet === 2) mappedCol = 'Val_Download_Packet_Loss';
                             uxiCounters.packet++;
                         }
-                        else if (lowerHeader.includes('upload latency')) {
+                        else if (lowerHeader.includes('latency')) {
                             if (uxiCounters.latency === 0) mappedCol = 'Norm_Upload_Latency';
                             else if (uxiCounters.latency === 1) mappedCol = 'Point_Upload_Latency';
                             else if (uxiCounters.latency === 2) mappedCol = 'Val_Upload_Latency';
                             uxiCounters.latency++;
                         }
-                        else if (lowerHeader.includes('user download throughput')) {
+                        else if (lowerHeader.includes('throughput') || lowerHeader.includes('through put')) {
                             if (uxiCounters.throughput === 0) mappedCol = 'Norm_User_Download_Throughput';
                             else if (uxiCounters.throughput === 1) mappedCol = 'Point_User_Download_Throughput';
                             else if (uxiCounters.throughput === 2) mappedCol = 'Val_User_Download_Throughput';
                             uxiCounters.throughput++;
                         }
-                        else if (lowerHeader.includes('video buffering rate')) {
+                        else if (lowerHeader.includes('video')) {
                             if (uxiCounters.video === 0) mappedCol = 'Norm_Video_Buffering_Rate';
                             else if (uxiCounters.video === 1) mappedCol = 'Point_Video_Buffering_Rate';
                             else if (uxiCounters.video === 2) mappedCol = 'Val_Video_Buffering_Rate';
                             uxiCounters.video++;
                         }
-                        else if (lowerHeader.includes('init buffering time')) {
+                        else if (lowerHeader.includes('init')) {
                             if (uxiCounters.init === 0) mappedCol = 'Norm_Init_Buffering_Time';
                             else if (uxiCounters.init === 1) mappedCol = 'Point_Init_Buffering_Time';
                             else if (uxiCounters.init === 2) mappedCol = 'Val_Init_Buffering_Time';
@@ -1364,8 +1364,10 @@ exports.handleImportData = async (req, res) => {
             const stringColumns = [
                 'Thoi_gian', 'Date', 'Cell_name', 'Ten_CELL', 'Site_name', 'Cell_code', 
                 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 
-                'MIMO', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
-                'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name'
+                'MIMO', 'Mimo', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
+                'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name',
+                // Bổ sung các cột chuỗi của CEM:
+                'Ma_Tinh_TP', 'Ten_Tinh_TP', 'Ma_PX', 'Ten_PX', 'Ten_tram', 'Cell_Name'
             ];
 
             // BẮT BUỘC QUÉT TỪ DÒNG DỮ LIỆU THỰC TẾ
