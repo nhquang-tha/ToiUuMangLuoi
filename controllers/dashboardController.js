@@ -1911,6 +1911,7 @@ exports.resetImportedData = async (req, res) => {
 exports.getCrossSectorData = async (req, res) => {
     const network = req.query.network || '4g';
     const tableName = network === '4g' ? 'kpi_4g' : 'kpi_5g';
+    const rfTableName = network === '4g' ? 'rf_4g' : 'rf_5g';
 
     try {
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM ${tableName} WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
@@ -1925,25 +1926,42 @@ exports.getCrossSectorData = async (req, res) => {
         const t0 = targetDates[0];
         const placeholders = targetDates.map(() => '?').join(',');
 
+        // 1. TỰ ĐỘNG DÒ TÌM TÊN CỘT CSHT TRONG BẢNG RF (Chống sập lỗi SQL)
+        const [rfCols] = await db.query(`SHOW COLUMNS FROM ${rfTableName}`);
+        let cshtColumnName = null;
+        for (let col of rfCols) {
+            let fieldName = col.Field.toLowerCase();
+            if (fieldName === 'ma_csht' || fieldName === 'csht_code' || fieldName === 'mã_csht') {
+                cshtColumnName = col.Field;
+                break;
+            }
+        }
+        
+        // Nếu không tìm thấy cột CSHT chuyên dụng, fallback về Site_code hoặc Site_name
+        if (!cshtColumnName) {
+            let hasSiteCode = rfCols.some(c => c.Field.toLowerCase() === 'site_code');
+            cshtColumnName = hasSiteCode ? 'Site_code' : 'Site_name';
+            console.log(`⚠️ Không tìm thấy cột CSHT_code trong bảng ${rfTableName}. Tạm dùng cột ${cshtColumnName} để ghép cặp.`);
+        }
+
+        // 2. KẾT NỐI KPI VỚI BẢNG RF ĐỂ LẤY MÃ CSHT CHÍNH XÁC CỦA TỪNG CELL
         let querySql = '';
         if (network === '4g') {
-            // [FIX]: Lấy chính xác Site_code (Mã CSHT) từ bảng rf_4g
             querySql = `
                 SELECT k.Site_name as site, k.CellType as cell_type, k.MIMO as mimo_type, k.Cell_name as cell, k.Thoi_gian as date, 
                        k.Total_Data_Traffic_Volume_GB as traffic, k.RB_Util_Rate_DL as prb, k.CQI_4G as cqi, 
                        k.User_DL_Avg_Throughput_Kbps as thput, k.Service_Drop_all as drop_rate,
-                       r.Site_code as csht_code
+                       r.\`${cshtColumnName}\` as csht_code
                 FROM kpi_4g k
                 LEFT JOIN rf_4g r ON k.Cell_name = r.Cell_code
                 WHERE k.Thoi_gian IN (${placeholders}) 
                 AND k.Cell_name NOT LIKE 'MBF_TH%'
             `;
         } else {
-            // [FIX]: Lấy chính xác Site_code (Mã CSHT) từ bảng rf_5g
             querySql = `
                 SELECT k.Ten_GNODEB as site, k.Loai_NE as cell_type, 'Massive_MIMO' as mimo_type, k.Ten_CELL as cell, k.Thoi_gian as date, 
                        k.Total_Data_Traffic_Volume_GB as traffic, k.CQI_5G as cqi, k.A_User_DL_Avg_Throughput as thput,
-                       r.Site_code as csht_code
+                       r.\`${cshtColumnName}\` as csht_code
                 FROM kpi_5g k
                 LEFT JOIN rf_5g r ON k.Ten_CELL = r.Cell_code
                 WHERE k.Thoi_gian IN (${placeholders}) 
@@ -1958,16 +1976,13 @@ exports.getCrossSectorData = async (req, res) => {
             const cell = row.cell;
             if (!cell) return;
             
-            // ÉP BUỘC CHỈ NHỮNG TRẠM CÙNG MÃ CSHT MỚI ĐƯỢC CHUNG MÂM
-            // Ưu tiên 1: Mã CSHT vật lý từ bảng RF
+            // ÉP BUỘC CHỈ NHỮNG TRẠM CÙNG MÃ CSHT MỚI ĐƯỢC CHUNG MÂM GHÉP CẶP
             let siteCode = row.csht_code;
             
-            // Ưu tiên 2 (Dự phòng nếu DB RF chưa cập nhật trạm này): Tên Site từ KPI
+            // Dự phòng nếu giá trị CSHT_code bị rỗng trong Database
             if (!siteCode || String(siteCode).trim() === '') {
                 siteCode = row.site;
             }
-            
-            // Ưu tiên 3 (Dự phòng cuối cùng): Cắt chuỗi 6 ký tự
             if (!siteCode || String(siteCode).trim() === '') {
                 siteCode = cell.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
             }
@@ -1999,13 +2014,14 @@ exports.getCrossSectorData = async (req, res) => {
 
         const suspiciousSites = [];
 
-        // Duyệt từng cụm CSHT riêng biệt
+        // Lồng ấp phân tích (Chỉ duyệt các cặp Cell nằm chung trong 1 mã CSHT vật lý)
         for (let site in siteMap) {
             const cells = siteMap[site];
             let cellStats = [];
 
             for (let cellName in cells) {
                 const c = cells[cellName];
+                // Chặn những Cell không có mặt trong ngày mới nhất (T0)
                 if (!c.has_t0 || c.count_past === 0) continue;
                 
                 const avgTraffic = c.past_traffic / c.count_past;
@@ -2026,7 +2042,6 @@ exports.getCrossSectorData = async (req, res) => {
                 }
             }
 
-            // Chỉ ghép cặp với các Cell TRONG CÙNG 1 MÃ CSHT (Do vòng lặp cha đã bao bọc)
             if (cellStats.length >= 2) {
                 let dropCells = cellStats.filter(c => c.deltaTraffic <= -30); 
                 let spikeCells = cellStats.filter(c => c.deltaTraffic >= 30);  
@@ -2095,6 +2110,7 @@ exports.getCrossSectorData = async (req, res) => {
                             }
 
                             if (score >= 50) { 
+                                // site ở đây chính là mã CSHT_code (hoặc mã fallback)
                                 suspiciousSites.push({
                                     site: site, 
                                     score: score,
