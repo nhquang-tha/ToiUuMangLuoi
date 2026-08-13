@@ -229,7 +229,6 @@
     }
 
     async function executeAnalysis() {
-        // ... (Giữ nguyên logic vẽ biểu đồ cũ của QoE/QoS) ...
         const val = document.getElementById('keywordInput').value.trim();
         const limitVal = document.getElementById('chartWeeksLimit').value;
         if (!val) return alert("Vui lòng nhập Tên Cell hoặc Site!");
@@ -268,7 +267,6 @@
     }
 
     function buildChart(canvasId, rawData, valueKey, titleText, limitVal) {
-        // ... (Giữ nguyên logic buildChart) ...
         if (!rawData || rawData.length === 0) return;
         let allWeeks = sortWeeks([...new Set(rawData.map(d => d.Tuan))].filter(Boolean));
         if (limitVal !== 'all') { let limit = parseInt(limitVal); if (allWeeks.length > limit) allWeeks = allWeeks.slice(-limit); }
@@ -293,7 +291,6 @@
     }
 
     function openModal(canvasId) {
-        // ... (Giữ nguyên) ...
         const dataStore = window.chartDataStore[canvasId]; if (!dataStore) return;
         const modal = document.getElementById('chartModal'); modal.classList.add('show'); 
         setTimeout(() => {
@@ -302,6 +299,7 @@
             modalChartInstance = new Chart(ctx, { type: 'line', data: { labels: dataStore.labels, datasets: zoomedDatasets }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, interaction: { mode: 'index', intersect: false }, plugins: { title: { display: true, text: dataStore.title, font: { size: 24, weight: 'bold' }, color: '#2c3e50', padding: { bottom: 20 } }, legend: { display: zoomedDatasets.length > 1, position: 'bottom', labels: { font: { size: 16 } } }, tooltip: { backgroundColor: 'rgba(44, 62, 80, 0.95)', titleColor: '#fff', bodyColor: '#fff', titleFont: { size: 18 }, bodyFont: { size: 18, weight: 'bold' }, padding: 15, cornerRadius: 8, displayColors: true } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 16 } } }, y: { beginAtZero: false, grid: { borderDash: [5, 5], color: '#ecf0f1' }, ticks: { font: { size: 16 } } } } } });
         }, 50); 
     }
+    
     function closeModal() { document.getElementById('chartModal').classList.remove('show'); }
     window.onclick = function(e) { if (e.target === document.getElementById('chartModal')) closeModal(); }
 
@@ -437,20 +435,30 @@
             let qoeRankFilter = document.getElementById("qoeRankFilter").value;
             let qosRankFilter = document.getElementById("qosRankFilter").value;
 
-            let filteredData = window.allQoeQosData.filter(r => {
-            let siteText = (r.Site_Name || '').toUpperCase();
-            let cellText = (r.Cell_Name || '').toUpperCase();
-            let districtText = (r.District || '').toUpperCase();
-            let qoeRankText = r.QoE_Rank !== null ? String(r.QoE_Rank) : '';
-            let qosRankText = r.QoS_Rank !== null ? String(r.QoS_Rank) : '';
+            window.filteredData = window.allQoeQosData.filter(r => {
+                let siteText = (r.Site_Name || '').toUpperCase();
+                let cellText = (r.Cell_Name || '').toUpperCase();
+                let districtText = (r.District || '').toUpperCase();
+                let qoeRankText = r.QoE_Rank !== null ? String(r.QoE_Rank) : '';
+                let qosRankText = r.QoS_Rank !== null ? String(r.QoS_Rank) : '';
 
-            return (siteText.includes(searchInput) || cellText.includes(searchInput)) &&
-                   (districtFilter === "" || districtText === districtFilter) &&
-                   (qoeRankFilter === "" || qoeRankText === qoeRankFilter) &&
-                   (qosRankFilter === "" || qosRankText === qosRankFilter);
-        });
+                return (siteText.includes(searchInput) || cellText.includes(searchInput)) &&
+                       (districtFilter === "" || districtText === districtFilter) &&
+                       (qoeRankFilter === "" || qoeRankText === qoeRankFilter) &&
+                       (qosRankFilter === "" || qosRankText === qosRankFilter);
+            });
 
-        let exportData = filteredData.map((r, i) => ({
+            window.currentPage = 1;
+            renderTablePage();
+        }, 150); 
+    }
+
+    function exportTableToExcel() {
+        if (typeof XLSX === 'undefined') {
+            alert('Thư viện Excel chưa tải xong, vui lòng đợi...'); return;
+        }
+        
+        let exportData = window.filteredData.map((r, i) => ({
             "STT": i + 1,
             "Site Name": r.Site_Name || '',
             "Cell Name": r.Cell_Name || '',
@@ -469,6 +477,16 @@
         let wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_CEM_QoS");
         XLSX.writeFile(wb, "Danh_Sach_Tong_Hop_CEM_QoS.xlsx");
+    }
+
+    async function saveNote(cellName, noteValue) {
+        try {
+            await fetch('/api/save-cell-note', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({cell_name: cellName, note: noteValue})
+            });
+            let cell = window.allQoeQosData.find(c => c.Cell_Name === cellName);
+            if (cell) cell.lich_su_tac_dong = noteValue;
+        } catch(e) { alert('Lưu lịch sử thất bại. Vui lòng kiểm tra kết nối mạng!'); }
     }
 </script>
 </body>
