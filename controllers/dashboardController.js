@@ -767,6 +767,7 @@ exports.handleImportData = async (req, res) => {
     const networkType = req.body.networkType; 
     let isKpiImported = networkType.startsWith('kpi_');
 
+    // [FIX 1]: Bổ sung mbb_cem vào danh sách nhận diện Tuần
     let weekPrefix = "";
     if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem') {
         const wNum = req.body.weekNumber;
@@ -807,6 +808,7 @@ exports.handleImportData = async (req, res) => {
         }
     }
 
+    // [FIX 2]: Bổ sung mbb_cem vào danh sách Xóa đè dữ liệu cũ
     if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem')) {
         try { await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]); } catch (e) {}
     }
@@ -1851,18 +1853,19 @@ exports.getQoeQosData = async (req, res) => {
 
 exports.getQoeQosListAll = async (req, res) => {
     try {
-        let [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+        // [FIX]: Dùng lệnh IFNULL để đẩy tất cả những trạm chưa có CEM (Bị NULL) xuống cuối bảng (Rank 999)
+        let [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY IFNULL(QoE_Rank, 999) ASC, IFNULL(QoS_Rank, 999) ASC');
         if (rows.length === 0) {
-            console.log("⚡ Dữ liệu tổng hợp QoE/QoS đang trống. Hệ thống đang tự động kích hoạt đồng bộ...");
+            console.log("⚡ Dữ liệu tổng hợp CEM/QoS đang trống. Hệ thống đang tự động kích hoạt đồng bộ...");
             await syncQoeQosSummary();
-            [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+            [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY IFNULL(QoE_Rank, 999) ASC, IFNULL(QoS_Rank, 999) ASC');
         }
         res.json(rows);
     } catch (e) {
         console.error("Lỗi lấy danh sách qoe_qos, đang tự động khởi tạo lại:", e);
         try {
             await syncQoeQosSummary();
-            const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY QoE_Score ASC, QoS_Score ASC');
+            const [rows] = await db.query('SELECT * FROM qoe_qos ORDER BY IFNULL(QoE_Rank, 999) ASC, IFNULL(QoS_Rank, 999) ASC');
             res.json(rows);
         } catch (err) {
             console.error("Lỗi khởi tạo bảng QoE/QoS:", err);
