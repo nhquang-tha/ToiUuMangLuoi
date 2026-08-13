@@ -68,7 +68,7 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>So Sánh & Phân Tích Trải Nghiệm (QoE / QoS)</h1>
+            <h1>So Sánh & Phân Tích Trải Nghiệm (CEM / QoS)</h1>
         </header>
         
         <div class="content-body">
@@ -97,7 +97,7 @@
             </div>
 
             <div id="initMsg" style="text-align: center; padding: 50px; color: #7f8c8d; font-size: 14px; background: white; border-radius: 8px; border: 1px solid #ecf0f1;">
-                <i>Vui lòng nhập Cell_Code hoặc Site_Code và bấm "Phân Tích Biểu Đồ" để vẽ line Chart.<br>Hoặc bấm vào nút bên dưới để xem dữ liệu QoE/QoS của Tuần Mới Nhất.</i>
+                <i>Vui lòng nhập Cell_Code hoặc Site_Code và bấm "Phân Tích Biểu Đồ" để vẽ line Chart.<br>Hoặc bấm vào nút bên dưới để xem dữ liệu CEM/QoS của Tuần Mới Nhất.</i>
             </div>
             
             <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #e67e22; font-size: 15px; font-weight: bold; background: white; border-radius: 8px; margin-bottom: 15px; border: 1px solid #f9e79f;">
@@ -119,8 +119,8 @@
             </div>
 
             <div style="text-align: center; margin: 30px 0;">
-                <button onclick="fetchAllList()" class="btn-success" style="background: #27ae60; color: white; padding: 12px 35px; border-radius: 8px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 10px rgba(39, 174, 96, 0.2); border: none; cursor: pointer;">
-                    📋 Xem Bảng Danh Sách QoE/QoS (Tuần Mới Nhất)
+                <button onclick="fetchAllList()" class="btn-success" style="background: #27ae60; color: white; padding: 12px 35px; border-radius: 8px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 10px rgba(39, 174, 96, 0.2);">
+                    📋 Xem Bảng Danh Sách CEM/QoS (Tuần Mới Nhất)
                 </button>
             </div>
 
@@ -129,9 +129,16 @@
                 <div style="padding: 15px 20px; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: white;">
                     <div style="font-weight: bold; color: #2c3e50; font-size: 15px; white-space: nowrap;">Kết quả lọc: <span id="totalCells" style="color: #3498db; font-size: 18px;">0</span> Cell</div>
                     <div class="table-controls">
-                        <select id="districtFilter" class="table-filter-select" onchange="filterTable()"><option value="">-- Tất cả District --</option></select>
+                        <select id="districtFilter" class="table-filter-select" onchange="filterTable()">
+                            <option value="">-- Tất cả District --</option>
+                        </select>
                         <select id="qoeRankFilter" class="table-filter-select" onchange="filterTable()">
-                            <option value="">-- Lọc QoE Rank --</option><option value="1">Rank 1</option><option value="2">Rank 2</option><option value="3">Rank 3</option><option value="4">Rank 4</option><option value="5">Rank 5</option>
+                            <option value="">-- Tất cả CEM Rank --</option>
+                            <option value="1">Rank 1</option>
+                            <option value="2">Rank 2</option>
+                            <option value="3">Rank 3</option>
+                            <option value="4">Rank 4</option>
+                            <option value="5">Rank 5</option>
                         </select>
                         <select id="qosRankFilter" class="table-filter-select" onchange="filterTable()">
                             <option value="">-- Lọc QoS Rank --</option><option value="1">Rank 1</option><option value="2">Rank 2</option><option value="3">Rank 3</option><option value="4">Rank 4</option><option value="5">Rank 5</option>
@@ -143,22 +150,22 @@
                 
                 <div class="table-wrapper">
                     <table class="data-table" id="listTable">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th style="text-align: left;">Site Name</th>
-                                <th style="text-align: left;">Cell Name</th>
-                                <th>District</th>
-                                <th>MIMO</th>
-                                <th>QoE Rank<br><small style="color:#7f8c8d; font-weight:normal;">(Tuần mới nhất)</small></th>
-                                <th>QoE Score<br><small style="color:#7f8c8d; font-weight:normal;">(So với TB 4 tuần)</small></th>
-                                <th>QoS Rank<br><small style="color:#7f8c8d; font-weight:normal;">(Tuần mới nhất)</small></th>
-                                <th>QoS Score<br><small style="color:#7f8c8d; font-weight:normal;">(So với TB 4 tuần)</small></th>
-                                <th style="width: 200px;">Lịch Sử Tác Động<br><small style="color:#7f8c8d; font-weight:normal;">(Tự động lưu khi gõ)</small></th>
-                                <th>Thao Tác</th>
-                            </tr>
-                        </thead>
-                        <tbody id="listTableBody"></tbody>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th style="text-align: left;">Site Name</th>
+                            <th style="text-align: left;">Cell Name</th>
+                            <th>District</th>
+                            <th>MIMO</th>
+                            <th>CEM Rank<br><small style="color:#7f8c8d; font-weight:normal;">(Tuần mới nhất)</small></th>
+                            <th>CEM Score<br><small style="color:#7f8c8d; font-weight:normal;">(So với TB 4 tuần)</small></th>
+                            <th>QoS Rank<br><small style="color:#7f8c8d; font-weight:normal;">(Tuần mới nhất)</small></th>
+                            <th>QoS Score<br><small style="color:#7f8c8d; font-weight:normal;">(So với TB 4 tuần)</small></th>
+                            <th style="width: 200px;">Lịch Sử Tác Động<br><small style="color:#7f8c8d; font-weight:normal;">(Tự động lưu khi gõ)</small></th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listTableBody"></tbody>
                     </table>
                 </div>
 
@@ -245,12 +252,14 @@
             document.getElementById('loadingMsg').style.display = 'none';
 
             if ((!data.qoe || data.qoe.length === 0) && (!data.qos || data.qos.length === 0)) {
-                document.getElementById('errorMsg').innerText = "Hệ thống không tìm thấy dữ liệu QoE hoặc QoS nào khớp với từ khóa của bạn.";
-                document.getElementById('errorMsg').style.display = 'block'; return;
+                document.getElementById('errorMsg').innerText = "Hệ thống không tìm thấy dữ liệu CEM hoặc QoS nào khớp với từ khóa của bạn.";
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
             }
 
             document.getElementById('dynamicChartsArea').style.display = 'block';
-            buildChart('canvas_qoe', data.qoe, 'QoE_Score', '⭐ Điểm Trải Nghiệm (QoE Score)', limitVal);
+            
+            buildChart('canvas_qoe', data.qoe, 'QoE_Score', '⭐ Điểm Trải Nghiệm (CEM Score)', limitVal);
             buildChart('canvas_qos', data.qos, 'QoS_Score', '⚙️ Điểm Dịch Vụ (QoS Score)', limitVal);
 
         } catch (error) {
@@ -317,8 +326,9 @@
             document.getElementById('loadingMsg').style.display = 'none';
             
             if (!window.allQoeQosData || window.allQoeQosData.length === 0) {
-                document.getElementById('errorMsg').innerText = "Bảng dữ liệu QoE/QoS hiện đang trống. Hãy kiểm tra lại Database.";
-                document.getElementById('errorMsg').style.display = 'block'; return;
+                document.getElementById('errorMsg').innerText = "Bảng dữ liệu CEM/QoS hiện đang trống. Hãy kiểm tra lại Database (bảng qoe_qos).";
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
             }
             
             let districts = new Set();
@@ -427,44 +437,38 @@
             let qoeRankFilter = document.getElementById("qoeRankFilter").value;
             let qosRankFilter = document.getElementById("qosRankFilter").value;
 
-            window.filteredData = window.allQoeQosData.filter(r => {
-                let siteText = (r.Site_Name || '').toUpperCase(); let cellText = (r.Cell_Name || '').toUpperCase();
-                let districtText = (r.District || '').toUpperCase();
-                let qoeRankText = r.QoE_Rank !== null ? String(r.QoE_Rank) : '';
-                let qosRankText = r.QoS_Rank !== null ? String(r.QoS_Rank) : '';
+            let filteredData = window.allQoeQosData.filter(r => {
+            let siteText = (r.Site_Name || '').toUpperCase();
+            let cellText = (r.Cell_Name || '').toUpperCase();
+            let districtText = (r.District || '').toUpperCase();
+            let qoeRankText = r.QoE_Rank !== null ? String(r.QoE_Rank) : '';
+            let qosRankText = r.QoS_Rank !== null ? String(r.QoS_Rank) : '';
 
-                let matchSearch = (siteText.includes(searchInput) || cellText.includes(searchInput));
-                let matchDistrict = (districtFilter === "" || districtText === districtFilter);
-                let matchQoeRank = (qoeRankFilter === "" || qoeRankText === qoeRankFilter);
-                let matchQosRank = (qosRankFilter === "" || qosRankText === qosRankFilter);
+            return (siteText.includes(searchInput) || cellText.includes(searchInput)) &&
+                   (districtFilter === "" || districtText === districtFilter) &&
+                   (qoeRankFilter === "" || qoeRankText === qoeRankFilter) &&
+                   (qosRankFilter === "" || qosRankText === qosRankFilter);
+        });
 
-                return matchSearch && matchDistrict && matchQoeRank && matchQosRank;
-            });
-
-            window.currentPage = 1;
-            renderTablePage();
-        }, 150); 
-    }
-
-    async function saveNote(cellName, noteValue) {
-        try {
-            await fetch('/api/save-cell-note', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({cell_name: cellName, note: noteValue}) });
-            let cell = window.allQoeQosData.find(c => c.Cell_Name === cellName);
-            if (cell) cell.lich_su_tac_dong = noteValue;
-        } catch(e) { alert('Lưu lịch sử thất bại!'); }
-    }
-
-    function exportTableToExcel() {
-        if (typeof XLSX === 'undefined') { alert('Đang tải thư viện Excel...'); return; }
-        let exportData = window.filteredData.map((r, i) => ({
-            "STT": i + 1, "Site Name": r.Site_Name || '', "Cell Name": r.Cell_Name || '', "District": r.District || '', "MIMO": r.MIMO || '',
-            "QoE Rank": r.QoE_Rank !== null ? r.QoE_Rank : '-', "QoE Score": r.QoE_Score !== null ? r.QoE_Score.toFixed(2) : '-',
-            "QoE Trend": r.QoE_Trend ? r.QoE_Trend.toFixed(2) : '-', "QoS Rank": r.QoS_Rank !== null ? r.QoS_Rank : '-',
-            "QoS Score": r.QoS_Score !== null ? r.QoS_Score.toFixed(2) : '-', "QoS Trend": r.QoS_Trend ? r.QoS_Trend.toFixed(2) : '-',
+        let exportData = filteredData.map((r, i) => ({
+            "STT": i + 1,
+            "Site Name": r.Site_Name || '',
+            "Cell Name": r.Cell_Name || '',
+            "District": r.District || '',
+            "MIMO": r.MIMO || '',
+            "CEM Rank (Mới nhất)": r.QoE_Rank !== null ? r.QoE_Rank : '-',
+            "CEM Score (Mới nhất)": r.QoE_Score !== null ? r.QoE_Score.toFixed(2) : '-',
+            "CEM Trend (Biến động)": r.QoE_Trend ? r.QoE_Trend.toFixed(2) : '-',
+            "QoS Rank (Mới nhất)": r.QoS_Rank !== null ? r.QoS_Rank : '-',
+            "QoS Score (Mới nhất)": r.QoS_Score !== null ? r.QoS_Score.toFixed(2) : '-',
+            "QoS Trend (Biến động)": r.QoS_Trend ? r.QoS_Trend.toFixed(2) : '-',
             "Lịch Sử Tác Động": r.lich_su_tac_dong || ''
         }));
-        let ws = XLSX.utils.json_to_sheet(exportData); let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "QoE_QoS"); XLSX.writeFile(wb, "Danh_Sach_Tong_Hop_QoE_QoS.xlsx");
+
+        let ws = XLSX.utils.json_to_sheet(exportData);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_CEM_QoS");
+        XLSX.writeFile(wb, "Danh_Sach_Tong_Hop_CEM_QoS.xlsx");
     }
 </script>
 </body>
