@@ -402,7 +402,7 @@ async function syncTrafficDown() {
         let droppedTrafficPOIs = [];
         let poiTrafficMap = {}; 
 
-        // Hàm hỗ trợ: Tính chính xác ngày lùi lại (T-offset)
+        // Hàm hỗ trợ: Tính chính xác ngày lùi lại trên lịch (T-offset)
         const getOffsetDateStr = (dateStr, offsetDays) => {
             if (!dateStr) return null;
             let parts = dateStr.split('/');
@@ -457,39 +457,46 @@ async function syncTrafficDown() {
                 if (c[t0] === undefined) continue; 
                 
                 const v0 = c[t0]; 
-                
-                // Tính trung bình 1, 3, 7 ngày trước đó (Lùi chuẩn theo ngày dương lịch)
-                let avgPast1 = c[t1] !== undefined ? c[t1] : 0;
+                const v1 = c[t1] !== undefined ? c[t1] : 0;
+                const v2 = c[t2] !== undefined ? c[t2] : 0;
+                const v3 = c[t3] !== undefined ? c[t3] : 0;
+                const v4 = c[getOffsetDateStr(t0, 4)] !== undefined ? c[getOffsetDateStr(t0, 4)] : 0;
+                const v5 = c[getOffsetDateStr(t0, 5)] !== undefined ? c[getOffsetDateStr(t0, 5)] : 0;
+                const v6 = c[getOffsetDateStr(t0, 6)] !== undefined ? c[getOffsetDateStr(t0, 6)] : 0;
 
-                let sumPast3 = 0, countPast3 = 0;
-                for(let i=1; i<=3; i++) { 
-                    let dStr = getOffsetDateStr(t0, i);
-                    if(c[dStr] !== undefined) { sumPast3 += c[dStr]; countPast3++; } 
-                }
-                let avgPast3 = countPast3 > 0 ? sumPast3/countPast3 : 0;
+                // Hàm tính trung bình cộng an toàn
+                const getAvg = (startOffset, endOffset) => {
+                    let sum = 0, count = 0;
+                    for (let i = startOffset; i <= endOffset; i++) {
+                        let dStr = getOffsetDateStr(t0, i);
+                        if (c[dStr] !== undefined) { sum += c[dStr]; count++; }
+                    }
+                    return count > 0 ? sum / count : 0;
+                };
 
-                let sumPast7 = 0, countPast7 = 0;
-                for(let i=1; i<=7; i++) { 
-                    let dStr = getOffsetDateStr(t0, i);
-                    if(c[dStr] !== undefined) { sumPast7 += c[dStr]; countPast7++; } 
-                }
-                let avgPast7 = countPast7 > 0 ? sumPast7/countPast7 : 0;
+                // Tính TB 7 ngày TRƯỚC thời điểm sự cố (Để so sánh Traffic TB > 1 GB)
+                let avgPast1 = getAvg(1, 7);   
+                let avgPast3 = getAvg(3, 9);   
+                let avgPast7 = getAvg(7, 13);  
 
-                // TIÊU CHÍ ZERO TRAFFIC (T0 < 0.1 và TB quá khứ > 2)
-                if (v0 < 0.1 && avgPast7 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast7, date_t0: t0, date_t7: t7 });
+                const isZero = (val) => val < 0.01; // Xử lý trôi số thập phân của Excel
+
+                // 1. ĐIỀU KIỆN LỌC ZERO TRAFFIC MỚI
+                // - Lọc 7 ngày: T0 đến T6 đều = 0 VÀ TB 7 ngày trước đó (T7-T13) > 1 GB
+                if (isZero(v0) && isZero(v1) && isZero(v2) && isZero(v3) && isZero(v4) && isZero(v5) && isZero(v6) && avgPast7 > 1) {
+                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast7, date_t0: t0, date_t7: t7 });
                 }
-                else if (v0 < 0.1 && avgPast3 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast3, date_t0: t0, date_t7: t3 });
+                // - Lọc 3 ngày: T0 đến T2 đều = 0 VÀ TB 7 ngày trước đó (T3-T9) > 1 GB
+                else if (isZero(v0) && isZero(v1) && isZero(v2) && avgPast3 > 1) {
+                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast3, date_t0: t0, date_t7: t3 });
                 }
-                else if (v0 < 0.1 && avgPast1 > 2) {
-                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: v0, avgPast: avgPast1, date_t0: t0, date_t7: t1 });
+                // - Lọc 1 ngày: T0 = 0 VÀ TB 7 ngày trước đó (T1-T7) > 1 GB
+                else if (isZero(v0) && avgPast1 > 1) {
+                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1, date_t0: t0, date_t7: t1 });
                 }
 
-                // TIÊU CHÍ DROPPED CELL: Giảm 3 ngày liên tiếp so với cùng thứ tuần trước
+                // 2. ĐIỀU KIỆN LỌC CELL SUY GIẢM: T0 < 70% T7 VÀ T7 > 1 GB VÀ BẮT BUỘC GIẢM 3 NGÀY LIÊN TIẾP
                 if (network === '4g' || network === '5g') {
-                    const v1 = c[t1] !== undefined ? c[t1] : 0;
-                    const v2 = c[t2] !== undefined ? c[t2] : 0;
                     const v7 = c[t7] !== undefined ? c[t7] : 0; 
                     const v8 = c[t8] !== undefined ? c[t8] : 0;
                     const v9 = c[t9] !== undefined ? c[t9] : 0;
@@ -518,8 +525,9 @@ async function syncTrafficDown() {
                 const p = poiTrafficMap[poi];
                 if (!p.has_data) continue;
                 
+                // CHẶN POI KHÔNG CÓ TRONG NGÀY MỚI NHẤT
                 if (p[t0_poi] === undefined) continue;
-                
+
                 const v0 = p[t0_poi]; 
                 const v1 = p[t1_poi] !== undefined ? p[t1_poi] : 0; 
                 const v2 = p[t2_poi] !== undefined ? p[t2_poi] : 0;
@@ -527,7 +535,7 @@ async function syncTrafficDown() {
                 const v8 = p[t8_poi] !== undefined ? p[t8_poi] : 0; 
                 const v9 = p[t9_poi] !== undefined ? p[t9_poi] : 0;
                 
-                // TIÊU CHÍ DROPPED POI: Tổng T0 < 70% T7 và 3 ngày liên tiếp đều giảm
+                // 3. ĐIỀU KIỆN LỌC POI SUY GIẢM: Tổng T0 < 70% T7 và 3 ngày liên tiếp đều giảm
                 if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
                     droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: t7_poi });
                 }
