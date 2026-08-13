@@ -856,44 +856,53 @@ exports.handleImportData = async (req, res) => {
             // [CHIẾN LƯỢC MỚI]: XỬ LÝ RIÊNG CHO BẢNG CEM MỚI
             if (networkType === 'mbb_cem') {
                 // Theo cấu trúc Excel thực tế có 4 dòng tiêu đề:
-                // rawData[0] (Dòng 1): Tiêu đề nhóm lớn (UXI chuẩn hóa, Điểm UXI, UXI)
-                // rawData[1] (Dòng 2): Tiêu đề nhóm con (UXI 1, UXI 2, UXI 3)
-                // rawData[2] (Dòng 3): Tên cột chi tiết (Chat, Social Media, ...) - Đây là dòng ta dùng làm base
-                // rawData[3] (Dòng 4): Đơn vị (%, 1-5, ms, s)
-                // rawData[4] (Dòng 5): Dữ liệu bắt đầu
+                // rawData[0] (Dòng 1): Tiêu đề nhóm lớn (UXI chuẩn hóa, Điểm UXI, UXI) + Tiêu đề của các ô gộp dọc (Mã Tỉnh, Cell Name...)
+                // rawData[1] (Dòng 2): Tiêu đề nhóm con
+                // rawData[2] (Dòng 3): Tên cột chi tiết (Chat, Social Media, ...) 
+                // rawData[3] (Dòng 4): Đơn vị
                 
-                headerRowIdx = 2; // Lấy dòng 3 làm base chứa tên chi tiết
+                let headerRowIdx = 2; // Lấy dòng 3 làm base
                 dataStartIdx = 4; // Dữ liệu bắt đầu từ dòng 5
 
-                let rowGroup1 = rawData[0] || []; // Để nhận diện nhóm lớn (Norm, Point, Val)
-                let checkRow = rawData[headerRowIdx] || []; // Tên chi tiết
+                let rowGroup1 = rawData[0] || []; // Dòng 1
+                let rowGroup2 = rawData[1] || []; // Dòng 2
+                let checkRow = rawData[headerRowIdx] || []; // Dòng 3
 
-                let currentGroup = ''; // Biến cờ theo dõi nhóm hiện tại khi duyệt qua các cột
+                let currentGroup = ''; 
 
-                checkRow.forEach((h, idx) => {
-                    let rawHeader = String(h || '').trim();
-                    let rawGroup = String(rowGroup1[idx] || '').trim();
+                // Duyệt qua số lượng cột lớn nhất tìm được trong 3 dòng đầu
+                let maxCols = Math.max(rowGroup1.length, rowGroup2.length, checkRow.length);
+
+                for (let idx = 0; idx < maxCols; idx++) {
+                    // Lấy Tên Cột. Nếu Dòng 3 bị rỗng (do Merge dọc), nhặt Tên từ Dòng 2 hoặc Dòng 1
+                    let h3 = String(checkRow[idx] || '').trim();
+                    let h2 = String(rowGroup2[idx] || '').trim();
+                    let h1 = String(rowGroup1[idx] || '').trim();
                     
-                    // Cập nhật currentGroup nếu dòng 1 có giá trị (bởi vì các ô merge chỉ có giá trị ở ô đầu tiên)
+                    let rawHeader = h3 || h2 || h1; // Lấy ưu tiên từ dưới lên trên
+                    let rawGroup = h1; 
+                    
+                    // Cập nhật currentGroup nếu dòng 1 có giá trị nhóm ngang
                     if (rawGroup) {
-                        if (rawGroup.toLowerCase().includes('chuẩn hóa')) currentGroup = 'norm';
-                        else if (rawGroup.toLowerCase().includes('điểm uxi')) currentGroup = 'point';
+                        let lg = rawGroup.toLowerCase();
+                        if (lg.includes('chuẩn hóa')) currentGroup = 'norm';
+                        else if (lg.includes('điểm uxi')) currentGroup = 'point';
                         else if (rawGroup === 'UXI') currentGroup = 'val';
                     }
 
-                    if (!rawHeader) return;
+                    if (!rawHeader) continue;
                     
                     let cleanHeader = rawHeader.split('|').pop().trim();
                     let lowerHeader = cleanHeader.toLowerCase().replace(/[\ufeff\u200b\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
                     let mappedCol = null;
 
                     // 1. Ánh xạ các cột định danh (Cơ bản)
-                    if (lowerHeader === 'tỉnh' || lowerHeader === 'ma_tinh' || lowerHeader === 'ma_tinh/tp') mappedCol = 'Ma_Tinh_TP';
-                    else if (lowerHeader === 'tên tỉnh/tp' || lowerHeader === 'ten_tinh_tp') mappedCol = 'Ten_Tinh_TP';
+                    if (lowerHeader === 'tỉnh' || lowerHeader === 'ma_tinh' || lowerHeader === 'mã tỉnh/tp' || lowerHeader === 'ma_tinh/tp') mappedCol = 'Ma_Tinh_TP';
+                    else if (lowerHeader === 'tên tỉnh/tp' || lowerHeader === 'ten_tinh_tp' || lowerHeader === 'tên tỉnh') mappedCol = 'Ten_Tinh_TP';
                     else if (lowerHeader === 'mã px' || lowerHeader === 'ma_px') mappedCol = 'Ma_PX';
-                    else if (lowerHeader === 'tên px' || lowerHeader === 'ten_px' || lowerHeader === 'phuong_xa') mappedCol = 'Ten_PX';
-                    else if (lowerHeader === 'tên trạm' || lowerHeader === 'ten_tram') mappedCol = 'Ten_tram';
-                    else if (lowerHeader === 'cell' || lowerHeader.includes('cell name') || lowerHeader === 'cell_name' || lowerHeader.includes('tên cell')) mappedCol = 'Cell_Name';
+                    else if (lowerHeader === 'tên px' || lowerHeader === 'ten_px' || lowerHeader === 'phường xã' || lowerHeader === 'phuong_xa') mappedCol = 'Ten_PX';
+                    else if (lowerHeader === 'tên trạm' || lowerHeader === 'ten_tram' || lowerHeader === 'site name') mappedCol = 'Ten_tram';
+                    else if (lowerHeader === 'cell name' || lowerHeader === 'cell_name' || lowerHeader === 'tên cell' || lowerHeader === 'cell') mappedCol = 'Cell_Name';
                     else if (lowerHeader === 'cell_id' || lowerHeader === 'cell id') mappedCol = 'Cell_ID';
                     else if (lowerHeader === 'cei' || lowerHeader === 'cei (1-5)') mappedCol = 'CEI_1_5';
                     else if (lowerHeader === 'cei %' || lowerHeader === 'cei (%)') mappedCol = 'CEI_Percent';
@@ -902,32 +911,32 @@ exports.handleImportData = async (req, res) => {
                     else if (currentGroup === 'norm') {
                         if (lowerHeader.includes('chat')) mappedCol = 'Norm_Chat_Success_Sending_Message';
                         else if (lowerHeader.includes('social media')) mappedCol = 'Norm_Social_Media_Success_Sending_Message';
-                        else if (lowerHeader.includes('data session')) mappedCol = 'Norm_Data_Session_Completion_Rate';
+                        else if (lowerHeader.includes('data session') || lowerHeader.includes('completion')) mappedCol = 'Norm_Data_Session_Completion_Rate';
                         else if (lowerHeader.includes('packet loss')) mappedCol = 'Norm_Download_Packet_Loss';
                         else if (lowerHeader.includes('latency')) mappedCol = 'Norm_Upload_Latency';
-                        else if (lowerHeader.includes('throughput')) mappedCol = 'Norm_User_Download_Throughput';
-                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Norm_Video_Buffering_Rate';
-                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Norm_Init_Buffering_Time';
+                        else if (lowerHeader.includes('throughput') || lowerHeader.includes('through put')) mappedCol = 'Norm_User_Download_Throughput';
+                        else if (lowerHeader.includes('video buffering') || lowerHeader.includes('video buffer')) mappedCol = 'Norm_Video_Buffering_Rate';
+                        else if (lowerHeader.includes('init buffering') || lowerHeader.includes('init buffer')) mappedCol = 'Norm_Init_Buffering_Time';
                     }
                     else if (currentGroup === 'point') {
                         if (lowerHeader.includes('chat')) mappedCol = 'Point_Chat_Success_Sending_Message';
                         else if (lowerHeader.includes('social media')) mappedCol = 'Point_Social_Media_Success_Sending_Message';
-                        else if (lowerHeader.includes('data session')) mappedCol = 'Point_Data_Session_Completion_Rate';
+                        else if (lowerHeader.includes('data session') || lowerHeader.includes('completion')) mappedCol = 'Point_Data_Session_Completion_Rate';
                         else if (lowerHeader.includes('packet loss')) mappedCol = 'Point_Download_Packet_Loss';
                         else if (lowerHeader.includes('latency')) mappedCol = 'Point_Upload_Latency';
-                        else if (lowerHeader.includes('throughput')) mappedCol = 'Point_User_Download_Throughput';
-                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Point_Video_Buffering_Rate';
-                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Point_Init_Buffering_Time';
+                        else if (lowerHeader.includes('throughput') || lowerHeader.includes('through put')) mappedCol = 'Point_User_Download_Throughput';
+                        else if (lowerHeader.includes('video buffering') || lowerHeader.includes('video buffer')) mappedCol = 'Point_Video_Buffering_Rate';
+                        else if (lowerHeader.includes('init buffering') || lowerHeader.includes('init buffer')) mappedCol = 'Point_Init_Buffering_Time';
                     }
                     else if (currentGroup === 'val') {
                         if (lowerHeader.includes('chat')) mappedCol = 'Val_Chat_Success_Sending_Message';
                         else if (lowerHeader.includes('social media')) mappedCol = 'Val_Social_Media_Success_Sending_Message';
-                        else if (lowerHeader.includes('data session')) mappedCol = 'Val_Data_Session_Completion_Rate';
+                        else if (lowerHeader.includes('data session') || lowerHeader.includes('completion')) mappedCol = 'Val_Data_Session_Completion_Rate';
                         else if (lowerHeader.includes('packet loss')) mappedCol = 'Val_Download_Packet_Loss';
                         else if (lowerHeader.includes('latency')) mappedCol = 'Val_Upload_Latency';
-                        else if (lowerHeader.includes('throughput')) mappedCol = 'Val_User_Download_Throughput';
-                        else if (lowerHeader.includes('video buffering')) mappedCol = 'Val_Video_Buffering_Rate';
-                        else if (lowerHeader.includes('init buffering')) mappedCol = 'Val_Init_Buffering_Time';
+                        else if (lowerHeader.includes('throughput') || lowerHeader.includes('through put')) mappedCol = 'Val_User_Download_Throughput';
+                        else if (lowerHeader.includes('video buffering') || lowerHeader.includes('video buffer')) mappedCol = 'Val_Video_Buffering_Rate';
+                        else if (lowerHeader.includes('init buffering') || lowerHeader.includes('init buffer')) mappedCol = 'Val_Init_Buffering_Time';
                     }
 
                     if (mappedCol) {
@@ -938,11 +947,9 @@ exports.handleImportData = async (req, res) => {
                             else colMapping.push({ excelIdx: idx, dbCol: dbMatch.original });
                         }
                     }
-                });
+                }
                 
-                // Debug log để bạn kiểm tra xem map đã chuẩn chưa
                 console.log("🔥 [CEM MAP DEBUG] Số cột map được:", colMapping.length);
-                // console.log("🔥 [CEM MAP DEBUG] Chi tiết Map:", colMapping);
             }
             // Lấy dữ liệu bắt đầu chính xác từ Hàng 8 (Index = 7) đối với QoE/QoS cũ
             else if (networkType === 'mbb_qoe' || networkType === 'mbb_qos') {
