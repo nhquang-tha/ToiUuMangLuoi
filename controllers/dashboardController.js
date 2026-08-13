@@ -120,7 +120,7 @@ async function getKpiHistory() {
         const [rows4g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g');
         const [rows5g] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_5g');
         
-        const [rowsQoE] = await db.query('SELECT DISTINCT Tuan FROM mbb_qoe');
+        const [rowsQoE] = await db.query('SELECT DISTINCT Tuan FROM mbb_cem');
         const [rowsQoS] = await db.query('SELECT DISTINCT Tuan FROM mbb_qos');
 
         const processHistory = (rows) => {
@@ -607,7 +607,7 @@ async function syncBadCells() {
 /* STREAMING_CHUNK:Syncing QoE/QoS summary caching... */
 async function syncQoeQosSummary() {
     try {
-        console.log("⏳ Bắt đầu tính toán cache QoE / QoS Summary...");
+        console.log("⏳ Bắt đầu tính toán cache CEM / QoS Summary...");
         await db.query(`
             CREATE TABLE IF NOT EXISTS qoe_qos (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -630,7 +630,7 @@ async function syncQoeQosSummary() {
         const kpiMap = {};
         cellsKpi.forEach(c => kpiMap[c.Cell_name] = c);
 
-        const [qoe] = await db.query('SELECT Site_Name, Cell_Name, Tuan, QoE_Rank, QoE_Score FROM mbb_qoe');
+        const [qoe] = await db.query('SELECT Ten_tram as Site_Name, Cell_Name, Tuan, CEI_1_5 as QoE_Rank, CEI_Percent as QoE_Score FROM mbb_cem');
         const [qos] = await db.query('SELECT Site_Name, Cell_Name, Tuan, QoS_Rank, QoS_Score FROM mbb_qos');
         const [notes] = await db.query('SELECT cell_name, note_text FROM cell_notes');
         
@@ -1833,34 +1833,20 @@ exports.getQoeQosData = async (req, res) => {
     if (!value) return res.json({ qoe: [], qos: [] });
 
     try {
-        const rawKeywords = value.split(',').map(k => k.trim()).filter(Boolean);
-        if (rawKeywords.length === 0) return res.json({ qoe: [], qos: [] });
+        const keywords = value.split(',').map(k => k.trim()).filter(Boolean);
+        if (keywords.length === 0) return res.json({ qoe: [], qos: [] });
 
-        let conditions = [];
+        const likeQoe = keywords.map(() => `Cell_Name LIKE ? OR Ten_tram LIKE ?`).join(' OR ');
+        const likeQos = keywords.map(() => `Cell_Name LIKE ? OR Site_Name LIKE ?`).join(' OR ');
+        
         let params = [];
+        keywords.forEach(k => { params.push(`%${k}%`); params.push(`%${k}%`); });
 
-        rawKeywords.forEach(k => {
-            let coreCode = k.replace(/[-_][a-zA-Z]{2,3}$/, '');
-            
-            if (coreCode !== k) {
-                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ? OR Cell_Name LIKE ? OR Site_Name LIKE ?)`);
-                params.push(`%${k}%`, `%${k}%`, `%${coreCode}%`, `%${coreCode}%`);
-            } else {
-                conditions.push(`(Cell_Name LIKE ? OR Site_Name LIKE ?)`);
-                params.push(`%${k}%`, `%${k}%`);
-            }
-        });
+        const [qoeRows] = await db.query(`SELECT Tuan, Cell_Name, CEI_Percent as QoE_Score, CEI_1_5 as QoE_Rank FROM mbb_cem WHERE ${likeQoe} ORDER BY Tuan ASC`, params);
+        const [qosRows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE ${likeQos} ORDER BY Tuan ASC`, params);
 
-        const placeholders = conditions.join(' OR ');
-
-        const [qoe] = await db.query(`SELECT * FROM mbb_qoe WHERE ${placeholders}`, params);
-        const [qos] = await db.query(`SELECT * FROM mbb_qos WHERE ${placeholders}`, params);
-
-        res.json({ qoe: qoe, qos: qos });
-    } catch (error) { 
-        console.error("Lỗi getQoeQosData:", error);
-        res.json({ qoe: [], qos: [] }); 
-    }
+        res.json({ qoe: qoeRows, qos: qosRows });
+    } catch (error) { res.status(500).json({ error: 'Lỗi truy xuất CEM QoS' }); }
 };
 
 exports.getQoeQosListAll = async (req, res) => {
@@ -1898,7 +1884,7 @@ exports.resetImportedData = async (req, res) => {
     let userRole = req.session && req.session.user ? req.session.user.role : 'user';
     if (userRole !== 'admin') return res.status(403).send("Chỉ Admin mới có quyền thực hiện chức năng này.");
     const table = req.params.table;
-    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_qoe', 'mbb_qos', 'mbb_cem', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu', 'worst_cells', 'congestion_3g', 'traffic_down', 'bad_cells'];
+    const allowedTables = ['rf_3g', 'rf_4g', 'rf_5g', 'ta_query', 'mbb_cem', 'mbb_qos', 'poi_4g', 'poi_5g', 'csht_data', 'alarm_data', 'vat_tu', 'worst_cells', 'congestion_3g', 'traffic_down', 'bad_cells'];
     if (!allowedTables.includes(table)) return res.status(400).send("Bảng dữ liệu không hợp lệ.");
 
     try {
