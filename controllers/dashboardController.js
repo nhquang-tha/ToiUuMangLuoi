@@ -1927,21 +1927,27 @@ exports.getCrossSectorData = async (req, res) => {
 
         let querySql = '';
         if (network === '4g') {
+            // [FIX]: Lấy chính xác Site_code (Mã CSHT) từ bảng rf_4g
             querySql = `
-                SELECT Site_name as site, CellType as cell_type, MIMO as mimo_type, Cell_name as cell, Thoi_gian as date, 
-                       Total_Data_Traffic_Volume_GB as traffic, RB_Util_Rate_DL as prb, CQI_4G as cqi, 
-                       User_DL_Avg_Throughput_Kbps as thput, Service_Drop_all as drop_rate 
-                FROM kpi_4g 
-                WHERE Thoi_gian IN (${placeholders}) 
-                AND Cell_name NOT LIKE 'MBF_TH%'
+                SELECT k.Site_name as site, k.CellType as cell_type, k.MIMO as mimo_type, k.Cell_name as cell, k.Thoi_gian as date, 
+                       k.Total_Data_Traffic_Volume_GB as traffic, k.RB_Util_Rate_DL as prb, k.CQI_4G as cqi, 
+                       k.User_DL_Avg_Throughput_Kbps as thput, k.Service_Drop_all as drop_rate,
+                       r.Site_code as csht_code
+                FROM kpi_4g k
+                LEFT JOIN rf_4g r ON k.Cell_name = r.Cell_code
+                WHERE k.Thoi_gian IN (${placeholders}) 
+                AND k.Cell_name NOT LIKE 'MBF_TH%'
             `;
         } else {
+            // [FIX]: Lấy chính xác Site_code (Mã CSHT) từ bảng rf_5g
             querySql = `
-                SELECT Ten_GNODEB as site, Loai_NE as cell_type, 'Massive_MIMO' as mimo_type, Ten_CELL as cell, Thoi_gian as date, 
-                       Total_Data_Traffic_Volume_GB as traffic, CQI_5G as cqi, A_User_DL_Avg_Throughput as thput 
-                FROM kpi_5g 
-                WHERE Thoi_gian IN (${placeholders}) 
-                AND Ten_CELL NOT LIKE 'MBF_TH%'
+                SELECT k.Ten_GNODEB as site, k.Loai_NE as cell_type, 'Massive_MIMO' as mimo_type, k.Ten_CELL as cell, k.Thoi_gian as date, 
+                       k.Total_Data_Traffic_Volume_GB as traffic, k.CQI_5G as cqi, k.A_User_DL_Avg_Throughput as thput,
+                       r.Site_code as csht_code
+                FROM kpi_5g k
+                LEFT JOIN rf_5g r ON k.Ten_CELL = r.Cell_code
+                WHERE k.Thoi_gian IN (${placeholders}) 
+                AND k.Ten_CELL NOT LIKE 'MBF_TH%'
             `;
         }
 
@@ -1952,10 +1958,20 @@ exports.getCrossSectorData = async (req, res) => {
             const cell = row.cell;
             if (!cell) return;
             
-            let siteCode = row.site;
-            if (!siteCode) {
+            // ÉP BUỘC CHỈ NHỮNG TRẠM CÙNG MÃ CSHT MỚI ĐƯỢC CHUNG MÂM
+            // Ưu tiên 1: Mã CSHT vật lý từ bảng RF
+            let siteCode = row.csht_code;
+            
+            // Ưu tiên 2 (Dự phòng nếu DB RF chưa cập nhật trạm này): Tên Site từ KPI
+            if (!siteCode || String(siteCode).trim() === '') {
+                siteCode = row.site;
+            }
+            
+            // Ưu tiên 3 (Dự phòng cuối cùng): Cắt chuỗi 6 ký tự
+            if (!siteCode || String(siteCode).trim() === '') {
                 siteCode = cell.toUpperCase().replace(/^(3G|4G|5G)[-\s_]?/i, '').replace(/[-\s_]?(THA|TH)$/i, '').substring(0, 6);
             }
+            
             siteCode = String(siteCode).trim();
             
             if (!siteMap[siteCode]) siteMap[siteCode] = {};
@@ -1983,6 +1999,7 @@ exports.getCrossSectorData = async (req, res) => {
 
         const suspiciousSites = [];
 
+        // Duyệt từng cụm CSHT riêng biệt
         for (let site in siteMap) {
             const cells = siteMap[site];
             let cellStats = [];
@@ -2009,6 +2026,7 @@ exports.getCrossSectorData = async (req, res) => {
                 }
             }
 
+            // Chỉ ghép cặp với các Cell TRONG CÙNG 1 MÃ CSHT (Do vòng lặp cha đã bao bọc)
             if (cellStats.length >= 2) {
                 let dropCells = cellStats.filter(c => c.deltaTraffic <= -30); 
                 let spikeCells = cellStats.filter(c => c.deltaTraffic >= 30);  
