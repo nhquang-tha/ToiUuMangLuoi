@@ -569,7 +569,6 @@
         }
     }
 
-    /* STREAMING_CHUNK:Updating TA mapping logic... */
     async function renderTAMap(scale = 1) {
         const loading = document.getElementById('mapLoading');
         document.getElementById('loadingText').innerText = "Đang xử lý thuật toán mô phỏng TA...";
@@ -595,17 +594,15 @@
             layerGroup.clearLayers(); 
             taLayer.clearLayers();
 
-            const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
+            // [FIX]: Cập nhật chính xác dải khoảng cách cho từng TA Index (Đơn vị: mét)
+            const taBaseDistances = [0, 156, 312, 624, 1092, 2028, 3588, 6708, 14508, 30108, 61308, 115908, 201708];
 
             globalPolygons.forEach(cellItem => {
-                // [FIX 1]: Đổi thứ tự ưu tiên - Bắt buộc Map chính xác 100% bằng Cell Name trước
-                // Chỉ dùng Site Name (fastCoreCode) làm phương án dự phòng cuối cùng
                 let taRecord = taLookupMap[cellItem.cellStr] || taLookupMap[cellItem.fastCoreCode];
 
                 if (taRecord) {
                     let ues = [];
                     for(let i = 0; i <= 11; i++) {
-                        // [FIX 2]: Mở rộng nhận diện tên cột Index đề phòng trường hợp file Excel ghi là "Index 0" bị parse thành "index_0"
                         let val = taRecord['Index' + i] !== undefined ? taRecord['Index' + i] : 
                                   taRecord['index' + i] !== undefined ? taRecord['index' + i] : 
                                   taRecord['Index_' + i] !== undefined ? taRecord['Index_' + i] : 
