@@ -616,7 +616,12 @@
                             if (ueCount > 0) {
                                 let ratio = ueCount / maxUE; 
                                 let baseBw = 65; let bw = baseBw * (0.2 + 0.8 * ratio); 
-                                let innerR = taBaseDistances[i] * scale; let outerR = taBaseDistances[i+1] * scale;
+                                
+                                // [FIX]: Vẽ bán kính chính xác 100% theo chuẩn vật lý (mét) của TA Index
+                                // Không nhân với biến scale để tránh vùng phủ sóng bị thu nhỏ sai quy chuẩn
+                                let innerR = taBaseDistances[i]; 
+                                let outerR = taBaseDistances[i+1];
+                                
                                 let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellItem.displayCellName, i, ueCount);
                                 segment.addTo(taLayer);
                                 cellItem.taSegments = cellItem.taSegments || [];
