@@ -1290,10 +1290,10 @@ exports.handleImportData = async (req, res) => {
                             else if (h.includes('sgnb_add_success_rate') || h.includes('addition success rate')) mappedCol = 'SgNB_Addition_SR';
                             else if (h.includes('inter_sgnb_ps_change') || h.includes('inter-sgnb pscell change')) mappedCol = 'Inter_SgNB_PScell_Change_2';
                         } 
-                        else if (networkType === 'poi_4g' || networkType === 'poi_5g') {
-                            if (h.includes('cell_code') || h.includes('cell code')) mappedCol = 'Cell_Code';
-                            else if (h.includes('site_code') || h.includes('site code')) mappedCol = 'Site_Code';
-                            else if (h.includes('poi')) mappedCol = 'POI';
+                        else if (networkType.startsWith('poi_')) {
+                            if (h.includes('tenpoi') || h.includes('khuvuc') || h.includes('tên poi') || h === 'diadiem') mappedCol = 'POI';
+                            else if (h.includes('cell code') || h.includes('cell_code')) mappedCol = 'Cell_Code';
+                            else if (h.includes('site code') || h.includes('site_code')) mappedCol = 'Site_Code';
                         } 
                         else if (networkType.startsWith('rf_')) {
                             if (h.includes('cell_code') || h.includes('cell code') || h.includes('cell name') || h.includes('ten_cell')) mappedCol = 'Cell_code';
