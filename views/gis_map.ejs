@@ -569,6 +569,7 @@
         }
     }
 
+    /* STREAMING_CHUNK:Updating TA mapping logic... */
     async function renderTAMap(scale = 1) {
         const loading = document.getElementById('mapLoading');
         document.getElementById('loadingText').innerText = "Đang xử lý thuật toán mô phỏng TA...";
@@ -583,27 +584,32 @@
 
             document.getElementById('loadingText').innerText = "Đang vẽ bản đồ nhiệt đa sắc...";
             
-            // XÂY DỰNG HASHMAP (TỪ ĐIỂN O(1))
             const taLookupMap = {};
             taDataCache.forEach(t => {
-                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t.Cell_code || t['Cell Code'] || t['Cell_Code'] || '').trim();
+                let rawTaCell = String(t.Cell_Code || t.cell_code || t.CELL_CODE || t['Cell Code'] || t['Cell_Code'] || '').trim();
                 let core = extractCoreName(rawTaCell);
-                if (core) taLookupMap[core] = t;
-                taLookupMap[rawTaCell.toLowerCase()] = t;
+                if (core && !taLookupMap[core]) taLookupMap[core] = t; 
+                taLookupMap[rawTaCell.toLowerCase()] = t; 
             });
 
             layerGroup.clearLayers(); 
             taLayer.clearLayers();
 
-            const taBaseDistances = [0, 156, 312, 624, 1092, 2028, 3588, 6708, 14508, 30108, 61308, 115908, 201708];
+            const taBaseDistances = [0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6500, 8500, 11000, 15000];
 
             globalPolygons.forEach(cellItem => {
-                let taRecord = taLookupMap[cellItem.fastCoreCode] || taLookupMap[cellItem.cellStr];
+                // [FIX 1]: Đổi thứ tự ưu tiên - Bắt buộc Map chính xác 100% bằng Cell Name trước
+                // Chỉ dùng Site Name (fastCoreCode) làm phương án dự phòng cuối cùng
+                let taRecord = taLookupMap[cellItem.cellStr] || taLookupMap[cellItem.fastCoreCode];
 
                 if (taRecord) {
                     let ues = [];
                     for(let i = 0; i <= 11; i++) {
-                        let val = taRecord['Index' + i] !== undefined ? taRecord['Index' + i] : taRecord['index' + i];
+                        // [FIX 2]: Mở rộng nhận diện tên cột Index đề phòng trường hợp file Excel ghi là "Index 0" bị parse thành "index_0"
+                        let val = taRecord['Index' + i] !== undefined ? taRecord['Index' + i] : 
+                                  taRecord['index' + i] !== undefined ? taRecord['index' + i] : 
+                                  taRecord['Index_' + i] !== undefined ? taRecord['Index_' + i] : 
+                                  taRecord['index_' + i] !== undefined ? taRecord['index_' + i] : 0;
                         ues.push(parseInt(val) || 0);
                     }
                     let maxUE = Math.max(...ues);
@@ -613,11 +619,7 @@
                             if (ueCount > 0) {
                                 let ratio = ueCount / maxUE; 
                                 let baseBw = 65; let bw = baseBw * (0.2 + 0.8 * ratio); 
-                                
-                                // BỎ HOÀN TOÀN BIẾN * scale ĐỂ KHÓA TỶ LỆ KÍCH THƯỚC VẬT LÝ 100% CHUẨN XÁC
-                                let innerR = taBaseDistances[i]; 
-                                let outerR = taBaseDistances[i+1]; 
-                                
+                                let innerR = taBaseDistances[i] * scale; let outerR = taBaseDistances[i+1] * scale;
                                 let segment = createTASegment(cellItem.lat, cellItem.lng, cellItem.azimuth, innerR, outerR, bw, ratio, cellItem.displayCellName, i, ueCount);
                                 segment.addTo(taLayer);
                                 cellItem.taSegments = cellItem.taSegments || [];
@@ -626,7 +628,6 @@
                         }
                     }
                 } else {
-                    // Trạm rỗng (Fallback) vẫn dùng biến scale để thu nhỏ theo thanh trượt cho đỡ rối mắt
                     let fallback = createSector(cellItem.lat, cellItem.lng, cellItem.azimuth, cellItem.displayCellName, '4g', cellItem.rawData.rfData, 250, scale);
                     let styleObj = {fillColor: '#bdc3c7', color: '#95a5a6', fillOpacity: 0.3, weight: 1.5};
                     fallback.setStyle(styleObj); fallback.originalStyle = styleObj;
@@ -637,7 +638,7 @@
             addTALegend();
             loading.style.display = 'none';
         } catch (e) {
-            console.error(e); alert('Lỗi truy xuất hệ thống khi tải dữ liệu TA!');
+            console.error(e); showToast('Lỗi truy xuất hệ thống khi tải dữ liệu TA!', true);
             loading.style.display = 'none';
         }
     }
