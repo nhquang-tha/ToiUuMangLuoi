@@ -149,39 +149,77 @@ async function aggregateDashboardData() {
     try {
         console.log("⏳ Bắt đầu đồng bộ và tính toán Dashboard...");
 
-        // [AUTO-CLEANUP]: Tự động dọn dẹp các dòng rác sinh ra do nhập nhầm Header
-        await db.query(`DELETE FROM Dashboard WHERE thoi_gian = 'Thời' OR thoi_gian LIKE '%Thời%' OR thoi_gian LIKE '%Date%' OR thoi_gian = '0'`);
-        await db.query(`DELETE FROM district_dashboard WHERE thoi_gian = 'Thời' OR thoi_gian LIKE '%Thời%' OR thoi_gian LIKE '%Date%' OR thoi_gian = '0'`);
-        await db.query(`DELETE FROM kpi_3g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0'`);
-        await db.query(`DELETE FROM kpi_4g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0'`);
-        await db.query(`DELETE FROM kpi_5g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0'`);
+        // 1. Tạo bảng và cấu trúc chuẩn (Nếu chưa có)
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS Dashboard (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                thoi_gian VARCHAR(50) NOT NULL,
+                sum_TRAFFIC_4G FLOAT DEFAULT 0,
+                AVG_USER_DL_AVG_THPUT_4G FLOAT DEFAULT 0,
+                AVG_RES_BLK_DL_4G FLOAT DEFAULT 0,
+                AVG_CQI_4G FLOAT DEFAULT 0,
+                sum_TRAFFIC_5G FLOAT DEFAULT 0,
+                AVG_USER_DL_AVG_THPUT_5G FLOAT DEFAULT 0,
+                AVG_CQI_5G FLOAT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS district_dashboard (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                thoi_gian VARCHAR(50) NOT NULL,
+                district VARCHAR(100) NOT NULL,
+                sum_TRAFFIC_4G FLOAT DEFAULT 0,
+                AVG_USER_DL_AVG_THPUT_4G FLOAT DEFAULT 0,
+                AVG_RES_BLK_DL_4G FLOAT DEFAULT 0,
+                AVG_CQI_4G FLOAT DEFAULT 0,
+                sum_TRAFFIC_5G FLOAT DEFAULT 0,
+                AVG_USER_DL_AVG_THPUT_5G FLOAT DEFAULT 0,
+                AVG_CQI_5G FLOAT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 2. LÀM SẠCH HOÀN TOÀN BẢNG TỔNG HỢP: Đảm bảo không dính rác và ép Unique Key hoạt động chuẩn
+        await db.query(`TRUNCATE TABLE Dashboard`);
+        await db.query(`TRUNCATE TABLE district_dashboard`);
+        
+        try { await db.query('ALTER TABLE Dashboard ADD UNIQUE KEY unique_thoi_gian (thoi_gian)'); } catch(e){}
+        try { await db.query('ALTER TABLE district_dashboard ADD UNIQUE KEY unique_date_district (thoi_gian, district)'); } catch(e){}
+
+        // 3. Xóa dữ liệu lỗi / rỗng ở bảng KPI gốc
+        await db.query(`DELETE FROM kpi_3g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0' OR Thoi_gian IS NULL OR Thoi_gian = ''`);
+        await db.query(`DELETE FROM kpi_4g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0' OR Thoi_gian IS NULL OR Thoi_gian = ''`);
+        await db.query(`DELETE FROM kpi_5g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0' OR Thoi_gian IS NULL OR Thoi_gian = ''`);
+
+        // 4. Đồng bộ dữ liệu Toàn mạng (Dashboard)
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
             SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
+            FROM kpi_4g GROUP BY Thoi_gian
+            ON DUPLICATE KEY UPDATE 
+                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
 
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
             SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(A_User_DL_Avg_Throughput), AVG(CQI_5G)
-            FROM kpi_5g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' GROUP BY Thoi_gian
+            FROM kpi_5g GROUP BY Thoi_gian
             ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
-                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
+                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
                 AVG_CQI_5G = VALUES(AVG_CQI_5G)
         `);
 
+        // 5. Đồng bộ dữ liệu theo Quận/Huyện (district_dashboard)
         await db.query(`
             INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
             SELECT Thoi_gian, District_code, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
-            FROM kpi_4g 
-            WHERE Thoi_gian IS NOT NULL AND Thoi_gian != '' AND District_code IS NOT NULL AND District_code != '' 
-            GROUP BY Thoi_gian, District_code
+            FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != '' GROUP BY Thoi_gian, District_code
             ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), 
-                AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
-                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), 
-                AVG_CQI_4G = VALUES(AVG_CQI_4G)
+                sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
+                AVG_RES_BLK_DL_4G = VALUES(AVG_RES_BLK_DL_4G), AVG_CQI_4G = VALUES(AVG_CQI_4G)
         `);
 
         await db.query(`
@@ -190,14 +228,11 @@ async function aggregateDashboardData() {
             FROM kpi_5g t5
             JOIN (
                 SELECT DISTINCT SUBSTRING(REPLACE(REPLACE(Cell_name, '4G-', ''), '4G_', ''), 1, 6) as core_code, District_code 
-                FROM kpi_4g 
-                WHERE District_code IS NOT NULL AND District_code != ''
+                FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != ''
             ) t4map ON SUBSTRING(REPLACE(REPLACE(t5.Ten_CELL, '5G-', ''), '5G_', ''), 1, 6) = t4map.core_code
-            WHERE t5.Thoi_gian IS NOT NULL AND t5.Thoi_gian != ''
             GROUP BY t5.Thoi_gian, t4map.District_code
             ON DUPLICATE KEY UPDATE 
-                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), 
-                AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
+                sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
                 AVG_CQI_5G = VALUES(AVG_CQI_5G)
         `);
 
