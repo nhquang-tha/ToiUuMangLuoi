@@ -132,7 +132,7 @@
                         <select id="districtFilter" class="table-filter-select" onchange="filterTable()">
                             <option value="">-- Tất cả District --</option>
                         </select>
-                        <select id="qoeRankFilter" class="table-filter-select" onchange="filterTable()">
+                       <select id="qoeRankFilter" class="table-filter-select" onchange="filterTable()">
                             <option value="">-- Tất cả CEM Rank --</option>
                             <option value="1">Rank 1</option>
                             <option value="2">Rank 2</option>
@@ -141,7 +141,12 @@
                             <option value="5">Rank 5</option>
                         </select>
                         <select id="qosRankFilter" class="table-filter-select" onchange="filterTable()">
-                            <option value="">-- Lọc QoS Rank --</option><option value="1">Rank 1</option><option value="2">Rank 2</option><option value="3">Rank 3</option><option value="4">Rank 4</option><option value="5">Rank 5</option>
+                            <option value="">-- Tất cả QoS Rank --</option>
+                            <option value="1">Rank 1</option>
+                            <option value="2">Rank 2</option>
+                            <option value="3">Rank 3</option>
+                            <option value="4">Rank 4</option>
+                            <option value="5">Rank 5</option>
                         </select>
                         <input type="text" id="tableSearch" placeholder="Tìm Cell/Site..." onkeyup="filterTable()" style="padding: 8px 12px; border: 1px solid #dcdde1; border-radius: 6px; outline: none; font-size: 13px;">
                         <button onclick="exportTableToExcel()" class="btn-primary" style="background:#27ae60; white-space: nowrap; height: 35px; margin: 0; border: none; padding: 0 15px; border-radius: 6px; color: white; font-weight: bold; cursor: pointer;">📥 Xuất Excel</button>
