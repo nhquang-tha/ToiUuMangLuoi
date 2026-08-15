@@ -331,7 +331,8 @@
         document.getElementById('emptyIndicator').style.display = 'none';
 
         try {
-            const res = await fetch(`/api/dashboard-data?district=${encodeURIComponent(selectedDistrict)}`);
+            // Thêm Timestamp để phá vỡ Cache của trình duyệt
+            const res = await fetch(`/api/dashboard-data?district=${encodeURIComponent(selectedDistrict)}&t=${new Date().getTime()}`);
             if (!res.ok) throw new Error('API Error');
             rawDashboardData = await res.json();
             
