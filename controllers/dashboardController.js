@@ -514,23 +514,21 @@ async function syncTrafficDown() {
                 let avgPast3 = getAvg(3, 9);   
                 let avgPast7 = getAvg(7, 13);  
 
-                const isZero = (val) => val < 0.01; // Xử lý trôi số thập phân của Excel
+                const isZero = (val) => val < 0.01; 
 
-                // 1. ĐIỀU KIỆN LỌC ZERO TRAFFIC MỚI
-                // - Lọc 7 ngày: T0 đến T6 đều = 0 VÀ TB 7 ngày trước đó (T7-T13) > 1 GB
+                // 1. Lọc Cell Không Lưu Lượng 7 ngày (Từ 7 ngày trở lên)
                 if (isZero(v0) && isZero(v1) && isZero(v2) && isZero(v3) && isZero(v4) && isZero(v5) && isZero(v6) && avgPast7 > 1) {
                     zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast7, date_t0: t0, date_t7: t7 });
                 }
-                // - Lọc 3 ngày: T0 đến T2 đều = 0 VÀ TB 7 ngày trước đó (T3-T9) > 1 GB
+                // 2. Lọc Cell Không Lưu Lượng 3 ngày (Từ 3 ngày đến dưới 7 ngày)
                 else if (isZero(v0) && isZero(v1) && isZero(v2) && avgPast3 > 1) {
                     zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast3, date_t0: t0, date_t7: t3 });
                 }
-                // - Lọc 1 ngày: T0 = 0 VÀ TB 7 ngày trước đó (T1-T7) > 1 GB
-                else if (isZero(v0) && avgPast1 > 1) {
+                // 3. Lọc Cell Không Lưu Lượng 1 ngày (Chỉ mới mất 1 ngày, ngày trước đó phải > 0)
+                else if (isZero(v0) && !isZero(v1) && avgPast1 > 1) {
                     zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1, date_t0: t0, date_t7: t1 });
                 }
 
-                // 2. ĐIỀU KIỆN LỌC CELL SUY GIẢM: T0 < 70% T7 VÀ T7 > 1 GB VÀ BẮT BUỘC GIẢM 3 NGÀY LIÊN TIẾP
                 if (network === '4g' || network === '5g') {
                     const v7 = c[t7] !== undefined ? c[t7] : 0; 
                     const v8 = c[t8] !== undefined ? c[t8] : 0;
