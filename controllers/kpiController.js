@@ -252,29 +252,30 @@ exports.getOptimizingPage = async (req, res) => {
 
 /* STREAMING_CHUNK:Executing CEM/QoS optimization algorithms... */
 exports.getOptimizingData = async (req, res) => {
-    const db = require('../models/db'); // Đảm bảo đã khai báo db
+    const db = require('../models/db');
     const week = req.query.week;
     const filterBlacklist = req.query.filterBlacklist === 'true';
 
     if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
 
     try {
-        // BƯỚC 1: LỌC BADCELL TỪ BÁO CÁO TUẦN (< 3 ĐIỂM)
+        // BƯỚC 1: LỌC GIAO THOA "TỘI PHẠM KÉP" (Double-Red Filter)
+        // Lấy chính xác những Cell vừa hỏng kỹ thuật (QoS < 3) vừa làm KH phàn nàn (CEM < 3)
         const queryBadCells = `
-            SELECT Cell_Name, QoE_Rank as Score, 'Vi phạm CEM' as Type FROM qoe_qos WHERE QoE_Rank < 3
-            UNION
-            SELECT Cell_Name, QoS_Rank as Score, 'Vi phạm QoS' as Type FROM qoe_qos WHERE QoS_Rank < 3
+            SELECT Cell_Name, QoE_Rank, QoS_Rank 
+            FROM qoe_qos 
+            WHERE QoE_Rank < 3 AND QoS_Rank < 3
         `;
         const [badCellsRaw] = await db.query(queryBadCells);
 
         if (badCellsRaw.length === 0) {
-            return res.json({ message: "Mạng lưới rất tốt! Không tìm thấy Cell nào có điểm CEM/QoS < 3 sao.", data: null });
+            return res.json({ message: "Mạng lưới tuyệt vời! Không tìm thấy Cell nào là 'Tội phạm kép' (Cùng lúc đỏ cả CEM và QoS).", data: null });
         }
 
         let blacklistedCount = 0;
         let validCellsObj = {};
         
-        // BƯỚC 1 (Tiếp): ÁP DỤNG BLACKLIST
+        // BƯỚC 3: LỌC NGOẠI TRỪ PHÁP LÝ (Blacklist Filter)
         badCellsRaw.forEach(row => {
             const cell = row.Cell_Name;
             if (!cell) return;
@@ -292,17 +293,15 @@ exports.getOptimizingData = async (req, res) => {
                 return;
             }
 
-            if (!validCellsObj[cell]) validCellsObj[cell] = { Cell_Name: cell, issues: [] };
-            if (!validCellsObj[cell].issues.includes(row.Type)) validCellsObj[cell].issues.push(row.Type);
+            validCellsObj[cell] = { Cell_Name: cell, type: 'Double-Red' };
         });
 
         const targetCells = Object.keys(validCellsObj);
         if (targetCells.length === 0) {
-             return res.json({ message: `Đã loại trừ ${blacklistedCount} trạm Blacklist bất khả kháng. Hiện không còn trạm nào cần phân tích khẩn cấp.`, data: null });
+             return res.json({ message: `Đã gạt bỏ ${blacklistedCount} trạm Blacklist bất khả kháng. Hiện không còn trạm nào cần phân tích.`, data: null });
         }
 
-        // BƯỚC 2: BÓC TÁCH NGUYÊN NHÂN (PHÂN TÍCH KPI NGÀY - QUY TẮC 5/7)
-        // Lấy 7 ngày mới nhất
+        // Lấy 7 ngày KPI mới nhất để làm đối chiếu
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
         const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-')));
         const targetDates = dates.slice(0, 7);
@@ -316,10 +315,12 @@ exports.getOptimizingData = async (req, res) => {
         try {
             let queryKpi = `
                 SELECT Cell_name,
+                       AVG(Total_Data_Traffic_Volume_GB) as avg_traf,
+                       AVG(Total_UE) as avg_ue,
                        SUM(CASE WHEN User_DL_Avg_Throughput_Kbps < 15000 THEN 1 ELSE 0 END) as v_thput,
-                       SUM(CASE WHEN RB_Util_Rate_DL > 60 THEN 1 ELSE 0 END) as v_prb,
+                       SUM(CASE WHEN RB_Util_Rate_DL > 70 THEN 1 ELSE 0 END) as v_prb,
                        SUM(CASE WHEN CQI_4G < 90 THEN 1 ELSE 0 END) as v_cqi,
-                       SUM(CASE WHEN Service_Drop_all > 0.5 THEN 1 ELSE 0 END) as v_drop,
+                       SUM(CASE WHEN Service_Drop_all > 1 THEN 1 ELSE 0 END) as v_drop,
                        SUM(CASE WHEN Downlink_Latency > 50 THEN 1 ELSE 0 END) as v_latency,
                        AVG(User_DL_Avg_Throughput_Kbps) as thput,
                        AVG(Downlink_Latency) as latency,
@@ -336,14 +337,20 @@ exports.getOptimizingData = async (req, res) => {
         let group1 = []; // Truyền dẫn
         let group2 = []; // Vô tuyến
         let group3 = []; // Nghẽn
+        let lowTrafficCount = 0;
 
         kpiData.forEach(row => {
-            // Loại bỏ các cell không vi phạm luật 5/7 nào
-            if (row.v_thput < 5 && row.v_prb < 5 && row.v_cqi < 5 && row.v_drop < 5 && row.v_latency < 5) return;
+            // BƯỚC 2: LỌC "RÁC" LƯU LƯỢNG (Traffic Threshold Filter)
+            if (row.avg_traf < 5 || row.avg_ue < 30) {
+                lowTrafficCount++;
+                return;
+            }
+
+            // BƯỚC 4: KHẲNG ĐỊNH BỆNH MÃN TÍNH (Quy Tắc 5/7 Ngày)
+            if (row.v_thput < 5 && row.v_prb < 5 && row.v_cqi < 5 && row.v_drop < 5) return;
 
             const cellInfo = {
                 Cell_Name: row.Cell_name,
-                Type: validCellsObj[row.Cell_name].issues.join(' & '),
                 metrics: { 
                     thput: (parseFloat(row.thput)/1000).toFixed(2), 
                     latency: parseFloat(row.latency).toFixed(1), 
@@ -357,27 +364,34 @@ exports.getOptimizingData = async (req, res) => {
                 }
             };
 
-            // BƯỚC 3: PHÂN NHÓM CHỈ ĐỊNH XỬ LÝ
-            // Nhóm Truyền dẫn (Tốc độ thấp + Trễ cao + PRB không quá tải)
-            if (row.v_thput >= 5 && row.v_latency >= 5 && row.v_prb < 5) {
+            // BƯỚC 5: MA TRẬN RA QUYẾT ĐỊNH & GIAO VIỆC
+            // 5.1 Nhóm Truyền dẫn (Sóng rỗi nhưng mạng chậm: Thput thấp + Trễ cao + PRB < 50%)
+            if (row.v_thput >= 5 && row.v_latency >= 5 && parseFloat(row.prb) < 50) {
                 group1.push(cellInfo);
             } 
-            // Nhóm Nghẽn tài nguyên (PRB liên tục > 60-70%)
+            // 5.2 Nhóm Nghẽn tài nguyên (PRB > 70%)
             else if (row.v_prb >= 5) {
                 group3.push(cellInfo);
             } 
-            // Nhóm Vô tuyến & Thiết bị (Nhiễu CQI hoặc Rớt dịch vụ cao)
+            // 5.3 Nhóm Vô tuyến & Thiết bị (CQI < 90% hoặc Drop > 1%)
             else if (row.v_cqi >= 5 || row.v_drop >= 5) {
                 group2.push(cellInfo);
             } 
-            // Vét mẻ cuối: Nếu tốc độ rùa bò mà không rõ nguyên nhân, quăng vào nhóm Vô tuyến kiểm tra
+            // Nếu rớt mẻ cuối, quăng vào nhóm Vô tuyến để check Alarms
             else {
                 group2.push(cellInfo);
             }
         });
 
+        let totalAnalyzed = group1.length + group2.length + group3.length;
+
         res.json({
-            stats: { totalBad: badCellsRaw.length, blacklisted: blacklistedCount, analyzed: kpiData.length },
+            stats: { 
+                totalBad: badCellsRaw.length, 
+                blacklisted: blacklistedCount, 
+                lowTraffic: lowTrafficCount,
+                analyzed: totalAnalyzed 
+            },
             data: { group1, group2, group3 }
         });
 
