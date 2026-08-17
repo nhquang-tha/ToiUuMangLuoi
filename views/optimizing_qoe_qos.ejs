@@ -9,30 +9,31 @@
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
-    .filter-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 6px solid #2980b9;}
+    .filter-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 4px solid #2980b9;}
     
-    .step-badge { background: #2c3e50; color: white; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; margin-bottom: 10px; display: inline-block; letter-spacing: 0.5px;}
+    .step-badge { background: #2c3e50; color: white; padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; margin-bottom: 12px; display: inline-block; letter-spacing: 0.5px;}
     .step-desc { font-size: 14px; color: #34495e; margin-bottom: 15px; line-height: 1.6;}
+    .step-desc ul { margin: 8px 0 0 20px; padding: 0; }
+    .step-desc li { margin-bottom: 6px; }
 
     .group-card { background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 30px; overflow: hidden; border: 1px solid #ecf0f1; display: none; animation: fadeIn 0.5s;}
     .group-header { padding: 15px 20px; font-weight: bold; color: white; font-size: 16px; display: flex; justify-content: space-between; align-items: center; text-transform: uppercase;}
     
-    /* Nhóm Nguyên Nhân */
     .group-header.g1 { background: #8e44ad; } /* Truyền dẫn */
     .group-header.g2 { background: #e74c3c; } /* Vô tuyến */
     .group-header.g3 { background: #f39c12; } /* Nghẽn */
     
     .action-box { padding: 15px 20px; background: #fdfdfd; border-bottom: 1px solid #ecf0f1; font-size: 13.5px; line-height: 1.6; color: #2c3e50;}
-    .action-box ul { margin: 5px 0 0 20px; padding: 0; }
-    .action-box li { margin-bottom: 4px; }
-    .action-badge { background: #27ae60; color: white; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 11px; margin-right: 5px; }
+    .action-box ul { margin: 8px 0 0 20px; padding: 0; }
+    .action-box li { margin-bottom: 6px; }
+    .action-badge { background: #27ae60; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 12px; margin-right: 5px; }
 
     .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
     .data-table th { background-color: #f8f9fa; color: #2c3e50; font-size: 12px; }
     .data-table tbody tr:hover { background-color: #f4f6f8; }
 
-    .metric-bad { color: #e74c3c; font-weight: bold; background: #fdf2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fad2d2;}
+    .metric-bad { color: #e74c3c; font-weight: bold; background: #fdf2f2; padding: 3px 8px; border-radius: 4px; border: 1px solid #fad2d2;}
 
     .btn-kpi { background: #3498db; color: white; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; transition: 0.2s; border: none; display: inline-block;}
     .btn-kpi:hover { background: #2980b9; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
@@ -48,21 +49,25 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>🛠️ Tối Ưu CEM/QoS (Quy Trình RNO 5 Bước)</h1>
+            <h1>🛠️ Tối Ưu CEM/QoS (Quy Trình Phễu Lọc RNO 5 Bước)</h1>
         </header>
         
         <div class="content-body">
             
-            <!-- BƯỚC 1 & 2 -->
             <div class="filter-card">
-                <div class="step-badge">BƯỚC 1: NHẬN DIỆN SÀNG LỌC & BƯỚC 2: QUY TẮC 5/7</div>
+                <div class="step-badge">BƯỚC 1: TỘI PHẠM KÉP & BƯỚC 2: BỘ LỌC RÁC & BƯỚC 3: BLACKLIST</div>
                 <div class="step-desc">
-                    Hệ thống sẽ nạp danh sách <b>Badcell (Điểm < 3 sao)</b> từ tuần được chọn, tự động loại trừ các trạm <b>Blacklist</b> (Biên giới, Hải đảo, IBS cũ, VSAT). Sau đó, các Cell mục tiêu sẽ được đối chiếu với KPI 7 ngày gần nhất để bóc tách bệnh lý theo quy tắc 5/7 ngày vi phạm.
+                    Hệ thống sẽ chạy một luồng <b>Phễu Lọc Đa Tầng (Multi-layer Filtering)</b> có độ nhiễu bằng 0:
+                    <ul>
+                        <li><b>Tội phạm kép:</b> Chỉ lấy các điểm giao thoa nguy hiểm nhất (<span style="color:#e74c3c; font-weight:bold;">CEM < 3</span> VÀ <span style="color:#e74c3c; font-weight:bold;">QoS < 3</span>).</li>
+                        <li><b>Lọc Rác (False Positive):</b> Gạt ngay các trạm lưu lượng siêu thấp (Traffic < 5GB hoặc UE < 30) để không làm lãng phí nguồn lực kỹ sư.</li>
+                        <li><b>Miễn trừ Pháp lý:</b> Áp dụng tự động VLOOKUP để loại bỏ Blacklist IBS cũ, Hải đảo, Biên giới.</li>
+                    </ul>
                 </div>
                 
-                <div style="display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap;">
+                <div style="display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; margin-top: 25px;">
                     <div style="flex: 1; min-width: 250px;">
-                        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2980b9;">Báo Cáo Đánh Giá (Tuần):</label>
+                        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2980b9;">Đầu Vào: Báo Cáo Đánh Giá (Tuần):</label>
                         <select id="weekSelect" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; cursor: pointer; font-size: 14px;">
                             <% if (typeof weeks !== 'undefined' && weeks.length > 0) { %>
                                 <% weeks.forEach(w => { %>
@@ -76,104 +81,105 @@
                     <div style="flex: 1; min-width: 250px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #ecf0f1; display: flex; align-items: center; height: 46px; box-sizing: border-box;">
                         <label style="display:flex; align-items: center; cursor: pointer; font-weight: bold; color: #34495e; margin: 0;">
                             <input type="checkbox" id="blacklistCheck" checked style="width: 18px; height: 18px; margin-right: 10px;">
-                            Áp dụng loại bỏ Blacklist
+                            Kích hoạt màng lọc Blacklist
                         </label>
                     </div>
                     
                     <button onclick="runOptimization()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 0 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 46px; font-size: 14px; transition: 0.2s;">
-                        ⚙️ Khởi Chạy Thuật Toán
+                        ⚙️ Khởi Chạy Phễu Lọc
                     </button>
                 </div>
             </div>
 
             <!-- THÔNG BÁO -->
             <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #2980b9; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 25px;">
-                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang thực hiện bóc tách KPI và ánh xạ ma trận cấp cứu...
+                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang thực thi BƯỚC 4: Khẳng định bệnh mãn tính bằng quy tắc 5/7 ngày...
             </div>
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 25px;"></div>
 
             <div id="summaryBox" class="summary-box">
-                <b>BÁO CÁO NHANH:</b> Hệ thống đã quét được tổng cộng <span id="sumTotal">0</span> trạm "Vùng trũng" từ CEM/QoS. 
-                Đã loại trừ <span id="sumBlack">0</span> trạm thuộc diện Blacklist. 
-                Đã chốt danh sách <span id="sumValid">0</span> trạm vi phạm quy tắc 5/7 ngày để giao việc cho các đầu mối xử lý bên dưới.
+                <b>BÁO CÁO PHỄU LỌC:</b> Có <span id="sumTotal">0</span> trạm "Tội phạm kép" (Cả CEM và QoS đều Đỏ). 
+                Đã gạt bỏ <span id="sumBlack">0</span> trạm Blacklist và loại trừ <span id="sumLow">0</span> trạm "Rác lưu lượng" (Traffic thấp). 
+                Còn lại chính xác <span id="sumValid">0</span> trạm thực sự cần thiết phải ra quyết định tối ưu theo Ma trận.
             </div>
 
-            <!-- BƯỚC 3 & 4: NHÓM TRUYỀN DẪN -->
+            <!-- BƯỚC 5: NHÓM TRUYỀN DẪN -->
             <div class="group-card" id="group1">
                 <div class="group-header g1">
-                    <div>BƯỚC 3: NHÓM TRUYỀN DẪN (Tốc độ rùa bò + Trễ cao)</div>
+                    <div>MA TRẬN CẤP CỨU: NHÓM TRUYỀN DẪN (Tốc độ rùa bò + Trễ cao + PRB < 50%)</div>
                     <div>Cần Xử Lý: <b id="g1Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
-                    <span class="action-badge">BƯỚC 4: THỰC THI TỐI ƯU</span> <b>Đầu mối: Đội Truyền dẫn / NOC</b>
+                    <span class="action-badge">BƯỚC 5: ACTION</span> <b>Đầu mối: Đội Truyền dẫn / NOC</b>
                     <ul>
-                        <li>Kiểm tra thông luồng quang, lỗi SFP, đo kiểm Ping từ trạm về Core.</li>
-                        <li>Rà soát cấu hình Router/Switch tại trạm chống nghẽn Backhaul.</li>
+                        <li>Đo kiểm luồng quang, kiểm tra lỗi SFP, rà soát cấu hình Router/Switch tại trạm (Sóng rỗi nhưng mạng chậm do nghẽn Backhaul).</li>
+                        <li><b>Giám sát Đóng Vòng:</b> Theo dõi độ trễ (Latency) trong T+1, T+2 có giảm xuống dưới 50ms không.</li>
                     </ul>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Tên Cell</th><th>Lỗi Đánh Giá</th>
+                            <th>Tên Cell</th>
                             <th>Thput DL<br><small style="color:#7f8c8d">< 15 Mbps</small></th>
                             <th>Latency<br><small style="color:#7f8c8d">> 50 ms</small></th>
-                            <th>PRB DL<br><small style="color:#7f8c8d">< 60%</small></th>
-                            <th style="text-align: center;">BƯỚC 5: ĐÓNG VÒNG (T+1)</th>
+                            <th>PRB DL<br><small style="color:#7f8c8d">< 50%</small></th>
+                            <th style="text-align: center;">CLOSED-LOOP VERIFICATION</th>
                         </tr>
                     </thead>
                     <tbody id="g1Body"></tbody>
                 </table>
             </div>
 
-            <!-- BƯỚC 3 & 4: NHÓM VÔ TUYẾN -->
+            <!-- BƯỚC 5: NHÓM VÔ TUYẾN -->
             <div class="group-card" id="group2">
                 <div class="group-header g2">
-                    <div>BƯỚC 3: NHÓM VÔ TUYẾN & THIẾT BỊ (Nhiễu CQI + Rớt Dịch Vụ)</div>
+                    <div>MA TRẬN CẤP CỨU: NHÓM VÔ TUYẾN & THIẾT BỊ (CQI < 90% + Drop > 1%)</div>
                     <div>Cần Xử Lý: <b id="g2Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
-                    <span class="action-badge">BƯỚC 4: THỰC THI TỐI ƯU</span> <b>Đầu mối: Đội RNO / Đội UCTT</b>
+                    <span class="action-badge">BƯỚC 5: ACTION</span> <b>Đầu mối: Đội RNO / Đội Hiện trường (UCTT)</b>
                     <ul>
-                        <li>Phân tích Alarms cứng, đo kiểm hiện trường (Drive Test), quét nhiễu PIM/Nhiễu ngoài.</li>
-                        <li>Kiểm tra VSWR cáp Feeder, rà soát lại cấu hình Neighbor List chống rớt HO.</li>
+                        <li><b>Tối ưu Cứng (Physical):</b> Bắt buộc ra trạm đo PIM, quét nhiễu ngoài, kiểm tra VSWR cáp Feeder, hoặc xoay hướng Ăng-ten (Azimuth) tránh đâm sóng đối diện.</li>
+                        <li><b>Tối ưu Mềm:</b> Phân tích Alarms, rà soát cấu hình Neighbor List.</li>
+                        <li><b>Giám sát Đóng Vòng:</b> CQI phải phục hồi trên 90% và Tỷ lệ Drop dưới 1% ở T+2.</li>
                     </ul>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Tên Cell</th><th>Lỗi Đánh Giá</th>
+                            <th>Tên Cell</th>
                             <th>CQI 4G<br><small style="color:#7f8c8d">< 90%</small></th>
-                            <th>Drop Rate<br><small style="color:#7f8c8d">> 0.5%</small></th>
+                            <th>Service Drop<br><small style="color:#7f8c8d">> 1%</small></th>
                             <th>Thput DL<br><small style="color:#7f8c8d">Thực tế</small></th>
-                            <th style="text-align: center;">BƯỚC 5: ĐÓNG VÒNG (T+1)</th>
+                            <th style="text-align: center;">CLOSED-LOOP VERIFICATION</th>
                         </tr>
                     </thead>
                     <tbody id="g2Body"></tbody>
                 </table>
             </div>
 
-            <!-- BƯỚC 3 & 4: NHÓM NGHẼN -->
+            <!-- BƯỚC 5: NHÓM NGHẼN -->
             <div class="group-card" id="group3">
                 <div class="group-header g3">
-                    <div>BƯỚC 3: NHÓM NGHẼN TÀI NGUYÊN (PRB liên tục > 60-70%)</div>
+                    <div>MA TRẬN CẤP CỨU: NHÓM NGHẼN TÀI NGUYÊN (PRB liên tục > 70%)</div>
                     <div>Cần Xử Lý: <b id="g3Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
-                    <span class="action-badge">BƯỚC 4: THỰC THI TỐI ƯU</span> <b>Đầu mối: Đội RNO / Đội Quy Hoạch</b>
+                    <span class="action-badge">BƯỚC 5: ACTION</span> <b>Đầu mối: Đội RNO / Đội Quy Hoạch</b>
                     <ul>
-                        <li><b>Tối ưu Mềm:</b> Bật Cân bằng tải (Load Balancing) sang L2100/L900. Đổi mã PCI tránh xung đột.</li>
-                        <li><b>Tối ưu Cứng:</b> Cụp góc ngẩng (Downtilt), chỉnh hướng phát (Azimuth) hất user rìa.</li>
-                        <li><b>Đề xuất Nâng cấp:</b> Bật CA, thêm board, hoặc đề xuất nâng cấp 2T2R lên 4T4R nếu mãn tải.</li>
+                        <li><b>Tối ưu Mềm (Ưu tiên):</b> Bật và tinh chỉnh Load Balancing đẩy UE sang L2100, L900. Đổi mã PCI tránh xung đột lân cận.</li>
+                        <li><b>Tối ưu Cứng:</b> Cụp góc ngẩng (Downtilt) hất User rìa ra khỏi vùng phủ.</li>
+                        <li><b>Nâng Cấp:</b> Nếu trạm mãn tải thực sự, lập phiếu mở rộng License BBU, phát sóng thêm CA, nâng cấp từ 2T2R lên 4T4R.</li>
                     </ul>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Tên Cell</th><th>Lỗi Đánh Giá</th>
-                            <th>PRB DL<br><small style="color:#7f8c8d">> 60%</small></th>
+                            <th>Tên Cell</th>
+                            <th>PRB DL<br><small style="color:#7f8c8d">> 70%</small></th>
                             <th>Thput DL<br><small style="color:#7f8c8d">< 15 Mbps</small></th>
                             <th>CQI 4G<br><small style="color:#7f8c8d">Thực tế</small></th>
-                            <th style="text-align: center;">BƯỚC 5: ĐÓNG VÒNG (T+1)</th>
+                            <th style="text-align: center;">CLOSED-LOOP VERIFICATION</th>
                         </tr>
                     </thead>
                     <tbody id="g3Body"></tbody>
@@ -218,19 +224,20 @@
 
             document.getElementById('sumTotal').innerText = result.stats.totalBad;
             document.getElementById('sumBlack').innerText = result.stats.blacklisted;
+            document.getElementById('sumLow').innerText = result.stats.lowTraffic;
             document.getElementById('sumValid').innerText = result.stats.analyzed;
             document.getElementById('summaryBox').style.display = 'block';
 
             const renderRow = (r, type) => {
                 let m = r.metrics;
                 let v = r.vios;
-                let btn = `<a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📈 Xem KPI T+1</a>`;
+                let btn = `<a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📈 Trích Xuất KPI (T+1)</a>`;
                 
-                if(type === 1) return `<tr><td><b>${r.Cell_Name}</b></td><td style="color:#7f8c8d">${r.Type}</td><td class="${v.thput ? 'metric-bad' : ''}">${m.thput}</td><td class="${v.latency ? 'metric-bad' : ''}">${m.latency}</td><td>${m.prb}</td><td style="text-align:center;">${btn}</td></tr>`;
+                if(type === 1) return `<tr><td><b>${r.Cell_Name}</b></td><td class="${v.thput ? 'metric-bad' : ''}">${m.thput}</td><td class="${v.latency ? 'metric-bad' : ''}">${m.latency}</td><td>${m.prb}</td><td style="text-align:center;">${btn}</td></tr>`;
                 
-                if(type === 2) return `<tr><td><b>${r.Cell_Name}</b></td><td style="color:#7f8c8d">${r.Type}</td><td class="${v.cqi ? 'metric-bad' : ''}">${m.cqi}</td><td class="${v.drop ? 'metric-bad' : ''}">${m.drop_rate}</td><td>${m.thput}</td><td style="text-align:center;">${btn}</td></tr>`;
+                if(type === 2) return `<tr><td><b>${r.Cell_Name}</b></td><td class="${v.cqi ? 'metric-bad' : ''}">${m.cqi}</td><td class="${v.drop ? 'metric-bad' : ''}">${m.drop_rate}</td><td>${m.thput}</td><td style="text-align:center;">${btn}</td></tr>`;
                 
-                if(type === 3) return `<tr><td><b>${r.Cell_Name}</b></td><td style="color:#7f8c8d">${r.Type}</td><td class="${v.prb ? 'metric-bad' : ''}">${m.prb}</td><td class="${v.thput ? 'metric-bad' : ''}">${m.thput}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
+                if(type === 3) return `<tr><td><b>${r.Cell_Name}</b></td><td class="${v.prb ? 'metric-bad' : ''}">${m.prb}</td><td class="${v.thput ? 'metric-bad' : ''}">${m.thput}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
             };
 
             const data = result.data;
