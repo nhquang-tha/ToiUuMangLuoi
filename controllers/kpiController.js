@@ -252,6 +252,9 @@ exports.getOptimizingPage = async (req, res) => {
 
 /* STREAMING_CHUNK:Executing CEM/QoS optimization algorithms... */
 exports.getOptimizingData = async (req, res) => {
+    // Đảm bảo module CSDL được gọi an toàn
+    const db = require('../models/db'); 
+    
     const week = req.query.week;
     const filterBlacklist = req.query.filterBlacklist === 'true';
 
@@ -265,7 +268,15 @@ exports.getOptimizingData = async (req, res) => {
             FROM qoe_qos 
             WHERE QoE_Rank < 4 AND QoS_Rank < 4
         `;
-        const [badCellsRaw] = await db.query(queryBadCells);
+        
+        let badCellsRaw = [];
+        try {
+            const [rows] = await db.query(queryBadCells);
+            badCellsRaw = rows;
+        } catch (dbError) {
+            console.error("Lỗi CSDL Bảng qoe_qos:", dbError);
+            return res.json({ error: "Bảng dữ liệu qoe_qos chưa tồn tại hoặc trống. Vui lòng Import dữ liệu QoE/QoS vào hệ thống trước." });
+        }
 
         if (badCellsRaw.length === 0) {
             return res.json({ message: "Mạng lưới tuyệt vời! Không tìm thấy Cell nào là 'Tội phạm kép' (CEM < 4 & QoS < 4).", data: null });
@@ -278,6 +289,7 @@ exports.getOptimizingData = async (req, res) => {
             const cell = row.Cell_Name;
             if (!cell) return;
             
+            // Chuẩn hóa in hoa toàn bộ để chống lỗi lệch Key (Case-sensitive)
             const upperCell = cell.toUpperCase();
             const isBlacklisted = upperCell.includes('IBS') || 
                                   upperCell.includes('DAS') || 
@@ -291,9 +303,11 @@ exports.getOptimizingData = async (req, res) => {
                 return;
             }
 
-            if (!validCellsObj[cell]) validCellsObj[cell] = { Cell_Name: cell, issues: [] };
-            if (!validCellsObj[cell].issues.includes(row.Type)) {
-                validCellsObj[cell].issues.push(row.Type);
+            if (!validCellsObj[upperCell]) {
+                validCellsObj[upperCell] = { 
+                    Cell_Name: upperCell, 
+                    issues: ["Tội phạm kép (QoE & QoS)"] 
+                };
             }
         });
 
@@ -315,11 +329,15 @@ exports.getOptimizingData = async (req, res) => {
                        AVG(eRAB_Setup_SR_All) as erab,
                        AVG(Service_Drop_all) as drop_rate
                 FROM kpi_4g
-                WHERE Cell_name IN (${placeholders})
+                WHERE UPPER(Cell_name) IN (${placeholders})
                 GROUP BY Cell_name
             `;
-            [kpiData] = await db.query(queryKpi, targetCells);
-        } catch (error) { console.error("Lỗi lấy dữ liệu KPI 4G cho Tối Ưu:", error); }
+            const [kpiRows] = await db.query(queryKpi, targetCells);
+            kpiData = kpiRows;
+        } catch (error) { 
+            console.error("Lỗi lấy dữ liệu KPI 4G cho Tối Ưu:", error); 
+            return res.json({ error: "Lỗi truy xuất dữ liệu KPI 4G từ cơ sở dữ liệu." });
+        }
 
         let group1 = []; 
         let group2 = []; 
@@ -327,6 +345,11 @@ exports.getOptimizingData = async (req, res) => {
         let groupUnknown = []; 
 
         kpiData.forEach(row => {
+            const upperCell = String(row.Cell_name).toUpperCase();
+            
+            // Bỏ qua nếu dữ liệu rác không có trong danh sách
+            if (!validCellsObj[upperCell]) return;
+
             const thput = parseFloat(row.thput) || 0;
             const latency = parseFloat(row.latency) || 0;
             const prb = parseFloat(row.prb) || 0;
@@ -335,8 +358,8 @@ exports.getOptimizingData = async (req, res) => {
             const drop_rate = parseFloat(row.drop_rate) || 0;
 
             const cellInfo = {
-                Cell_Name: row.Cell_name,
-                Type: validCellsObj[row.Cell_name].issues.join(' & '),
+                Cell_Name: upperCell,
+                Type: validCellsObj[upperCell].issues.join(' & '),
                 metrics: { 
                     thput: (thput/1000).toFixed(2), 
                     latency: latency.toFixed(1), 
@@ -346,6 +369,47 @@ exports.getOptimizingData = async (req, res) => {
                     drop_rate: drop_rate.toFixed(2) 
                 }
             };
+
+            // BỘ LỌC MỚI CHUẨN CEM MBB (Áp dụng từ 01/05/2026)
+            // Nhóm 1: Ưu tiên tối cao UXI 3 (Video) - Trọng số 70% (Nghẽn PRB hoặc Thput thấp)
+            if (prb > 65 || thput < 15000) { 
+                group1.push(cellInfo); 
+            } 
+            // Nhóm 2: Ưu tiên UXI 1 & Yếu tố dập nhiễu (Khả năng truy cập & CQI)
+            else if (cqi < 90 || erab < 99.5) { 
+                group2.push(cellInfo); 
+            } 
+            // Nhóm 3: UXI 2 (Tính toàn vẹn Data) - Trọng số 10% (Truyền dẫn, Rớt mạng)
+            else if (latency > 50 || drop_rate > 0.3) { 
+                group3.push(cellInfo); 
+            } 
+            else { 
+                groupUnknown.push(cellInfo); 
+            }
+            
+            const idx = targetCells.indexOf(upperCell);
+            if (idx > -1) targetCells.splice(idx, 1);
+        });
+
+        targetCells.forEach(cell => {
+            groupUnknown.push({
+                Cell_Name: cell,
+                Type: validCellsObj[cell].issues.join(' & '),
+                metrics: { thput: '-', latency: '-', prb: '-', cqi: '-', erab: '-', drop_rate: '-' },
+                note: "Chưa có dữ liệu KPI 4G để bắt bệnh"
+            });
+        });
+
+        res.json({
+            stats: { totalBad: badCellsRaw.length, blacklisted: blacklistedCount, analyzed: Object.keys(validCellsObj).length },
+            data: { group1, group2, group3, groupUnknown }
+        });
+
+    } catch (error) {
+        console.error("Lỗi API getOptimizingData:", error);
+        res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." });
+    }
+};
 
             // BỘ LỌC MỚI CHUẨN CEM MBB (Áp dụng từ 01/05/2026)
             // Nhóm 1: Ưu tiên tối cao UXI 3 (Video) - Trọng số 70% (Nghẽn PRB hoặc Thput thấp)
