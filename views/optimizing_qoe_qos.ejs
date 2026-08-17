@@ -1,4 +1,3 @@
-
 <%- include('partials/head') %>
 <%
     let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
@@ -10,44 +9,36 @@
     .layout { display: flex; height: 100vh; overflow: hidden; background-color: #f4f6f8; }
     .main-content { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
     
-    .filter-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 4px solid #27ae60;}
+    .filter-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 6px solid #2980b9;}
     
-    .step-badge { background: #27ae60; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-bottom: 10px; display: inline-block;}
-    .step-desc { font-size: 14px; color: #7f8c8d; margin-bottom: 15px; line-height: 1.5;}
+    .step-badge { background: #2c3e50; color: white; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; margin-bottom: 10px; display: inline-block; letter-spacing: 0.5px;}
+    .step-desc { font-size: 14px; color: #34495e; margin-bottom: 15px; line-height: 1.6;}
 
-    .group-card { background: white; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; overflow: hidden; border: 1px solid #ecf0f1; display: none; animation: fadeIn 0.5s;}
-    .group-header { padding: 15px 20px; font-weight: bold; color: white; font-size: 16px; display: flex; justify-content: space-between; align-items: center;}
+    .group-card { background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 30px; overflow: hidden; border: 1px solid #ecf0f1; display: none; animation: fadeIn 0.5s;}
+    .group-header { padding: 15px 20px; font-weight: bold; color: white; font-size: 16px; display: flex; justify-content: space-between; align-items: center; text-transform: uppercase;}
     
-    .group-header.g1 { background: #c0392b; } 
-    .group-header.g2 { background: #e67e22; } 
-    .group-header.g3 { background: #34495e; } 
+    /* Nhóm Nguyên Nhân */
+    .group-header.g1 { background: #8e44ad; } /* Truyền dẫn */
+    .group-header.g2 { background: #e74c3c; } /* Vô tuyến */
+    .group-header.g3 { background: #f39c12; } /* Nghẽn */
     
-    .action-box { padding: 15px 20px; background: #fdfdfd; border-bottom: 1px solid #ecf0f1; display: flex; align-items: center; gap: 15px; line-height: 1.5;}
-    
-    /* CẤU HÌNH BẢNG & PHÂN TRANG */
-    .table-wrapper { width: 100%; max-height: 50vh; overflow-y: auto; overflow-x: auto; border-bottom: 1px solid #ecf0f1;}
-    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap;}
-    .data-table th, .data-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ecf0f1; }
-    .data-table th { background-color: #f8f9fa; color: #2c3e50; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1); font-size: 12px;}
-    .data-table tbody tr:hover td { background-color: #f4f6f8; }
+    .action-box { padding: 15px 20px; background: #fdfdfd; border-bottom: 1px solid #ecf0f1; font-size: 13.5px; line-height: 1.6; color: #2c3e50;}
+    .action-box ul { margin: 5px 0 0 20px; padding: 0; }
+    .action-box li { margin-bottom: 4px; }
+    .action-badge { background: #27ae60; color: white; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 11px; margin-right: 5px; }
 
-    .metric-bad { color: #e74c3c; font-weight: bold; }
-    .metric-ok { color: #27ae60; font-weight: bold; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th, .data-table td { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; text-align: left; }
+    .data-table th { background-color: #f8f9fa; color: #2c3e50; font-size: 12px; }
+    .data-table tbody tr:hover { background-color: #f4f6f8; }
 
-    .btn-kpi { background: #3498db; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; transition: 0.2s; border: 1px solid #2980b9; display: inline-block;}
-    .btn-kpi:hover { background: #2980b9; transform: scale(1.05); }
+    .metric-bad { color: #e74c3c; font-weight: bold; background: #fdf2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fad2d2;}
 
-    .pagination-bar { padding: 10px 15px; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-    .page-info select { padding: 4px 8px; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer; font-weight: bold;}
-    .page-controls { display: flex; gap: 5px; }
-    .btn-page { background: #f8f9fa; border: 1px solid #bdc3c7; padding: 4px 10px; border-radius: 4px; cursor: pointer; color: #34495e; font-weight: bold; transition: 0.2s;}
-    .btn-page:hover:not(:disabled) { background: #27ae60; color: white; border-color: #27ae60; }
-    .btn-page.active { background: #27ae60; color: white; border-color: #27ae60; }
-    .btn-page:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-kpi { background: #3498db; color: white; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; transition: 0.2s; border: none; display: inline-block;}
+    .btn-kpi:hover { background: #2980b9; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
 
-    .summary-box { background: #e8f8f5; border: 1px solid #27ae60; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;}
+    .summary-box { background: #e8f8f5; border: 1px solid #27ae60; padding: 20px; border-radius: 8px; margin-bottom: 25px; display: none; line-height: 1.6; font-size: 14.5px; color: #2c3e50;}
     .summary-box span { font-weight: bold; color: #27ae60; font-size: 18px;}
-    .cem-notice { background: #fffcf5; border-left: 4px solid #f1c40f; padding: 15px; border-radius: 4px; font-size: 13px; color: #34495e; margin-bottom: 15px; line-height: 1.5; }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -57,115 +48,136 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>🛠️ Tối Ưu Hóa Mạng Lưới (Theo chuẩn CEM MBB QoE)</h1>
+            <h1>🛠️ Tối Ưu CEM/QoS (Quy Trình RNO 5 Bước)</h1>
         </header>
         
         <div class="content-body">
             
-            <div class="cem-notice">
-                <b>📢 LƯU Ý CHIẾN LƯỢC MỚI:</b><br>
-                Hệ thống đánh giá trải nghiệm (UXI) đã thay đổi. Để nâng điểm QoE nhanh nhất, <b>hãy dồn 70% nguồn lực giải quyết các trạm ở NHÓM 1 (UXI 3 - Video)</b>.
-            </div>
-
+            <!-- BƯỚC 1 & 2 -->
             <div class="filter-card">
-                <div class="step-badge">BƯỚC 1 & 2: ĐỊNH VỊ VÀ SÀNG LỌC</div>
-                <div class="step-desc">Lựa chọn Tuần đánh giá để hệ thống quét các <b>"Vùng Trũng"</b> (< 3 sao). Tự động loại bỏ danh sách Blacklist.</div>
+                <div class="step-badge">BƯỚC 1: NHẬN DIỆN SÀNG LỌC & BƯỚC 2: QUY TẮC 5/7</div>
+                <div class="step-desc">
+                    Hệ thống sẽ nạp danh sách <b>Badcell (Điểm < 3 sao)</b> từ tuần được chọn, tự động loại trừ các trạm <b>Blacklist</b> (Biên giới, Hải đảo, IBS cũ, VSAT). Sau đó, các Cell mục tiêu sẽ được đối chiếu với KPI 7 ngày gần nhất để bóc tách bệnh lý theo quy tắc 5/7 ngày vi phạm.
+                </div>
                 
                 <div style="display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 250px;">
-                        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">1. Chọn Tuần Phân Tích (Từ DB):</label>
+                        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2980b9;">Báo Cáo Đánh Giá (Tuần):</label>
                         <select id="weekSelect" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none; cursor: pointer; font-size: 14px;">
                             <% if (typeof weeks !== 'undefined' && weeks.length > 0) { %>
-                                <% weeks.forEach(w => { %><option value="<%= w %>"><%= w %></option><% }) %>
-                            <% } else { %><option value="">Chưa có dữ liệu</option><% } %>
+                                <% weeks.forEach(w => { %>
+                                    <option value="<%= w %>"><%= w %></option>
+                                <% }) %>
+                            <% } else { %>
+                                <option value="Current">Dữ liệu Tuần Hiện Tại (Tự động)</option>
+                            <% } %>
                         </select>
                     </div>
-                    <div style="flex: 1; min-width: 250px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #ecf0f1;">
-                        <label style="display:flex; align-items: center; cursor: pointer; font-weight: bold; color: #34495e;">
-                            <input type="checkbox" id="blacklistCheck" checked style="width: 18px; height: 18px; margin-right: 10px;"> 2. Loại bỏ Blacklist
+                    <div style="flex: 1; min-width: 250px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #ecf0f1; display: flex; align-items: center; height: 46px; box-sizing: border-box;">
+                        <label style="display:flex; align-items: center; cursor: pointer; font-weight: bold; color: #34495e; margin: 0;">
+                            <input type="checkbox" id="blacklistCheck" checked style="width: 18px; height: 18px; margin-right: 10px;">
+                            Áp dụng loại bỏ Blacklist
                         </label>
                     </div>
                     
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button onclick="runOptimization()" class="btn-primary" style="background: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 46px;">⚙️ Khởi Chạy Phân Tích</button>
-                        <button onclick="exportToExcel()" id="btnExport" class="btn-success" style="display: none; height: 46px; background: #2980b9;">📥 Xuất File Excel</button>
-                    </div>
+                    <button onclick="runOptimization()" class="btn-primary" style="background: #2980b9; color: white; border: none; padding: 0 30px; border-radius: 6px; font-weight: bold; cursor: pointer; height: 46px; font-size: 14px; transition: 0.2s;">
+                        ⚙️ Khởi Chạy Thuật Toán
+                    </button>
                 </div>
             </div>
 
-            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #27ae60; font-size: 16px; font-weight: bold;">
-                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang thực hiện BƯỚC 3: Ánh xạ chẩn đoán bệnh lý...
+            <!-- THÔNG BÁO -->
+            <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #2980b9; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 25px;">
+                <span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Đang thực hiện bóc tách KPI và ánh xạ ma trận cấp cứu...
             </div>
-            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px;"></div>
+            <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 25px;"></div>
 
             <div id="summaryBox" class="summary-box">
-                Tóm tắt quy trình: Hệ thống đã quét được tổng cộng <span id="sumTotal">0</span> trạm rơi vào "Vùng trũng". Đã loại trừ <span id="sumBlack">0</span> trạm Blacklist. Hiện còn lại <span id="sumValid">0</span> trạm ưu tiên.
+                <b>BÁO CÁO NHANH:</b> Hệ thống đã quét được tổng cộng <span id="sumTotal">0</span> trạm "Vùng trũng" từ CEM/QoS. 
+                Đã loại trừ <span id="sumBlack">0</span> trạm thuộc diện Blacklist. 
+                Đã chốt danh sách <span id="sumValid">0</span> trạm vi phạm quy tắc 5/7 ngày để giao việc cho các đầu mối xử lý bên dưới.
             </div>
 
-            <!-- NHÓM 1 -->
+            <!-- BƯỚC 3 & 4: NHÓM TRUYỀN DẪN -->
             <div class="group-card" id="group1">
                 <div class="group-header g1">
-                    <div>Ưu Tiên 1 - Vi phạm UXI 3 (Trải nghiệm Video) - Quyết định 70% QoE</div>
-                    <div style="font-size: 14px; font-weight: normal;">Số lượng: <b id="g1Count">0</b> Cell</div>
+                    <div>BƯỚC 3: NHÓM TRUYỀN DẪN (Tốc độ rùa bò + Trễ cao)</div>
+                    <div>Cần Xử Lý: <b id="g1Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
-                    <span class="step-badge" style="background:#c0392b; margin:0;">BƯỚC 4: KÊ ĐƠN</span>
-                    <div><strong>Điều phối xử lý:</strong> Ép san tải (Load Balancing) sang L2100/L900 ngay lập tức, hoặc giảm góc ngẩng (Downtilt) để hất bớt người dùng ở vùng rìa.</div>
+                    <span class="action-badge">BƯỚC 4: THỰC THI TỐI ƯU</span> <b>Đầu mối: Đội Truyền dẫn / NOC</b>
+                    <ul>
+                        <li>Kiểm tra thông luồng quang, lỗi SFP, đo kiểm Ping từ trạm về Core.</li>
+                        <li>Rà soát cấu hình Router/Switch tại trạm chống nghẽn Backhaul.</li>
+                    </ul>
                 </div>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead><tr><th>Tên Cell</th><th>Lỗi Ghi Nhận</th><th>PRB DL (%)</th><th>Thput DL (Mbps)</th><th>CQI (%)</th><th>BƯỚC 5: CLOSED-LOOP</th></tr></thead>
-                        <tbody id="g1Body"></tbody>
-                    </table>
-                </div>
-                <div class="pagination-bar">
-                    <div class="page-info">Hiển thị <select id="sizeG1" onchange="changePageSize('G1')"><option value="10" selected>10</option><option value="20">20</option><option value="50">50</option></select> dòng</div>
-                    <div class="page-controls" id="pageControlsG1"></div>
-                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Tên Cell</th><th>Lỗi Đánh Giá</th>
+                            <th>Thput DL<br><small style="color:#7f8c8d">< 15 Mbps</small></th>
+                            <th>Latency<br><small style="color:#7f8c8d">> 50 ms</small></th>
+                            <th>PRB DL<br><small style="color:#7f8c8d">< 60%</small></th>
+                            <th style="text-align: center;">BƯỚC 5: ĐÓNG VÒNG (T+1)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="g1Body"></tbody>
+                </table>
             </div>
 
-            <!-- NHÓM 2 -->
+            <!-- BƯỚC 3 & 4: NHÓM VÔ TUYẾN -->
             <div class="group-card" id="group2">
                 <div class="group-header g2">
-                    <div>Ưu Tiên 2 - Vi phạm UXI 1 & Nhiễu CQI (Khả năng truy cập)</div>
-                    <div style="font-size: 14px; font-weight: normal;">Số lượng: <b id="g2Count">0</b> Cell</div>
+                    <div>BƯỚC 3: NHÓM VÔ TUYẾN & THIẾT BỊ (Nhiễu CQI + Rớt Dịch Vụ)</div>
+                    <div>Cần Xử Lý: <b id="g2Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
-                    <span class="step-badge" style="background:#e67e22; margin:0;">BƯỚC 4: KÊ ĐƠN</span>
-                    <div><strong>Điều phối xử lý:</strong> Dập nhiễu xuyên tâm, điều chỉnh hướng phát (Azimuth). Rà soát lại vùng phủ Uplink để giải quyết lỗi thiết lập kết nối (ERAB).</div>
+                    <span class="action-badge">BƯỚC 4: THỰC THI TỐI ƯU</span> <b>Đầu mối: Đội RNO / Đội UCTT</b>
+                    <ul>
+                        <li>Phân tích Alarms cứng, đo kiểm hiện trường (Drive Test), quét nhiễu PIM/Nhiễu ngoài.</li>
+                        <li>Kiểm tra VSWR cáp Feeder, rà soát lại cấu hình Neighbor List chống rớt HO.</li>
+                    </ul>
                 </div>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead><tr><th>Tên Cell</th><th>Lỗi Ghi Nhận</th><th>CQI (%)</th><th>ERAB Setup SR</th><th>Thput DL (Mbps)</th><th>BƯỚC 5: CLOSED-LOOP</th></tr></thead>
-                        <tbody id="g2Body"></tbody>
-                    </table>
-                </div>
-                <div class="pagination-bar">
-                    <div class="page-info">Hiển thị <select id="sizeG2" onchange="changePageSize('G2')"><option value="10" selected>10</option><option value="20">20</option><option value="50">50</option></select> dòng</div>
-                    <div class="page-controls" id="pageControlsG2"></div>
-                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Tên Cell</th><th>Lỗi Đánh Giá</th>
+                            <th>CQI 4G<br><small style="color:#7f8c8d">< 90%</small></th>
+                            <th>Drop Rate<br><small style="color:#7f8c8d">> 0.5%</small></th>
+                            <th>Thput DL<br><small style="color:#7f8c8d">Thực tế</small></th>
+                            <th style="text-align: center;">BƯỚC 5: ĐÓNG VÒNG (T+1)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="g2Body"></tbody>
+                </table>
             </div>
 
-            <!-- NHÓM 3 -->
+            <!-- BƯỚC 3 & 4: NHÓM NGHẼN -->
             <div class="group-card" id="group3">
                 <div class="group-header g3">
-                    <div>Ưu Tiên 3 - Vi phạm UXI 2 (Tính toàn vẹn Data) - Trọng số 10%</div>
-                    <div style="font-size: 14px; font-weight: normal;">Số lượng: <b id="g3Count">0</b> Cell</div>
+                    <div>BƯỚC 3: NHÓM NGHẼN TÀI NGUYÊN (PRB liên tục > 60-70%)</div>
+                    <div>Cần Xử Lý: <b id="g3Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
-                    <span class="step-badge" style="background:#34495e; margin:0;">BƯỚC 4: KÊ ĐƠN</span>
-                    <div><strong>Điều phối xử lý:</strong> Yêu cầu NOC đo Ping truyền dẫn từ trạm về Core. Điều tra nguyên nhân ngoại cảnh nếu Drop Rate tăng cao bất thường.</div>
+                    <span class="action-badge">BƯỚC 4: THỰC THI TỐI ƯU</span> <b>Đầu mối: Đội RNO / Đội Quy Hoạch</b>
+                    <ul>
+                        <li><b>Tối ưu Mềm:</b> Bật Cân bằng tải (Load Balancing) sang L2100/L900. Đổi mã PCI tránh xung đột.</li>
+                        <li><b>Tối ưu Cứng:</b> Cụp góc ngẩng (Downtilt), chỉnh hướng phát (Azimuth) hất user rìa.</li>
+                        <li><b>Đề xuất Nâng cấp:</b> Bật CA, thêm board, hoặc đề xuất nâng cấp 2T2R lên 4T4R nếu mãn tải.</li>
+                    </ul>
                 </div>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead><tr><th>Tên Cell</th><th>Lỗi Ghi Nhận</th><th>Latency (ms)</th><th>Drop Rate (%)</th><th>PRB DL (%)</th><th>BƯỚC 5: CLOSED-LOOP</th></tr></thead>
-                        <tbody id="g3Body"></tbody>
-                    </table>
-                </div>
-                <div class="pagination-bar">
-                    <div class="page-info">Hiển thị <select id="sizeG3" onchange="changePageSize('G3')"><option value="10" selected>10</option><option value="20">20</option><option value="50">50</option></select> dòng</div>
-                    <div class="page-controls" id="pageControlsG3"></div>
-                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Tên Cell</th><th>Lỗi Đánh Giá</th>
+                            <th>PRB DL<br><small style="color:#7f8c8d">> 60%</small></th>
+                            <th>Thput DL<br><small style="color:#7f8c8d">< 15 Mbps</small></th>
+                            <th>CQI 4G<br><small style="color:#7f8c8d">Thực tế</small></th>
+                            <th style="text-align: center;">BƯỚC 5: ĐÓNG VÒNG (T+1)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="g3Body"></tbody>
+                </table>
             </div>
 
         </div>
@@ -173,38 +185,35 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const xlsxScript = document.createElement('script');
-        xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
-        document.head.appendChild(xlsxScript);
-    });
-
-    const O_STATE = {
-        'G1': { data: [], page: 1, size: 10 },
-        'G2': { data: [], page: 1, size: 10 },
-        'G3': { data: [], page: 1, size: 10 }
-    };
-
     async function runOptimization() {
         const week = document.getElementById('weekSelect').value;
         const filterBL = document.getElementById('blacklistCheck').checked;
 
-        if (!week) { alert("Vui lòng import dữ liệu QoE/QoS!"); return; }
-
         document.getElementById('loadingMsg').style.display = 'block';
         document.getElementById('errorMsg').style.display = 'none';
-        ['summaryBox', 'group1', 'group2', 'group3', 'btnExport'].forEach(id => document.getElementById(id).style.display = 'none');
+        document.getElementById('summaryBox').style.display = 'none';
+        ['group1', 'group2', 'group3'].forEach(id => document.getElementById(id).style.display = 'none');
 
         try {
             const response = await fetch(`/api/optimizing-data?week=${encodeURIComponent(week)}&filterBlacklist=${filterBL}`);
             const result = await response.json();
+
             document.getElementById('loadingMsg').style.display = 'none';
 
-            if (result.error || result.message) {
-                let el = document.getElementById('errorMsg');
-                el.innerText = result.error || result.message;
-                el.className = result.error ? 'alert alert-danger' : 'alert alert-success';
-                el.style.display = 'block'; return;
+            if (result.error) {
+                document.getElementById('errorMsg').innerText = result.error;
+                document.getElementById('errorMsg').className = 'alert alert-danger';
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
+            }
+
+            if (result.message) {
+                document.getElementById('errorMsg').innerText = result.message;
+                document.getElementById('errorMsg').className = 'alert alert-success';
+                document.getElementById('errorMsg').style.color = '#27ae60';
+                document.getElementById('errorMsg').style.backgroundColor = '#e8f8f5';
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
             }
 
             document.getElementById('sumTotal').innerText = result.stats.totalBad;
@@ -212,101 +221,43 @@
             document.getElementById('sumValid').innerText = result.stats.analyzed;
             document.getElementById('summaryBox').style.display = 'block';
 
-            O_STATE['G1'].data = result.data.group1;
-            O_STATE['G2'].data = result.data.group2;
-            O_STATE['G3'].data = result.data.group3;
+            const renderRow = (r, type) => {
+                let m = r.metrics;
+                let v = r.vios;
+                let btn = `<a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📈 Xem KPI T+1</a>`;
+                
+                if(type === 1) return `<tr><td><b>${r.Cell_Name}</b></td><td style="color:#7f8c8d">${r.Type}</td><td class="${v.thput ? 'metric-bad' : ''}">${m.thput}</td><td class="${v.latency ? 'metric-bad' : ''}">${m.latency}</td><td>${m.prb}</td><td style="text-align:center;">${btn}</td></tr>`;
+                
+                if(type === 2) return `<tr><td><b>${r.Cell_Name}</b></td><td style="color:#7f8c8d">${r.Type}</td><td class="${v.cqi ? 'metric-bad' : ''}">${m.cqi}</td><td class="${v.drop ? 'metric-bad' : ''}">${m.drop_rate}</td><td>${m.thput}</td><td style="text-align:center;">${btn}</td></tr>`;
+                
+                if(type === 3) return `<tr><td><b>${r.Cell_Name}</b></td><td style="color:#7f8c8d">${r.Type}</td><td class="${v.prb ? 'metric-bad' : ''}">${m.prb}</td><td class="${v.thput ? 'metric-bad' : ''}">${m.thput}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
+            };
 
-            if (O_STATE['G1'].data.length > 0) {
-                document.getElementById('g1Count').innerText = O_STATE['G1'].data.length;
+            const data = result.data;
+            
+            if (data.group1.length > 0) {
+                document.getElementById('g1Count').innerText = data.group1.length;
+                document.getElementById('g1Body').innerHTML = data.group1.map(r => renderRow(r, 1)).join('');
                 document.getElementById('group1').style.display = 'block';
-                renderTable('G1');
             }
-            if (O_STATE['G2'].data.length > 0) {
-                document.getElementById('g2Count').innerText = O_STATE['G2'].data.length;
+
+            if (data.group2.length > 0) {
+                document.getElementById('g2Count').innerText = data.group2.length;
+                document.getElementById('g2Body').innerHTML = data.group2.map(r => renderRow(r, 2)).join('');
                 document.getElementById('group2').style.display = 'block';
-                renderTable('G2');
             }
-            if (O_STATE['G3'].data.length > 0) {
-                document.getElementById('g3Count').innerText = O_STATE['G3'].data.length;
+
+            if (data.group3.length > 0) {
+                document.getElementById('g3Count').innerText = data.group3.length;
+                document.getElementById('g3Body').innerHTML = data.group3.map(r => renderRow(r, 3)).join('');
                 document.getElementById('group3').style.display = 'block';
-                renderTable('G3');
             }
 
-            document.getElementById('btnExport').style.display = 'block';
-
-        } catch (error) { document.getElementById('loadingMsg').style.display = 'none'; }
-    }
-
-    const renderRow = (r, type) => {
-        let m = r.metrics;
-        let btn = `<a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">🔎 Kiểm tra phục hồi</a>`;
-        if(type === 'G1') return `<tr><td><b>${r.Cell_Name}</b></td><td>${r.Type}</td><td class="${m.prb > 65 ? 'metric-bad' : ''}">${m.prb}</td><td class="${m.thput < 15 ? 'metric-bad' : ''}">${m.thput}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
-        if(type === 'G2') return `<tr><td><b>${r.Cell_Name}</b></td><td>${r.Type}</td><td class="${m.cqi < 90 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${m.erab < 99.5 ? 'metric-bad' : ''}">${m.erab}</td><td>${m.thput}</td><td style="text-align:center;">${btn}</td></tr>`;
-        if(type === 'G3') return `<tr><td><b>${r.Cell_Name}</b></td><td>${r.Type}</td><td class="${m.latency > 50 ? 'metric-bad' : ''}">${m.latency}</td><td class="${m.drop_rate > 0.3 ? 'metric-bad' : ''}">${m.drop_rate}</td><td>${m.prb}</td><td style="text-align:center;">${btn}</td></tr>`;
-    };
-
-    function renderTable(type) {
-        const tbody = document.getElementById(type.toLowerCase() + 'Body');
-        tbody.innerHTML = '';
-        
-        let state = O_STATE[type];
-        const start = (state.page - 1) * state.size;
-        const pageData = state.data.slice(start, start + state.size);
-
-        tbody.innerHTML = pageData.map(r => renderRow(r, type)).join('');
-        renderPagination(type);
-    }
-
-    function renderPagination(type) {
-        let state = O_STATE[type];
-        const totalPages = Math.ceil(state.data.length / state.size);
-        const controls = document.getElementById('pageControls' + type);
-        controls.innerHTML = '';
-
-        if (totalPages <= 1) return;
-
-        controls.insertAdjacentHTML('beforeend', `<button class="btn-page" onclick="goToPage('${type}', ${state.page - 1})" ${state.page === 1 ? 'disabled' : ''}>&laquo;</button>`);
-        for (let i = 1; i <= totalPages; i++) {
-            if (i === 1 || i === totalPages || (i >= state.page - 1 && i <= state.page + 1)) {
-                controls.insertAdjacentHTML('beforeend', `<button class="btn-page ${state.page === i ? 'active' : ''}" onclick="goToPage('${type}', ${i})">${i}</button>`);
-            } else if (i === state.page - 2 || i === state.page + 2) {
-                controls.insertAdjacentHTML('beforeend', `<span style="padding: 5px;">...</span>`);
-            }
+        } catch (error) {
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('errorMsg').innerText = 'Lỗi kết nối đến máy chủ CSDL.';
+            document.getElementById('errorMsg').style.display = 'block';
         }
-        controls.insertAdjacentHTML('beforeend', `<button class="btn-page" onclick="goToPage('${type}', ${state.page + 1})" ${state.page === totalPages ? 'disabled' : ''}>&raquo;</button>`);
-    }
-
-    function goToPage(type, page) {
-        let state = O_STATE[type];
-        const totalPages = Math.ceil(state.data.length / state.size);
-        if (page >= 1 && page <= totalPages) {
-            state.page = page; renderTable(type);
-            document.getElementById('group' + type.charAt(1)).querySelector('.table-wrapper').scrollTop = 0;
-        }
-    }
-
-    function changePageSize(type) {
-        O_STATE[type].size = parseInt(document.getElementById('size' + type).value);
-        O_STATE[type].page = 1; renderTable(type);
-    }
-
-    function exportToExcel() {
-        if (typeof XLSX === 'undefined') { alert('Đang tải Excel...'); return; }
-        // ... (Giữ nguyên logic export cũ)
-        let wb = XLSX.utils.book_new();
-        let safeWeekName = document.getElementById('weekSelect').value.replace(/[\\\/\:\*\?\"\<\>\|]/g, '_');
-
-        const exportGroup = (type, sheetName) => {
-            if(O_STATE[type].data.length === 0) return;
-            let ws = XLSX.utils.json_to_sheet(O_STATE[type].data.map((r,i)=>({
-                "STT": i+1, "Tên Cell": r.Cell_Name, "Loại Lỗi": r.Type,
-                "PRB (%)": r.metrics.prb, "Thput (Mbps)": r.metrics.thput, "CQI (%)": r.metrics.cqi,
-                "Latency (ms)": r.metrics.latency, "Drop Rate (%)": r.metrics.drop_rate, "ERAB (%)": r.metrics.erab
-            })));
-            XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        };
-        exportGroup('G1', "UuTien1_UXI3"); exportGroup('G2', "UuTien2_UXI1"); exportGroup('G3', "UuTien3_UXI2");
-        XLSX.writeFile(wb, `Toi_Uu_CEM_${safeWeekName}.xlsx`);
     }
 </script>
 </body>
