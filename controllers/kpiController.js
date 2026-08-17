@@ -250,27 +250,31 @@ exports.getOptimizingPage = async (req, res) => {
     }
 };
 
+/* STREAMING_CHUNK:Executing CEM/QoS optimization algorithms... */
 exports.getOptimizingData = async (req, res) => {
+    const db = require('../models/db'); // Đảm bảo đã khai báo db
     const week = req.query.week;
     const filterBlacklist = req.query.filterBlacklist === 'true';
 
     if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
 
     try {
+        // BƯỚC 1: LỌC BADCELL TỪ BÁO CÁO TUẦN (< 3 ĐIỂM)
         const queryBadCells = `
-            SELECT Cell_Name, QoE_Rank as Score, 'Vi phạm QoE' as Type FROM mbb_qoe WHERE Tuan = ? AND QoE_Rank < 3
+            SELECT Cell_Name, QoE_Rank as Score, 'Vi phạm CEM' as Type FROM qoe_qos WHERE QoE_Rank < 3
             UNION
-            SELECT Cell_Name, QoS_Rank as Score, 'Vi phạm QoS' as Type FROM mbb_qos WHERE Tuan = ? AND QoS_Rank < 3
+            SELECT Cell_Name, QoS_Rank as Score, 'Vi phạm QoS' as Type FROM qoe_qos WHERE QoS_Rank < 3
         `;
-        const [badCellsRaw] = await db.query(queryBadCells, [week, week]);
+        const [badCellsRaw] = await db.query(queryBadCells);
 
         if (badCellsRaw.length === 0) {
-            return res.json({ message: "Mạng lưới rất tốt! Không tìm thấy Cell nào có điểm QoE/QoS < 3 trong tuần này.", data: null });
+            return res.json({ message: "Mạng lưới rất tốt! Không tìm thấy Cell nào có điểm CEM/QoS < 3 sao.", data: null });
         }
 
         let blacklistedCount = 0;
         let validCellsObj = {};
         
+        // BƯỚC 1 (Tiếp): ÁP DỤNG BLACKLIST
         badCellsRaw.forEach(row => {
             const cell = row.Cell_Name;
             if (!cell) return;
@@ -289,94 +293,92 @@ exports.getOptimizingData = async (req, res) => {
             }
 
             if (!validCellsObj[cell]) validCellsObj[cell] = { Cell_Name: cell, issues: [] };
-            if (!validCellsObj[cell].issues.includes(row.Type)) {
-                validCellsObj[cell].issues.push(row.Type);
-            }
+            if (!validCellsObj[cell].issues.includes(row.Type)) validCellsObj[cell].issues.push(row.Type);
         });
 
         const targetCells = Object.keys(validCellsObj);
         if (targetCells.length === 0) {
-             return res.json({ message: `Đã lọc ${blacklistedCount} trạm Blacklist bất khả kháng. Hiện không còn trạm nào cần phân tích khẩn cấp.`, data: null });
+             return res.json({ message: `Đã loại trừ ${blacklistedCount} trạm Blacklist bất khả kháng. Hiện không còn trạm nào cần phân tích khẩn cấp.`, data: null });
         }
 
-        const placeholders = targetCells.map(() => '?').join(',');
-        let kpiData = [];
+        // BƯỚC 2: BÓC TÁCH NGUYÊN NHÂN (PHÂN TÍCH KPI NGÀY - QUY TẮC 5/7)
+        // Lấy 7 ngày mới nhất
+        const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
+        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-')));
+        const targetDates = dates.slice(0, 7);
         
+        if (targetDates.length === 0) return res.json({ error: "Chưa có dữ liệu KPI ngày để phân tích quy tắc 5/7." });
+
+        const placeholders = targetCells.map(() => '?').join(',');
+        const datePlaceholders = targetDates.map(() => '?').join(',');
+        
+        let kpiData = [];
         try {
             let queryKpi = `
                 SELECT Cell_name,
+                       SUM(CASE WHEN User_DL_Avg_Throughput_Kbps < 15000 THEN 1 ELSE 0 END) as v_thput,
+                       SUM(CASE WHEN RB_Util_Rate_DL > 60 THEN 1 ELSE 0 END) as v_prb,
+                       SUM(CASE WHEN CQI_4G < 90 THEN 1 ELSE 0 END) as v_cqi,
+                       SUM(CASE WHEN Service_Drop_all > 0.5 THEN 1 ELSE 0 END) as v_drop,
+                       SUM(CASE WHEN Downlink_Latency > 50 THEN 1 ELSE 0 END) as v_latency,
                        AVG(User_DL_Avg_Throughput_Kbps) as thput,
                        AVG(Downlink_Latency) as latency,
                        AVG(RB_Util_Rate_DL) as prb,
                        AVG(CQI_4G) as cqi,
-                       AVG(eRAB_Setup_SR_All) as erab,
                        AVG(Service_Drop_all) as drop_rate
                 FROM kpi_4g
-                WHERE Cell_name IN (${placeholders})
+                WHERE Cell_name IN (${placeholders}) AND Thoi_gian IN (${datePlaceholders})
                 GROUP BY Cell_name
             `;
-            [kpiData] = await db.query(queryKpi, targetCells);
+            [kpiData] = await db.query(queryKpi, [...targetCells, ...targetDates]);
         } catch (error) { console.error("Lỗi lấy dữ liệu KPI 4G cho Tối Ưu:", error); }
 
-        let group1 = []; 
-        let group2 = []; 
-        let group3 = []; 
-        let groupUnknown = []; 
+        let group1 = []; // Truyền dẫn
+        let group2 = []; // Vô tuyến
+        let group3 = []; // Nghẽn
 
         kpiData.forEach(row => {
-            const thput = parseFloat(row.thput) || 0;
-            const latency = parseFloat(row.latency) || 0;
-            const prb = parseFloat(row.prb) || 0;
-            const cqi = parseFloat(row.cqi) || 0;
-            const erab = parseFloat(row.erab) || 100;
-            const drop_rate = parseFloat(row.drop_rate) || 0;
+            // Loại bỏ các cell không vi phạm luật 5/7 nào
+            if (row.v_thput < 5 && row.v_prb < 5 && row.v_cqi < 5 && row.v_drop < 5 && row.v_latency < 5) return;
 
             const cellInfo = {
                 Cell_Name: row.Cell_name,
                 Type: validCellsObj[row.Cell_name].issues.join(' & '),
                 metrics: { 
-                    thput: (thput/1000).toFixed(2), 
-                    latency: latency.toFixed(1), 
-                    prb: prb.toFixed(1), 
-                    cqi: cqi.toFixed(1), 
-                    erab: erab.toFixed(2), 
-                    drop_rate: drop_rate.toFixed(2) 
+                    thput: (parseFloat(row.thput)/1000).toFixed(2), 
+                    latency: parseFloat(row.latency).toFixed(1), 
+                    prb: parseFloat(row.prb).toFixed(1), 
+                    cqi: parseFloat(row.cqi).toFixed(1), 
+                    drop_rate: parseFloat(row.drop_rate).toFixed(2) 
+                },
+                vios: {
+                    thput: row.v_thput >= 5, latency: row.v_latency >= 5,
+                    prb: row.v_prb >= 5, cqi: row.v_cqi >= 5, drop: row.v_drop >= 5
                 }
             };
 
-            // BỘ LỌC MỚI CHUẨN CEM MBB (Áp dụng từ 01/05/2026)
-            // Nhóm 1: Ưu tiên tối cao UXI 3 (Video) - Trọng số 70% (Nghẽn PRB hoặc Thput thấp)
-            if (prb > 65 || thput < 15000) { 
-                group1.push(cellInfo); 
+            // BƯỚC 3: PHÂN NHÓM CHỈ ĐỊNH XỬ LÝ
+            // Nhóm Truyền dẫn (Tốc độ thấp + Trễ cao + PRB không quá tải)
+            if (row.v_thput >= 5 && row.v_latency >= 5 && row.v_prb < 5) {
+                group1.push(cellInfo);
             } 
-            // Nhóm 2: Ưu tiên UXI 1 & Yếu tố dập nhiễu (Khả năng truy cập & CQI)
-            else if (cqi < 90 || erab < 99.5) { 
-                group2.push(cellInfo); 
+            // Nhóm Nghẽn tài nguyên (PRB liên tục > 60-70%)
+            else if (row.v_prb >= 5) {
+                group3.push(cellInfo);
             } 
-            // Nhóm 3: UXI 2 (Tính toàn vẹn Data) - Trọng số 10% (Truyền dẫn, Rớt mạng)
-            else if (latency > 50 || drop_rate > 0.3) { 
-                group3.push(cellInfo); 
+            // Nhóm Vô tuyến & Thiết bị (Nhiễu CQI hoặc Rớt dịch vụ cao)
+            else if (row.v_cqi >= 5 || row.v_drop >= 5) {
+                group2.push(cellInfo);
             } 
-            else { 
-                groupUnknown.push(cellInfo); 
+            // Vét mẻ cuối: Nếu tốc độ rùa bò mà không rõ nguyên nhân, quăng vào nhóm Vô tuyến kiểm tra
+            else {
+                group2.push(cellInfo);
             }
-            
-            const idx = targetCells.indexOf(row.Cell_name);
-            if (idx > -1) targetCells.splice(idx, 1);
-        });
-
-        targetCells.forEach(cell => {
-            groupUnknown.push({
-                Cell_Name: cell,
-                Type: validCellsObj[cell].issues.join(' & '),
-                metrics: { thput: '-', latency: '-', prb: '-', cqi: '-', erab: '-', drop_rate: '-' },
-                note: "Chưa có dữ liệu KPI 4G để bắt bệnh"
-            });
         });
 
         res.json({
-            stats: { totalBad: badCellsRaw.length, blacklisted: blacklistedCount, analyzed: Object.keys(validCellsObj).length },
-            data: { group1, group2, group3, groupUnknown }
+            stats: { totalBad: badCellsRaw.length, blacklisted: blacklistedCount, analyzed: kpiData.length },
+            data: { group1, group2, group3 }
         });
 
     } catch (error) {
