@@ -410,7 +410,7 @@ exports.getOptimizingData = async (req, res) => {
             if (parseFloat(avgThput) < 18) qosIssues.push('SQI 5: Tốc độ tải xuống thấp (< 18-25 Mbps)');
 
             // [FIX ĐỘC QUYỀN]: Xử lý đúng logic Cảnh báo
-            let finalCemIssue = cemIssues.length > 0 ? cemIssues.join(' | ') : (cellInfo.QoE_Rank < 4 ? 'Cảnh báo CEM < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (QoE >= 4 sao)');
+            let finalCemIssue = cemIssues.length > 0 ? cemIssues.join(' | ') : (cellInfo.QoE_Rank < 4 ? 'Cảnh báo CEM < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (CEM >= 4 sao)');
             let finalQosIssue = qosIssues.length > 0 ? qosIssues.join(' | ') : (cellInfo.QoS_Rank < 4 ? 'Cảnh báo QoS < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (QoS >= 4 sao)');
 
             const item = {
