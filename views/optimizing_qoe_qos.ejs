@@ -42,6 +42,7 @@
     .data-table tbody tr:hover { background-color: #fdf2f2; }
 
     .metric-bad { color: #e74c3c; font-weight: bold; background: #fdf2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fad2d2;}
+    .metric-ok { color: #27ae60; font-weight: bold; }
 
     .btn-kpi { background: #3498db; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; transition: 0.2s; border: none; display: inline-block;}
     .btn-kpi:hover { background: #2980b9; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
@@ -64,7 +65,7 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>🛠️ Tối Ưu CEM/QoS (Chuẩn hóa 2304/VNPT-CN)</h1>
+            <h1>🛠️ Tối Ưu CEM/QoS (Chuẩn hóa Barem 2304)</h1>
         </header>
         
         <div class="content-body">
@@ -74,10 +75,10 @@
                 <div class="step-desc">
                     Hệ thống tự động hóa phễu lọc theo <b>Văn bản 2304/VNPT-CN</b>:
                     <ul>
-                        <li><b>Bước 1: Badcell 4G</b> (CEM < 3 sao HOẶC QoS < 3 sao). Kiểm soát tỷ lệ Badcell ≤ 3% (Tỉnh) & ≤ 5% (Miền núi/Hải đảo).</li>
-                        <li><b>Bước 2: Blacklist 4G</b> (Gạt bỏ trạm Vùng hở, VSAT-IP, Booster, IBS/DAS cũ 2T2R, Ngụy trang che chắn).</li>
-                        <li><b>Bước 3 & 4: Truy vết Barem</b> (Đối chiếu 7 ngày KPI với barem Băng thông 5-20MHz và MIMO 1T1R/2T2R/4T4R).</li>
-                        <li><b>Tự động Cảnh Báo Chuỗi 3 Ngày (Work Order):</b> Xuất danh sách khẩn giao việc UCTT/RNO khi bị Tag "Nguy kịch" 3 ngày liên tiếp.</li>
+                        <li><b>Bước 1: Nhận diện "Badcell 4G"</b> (QoE_Rank < 4 HOẶC QoS_Rank < 4). Đưa vào danh sách theo dõi đặc biệt.</li>
+                        <li><b>Bước 2: Lọc ngoại trừ (Blacklist 4G)</b> Miễn xử lý 6 tháng đối với trạm Vùng hở, VSAT-IP, Booster, IBS/DAS cũ 2T2R.</li>
+                        <li><b>Bước 3 & 4: Truy vết Barem</b> Phân rã nguyên nhân trải nghiệm (Network CEM) và kỹ thuật vô tuyến (QoS SQI 1-5).</li>
+                        <li><b>Tự động Cảnh Báo Chuỗi (Automation):</b> Xuất báo cáo Work Order khi bị Tag "Nguy kịch" 3 ngày liên tiếp.</li>
                     </ul>
                 </div>
                 
@@ -116,15 +117,15 @@
             <div id="errorMsg" style="display: none; text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; background: #fdf2f2; border: 1px solid #fad2d2; border-radius: 8px; margin-bottom: 25px;"></div>
 
             <div id="summaryBox" class="summary-box">
-                <b>BÁO CÁO PHỄU LỌC TỔNG HỢP:</b> Phát hiện <span id="sumTotal">0</span> Badcell 4G (< 3 điểm CEM/QoS). 
+                <b>BÁO CÁO PHỄU LỌC TỔNG HỢP:</b> Phát hiện <span id="sumTotal">0</span> Badcell 4G (< 4 điểm CEM/QoS). 
                 Đã miễn trừ <span id="sumBlack">0</span> trạm Blacklist. 
-                Đã lập <span id="sumWO" style="color:#c0392b">0</span> phiếu Work Order khẩn (Tag "Nguy kịch" 3 ngày liên tiếp). 
+                Đã lập <span id="sumWO" style="color:#c0392b">0</span> phiếu Work Order khẩn. 
                 Phân rã <span id="sumCEM" style="color:#8e44ad">0</span> Cell lỗi CEM và <span id="sumQoS" style="color:#2980b9">0</span> Cell lỗi QoS.
             </div>
 
             <!-- TAB CONTAINER -->
             <div class="nav-tabs" id="tabContainer" style="display: none;">
-                <button class="nav-tab-btn active" onclick="switchTab(1)">🚨 Work Order Chuỗi 3 Ngày (<span id="cntTab1">0</span>)</button>
+                <button class="nav-tab-btn active" onclick="switchTab(1)">🚨 Cảnh Báo Chuỗi (Work Order) (<span id="cntTab1">0</span>)</button>
                 <button class="nav-tab-btn" onclick="switchTab(2)">⭐ Phân Rã CEM MBB (<span id="cntTab2">0</span>)</button>
                 <button class="nav-tab-btn" onclick="switchTab(3)">⚙️ Phân Rã QoS 4G SQI (<span id="cntTab3">0</span>)</button>
                 <button class="nav-tab-btn" onclick="switchTab(4)">⚠️ Tag "Theo Dõi" Sát Ngưỡng (<span id="cntTab4">0</span>)</button>
@@ -133,8 +134,7 @@
             <!-- TAB 1: WORK ORDER CHUỖI 3 NGÀY NGUY KỊCH -->
             <div class="group-card" id="group1">
                 <div class="group-header g-workorder">
-                    <div>🚨 PHIẾU KHẨN WORK ORDER: CELL "NGUY KỊCH" 3 NGÀY LIÊN TIẾP (HOẶC CEM/QOS < 2 SAO)</div>
-                    <div>Cần Hiện Trường: <b id="g1Count" style="font-size: 18px;">0</b></div>
+                    <div>🚨 PHIẾU KHẨN WORK ORDER: TAG NGUY KỊCH 3 NGÀY LIÊN TIẾP (HOẶC < 2 SAO)</div>
                 </div>
                 <div class="action-box">
                     <span class="action-badge" style="background:#c0392b">GIAO UCTT / RNO</span> <b>Hành động khẩn cấp:</b>
@@ -169,8 +169,7 @@
             <!-- TAB 2: PHÂN RÃ CEM MBB -->
             <div class="group-card" id="group2">
                 <div class="group-header g-cem">
-                    <div>⭐ PHÂN RÃ NGUYÊN NHÂN TRẢI NGHIỆM KHÁCH HÀNG (NETWORK CEM MBB)</div>
-                    <div>Cần Tối Ưu: <b id="g2Count" style="font-size: 18px;">0</b></div>
+                    <div>⭐ BƯỚC 3: PHÂN RÃ NGUYÊN NHÂN TRẢI NGHIỆM KHÁCH HÀNG (NETWORK CEM MBB)</div>
                 </div>
                 <div class="action-box">
                     <span class="action-badge" style="background:#8e44ad">PHÂN TÍCH UXI</span> <b>Ngưỡng Barem 2304/VNPT-CN:</b>
@@ -189,7 +188,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>STT</th><th>Tên Cell</th><th>CEM Rank</th><th>Chỉ Số CEM Thấp</th>
+                                <th>STT</th><th>Tên Cell</th><th>CEM Rank</th><th>Chỉ Số CEM Nhận Diện</th>
                                 <th>Thput DL<br><small style="color:#7f8c8d">< 3 Mbps</small></th>
                                 <th>Latency<br><small style="color:#7f8c8d">> 300 ms</small></th>
                                 <th>eRAB Setup<br><small style="color:#7f8c8d">< 92%</small></th>
@@ -205,8 +204,7 @@
             <!-- TAB 3: PHÂN RÃ QOS 4G SQI -->
             <div class="group-card" id="group3">
                 <div class="group-header g-qos">
-                    <div>⚙️ PHÂN RÃ TRUY VẾT KỸ THUẬT VÔ TUYẾN (QOS 4G SQI)</div>
-                    <div>Cần Tối Ưu: <b id="g3Count" style="font-size: 18px;">0</b></div>
+                    <div>⚙️ BƯỚC 4: TRUY VẾT KỸ THUẬT VÔ TUYẾN (QOS 4G SQI)</div>
                 </div>
                 <div class="action-box">
                     <span class="action-badge" style="background:#2980b9">PHÂN TÍCH SQI</span> <b>Ngưỡng Barem 2304/VNPT-CN:</b>
@@ -243,7 +241,6 @@
             <div class="group-card" id="group4">
                 <div class="group-header g-warning">
                     <div>⚠️ TAG "THEO DÕI": DANH SÁCH MẤP MÉ SÁT NGƯỠNG NGUY HẠI (PRB 65-69%)</div>
-                    <div>Số Lượng: <b id="g4Count" style="font-size: 18px;">0</b></div>
                 </div>
                 <div class="action-box">
                     <span class="action-badge" style="background:#d35400">TỐI ƯU SỚM</span> <b>Cảnh báo sớm:</b>
@@ -315,11 +312,18 @@
         
         if(type === 1) return `<tr><td>${index}</td><td><b style="color:#c0392b">${r.Cell_Name}</b></td><td>${r.District}</td><td>${r.MIMO}</td><td>${r.QoE_Rank}</td><td>${r.QoS_Rank}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) >= 70 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 1 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
         
-        if(type === 2) return `<tr><td>${index}</td><td><b style="color:#8e44ad">${r.Cell_Name}</b></td><td>${r.QoE_Rank}</td><td style="font-size:12px; color:#c0392b;">${r.cemIssues}</td><td class="${parseFloat(m.thput) < 3 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.latency) > 300 ? 'metric-bad' : ''}">${m.latency}</td><td class="${parseFloat(m.erab) < 92 ? 'metric-bad' : ''}">${m.erab}</td><td style="text-align:center;">${btn}</td></tr>`;
-        
-        if(type === 3) return `<tr><td>${index}</td><td><b style="color:#2980b9">${r.Cell_Name}</b></td><td>${r.MIMO}</td><td>${r.QoS_Rank}</td><td style="font-size:12px; color:#c0392b;">${r.qosIssues}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) >= 70 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 1 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
-        
+        if(type === 2) {
+            let isCemOk = !r.cemIssues.includes('< 3 Mbps') && !r.cemIssues.includes('> 300ms') && !r.cemIssues.includes('< 92%');
+            return `<tr><td>${index}</td><td><b style="color:#8e44ad">${r.Cell_Name}</b></td><td>${r.QoE_Rank}</td><td style="font-size:12px; font-weight:bold; color:${isCemOk ? '#27ae60' : '#c0392b'};">${r.cemIssues}</td><td class="${parseFloat(m.thput) < 3 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.latency) > 300 ? 'metric-bad' : ''}">${m.latency}</td><td class="${parseFloat(m.erab) < 92 ? 'metric-bad' : ''}">${m.erab}</td><td style="text-align:center;">${btn}</td></tr>`;
+        }
+
+        if(type === 3) {
+            let isQosOk = !r.qosIssues.includes('SQI');
+            return `<tr><td>${index}</td><td><b style="color:#2980b9">${r.Cell_Name}</b></td><td>${r.MIMO}</td><td>${r.QoS_Rank}</td><td style="font-size:12px; font-weight:bold; color:${isQosOk ? '#27ae60' : '#c0392b'};">${r.qosIssues}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) >= 70 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 1 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
+        }
+
         if(type === 4) return `<tr><td>${index}</td><td><b style="color:#d35400">${r.Cell_Name}</b></td><td>${r.District}</td><td>${r.MIMO}</td><td class="${parseFloat(m.prb) >= 65 ? 'metric-bad' : ''}">${m.prb}</td><td>${m.thput}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
+        
         return '';
     };
 
@@ -406,9 +410,9 @@
 
             document.getElementById('sumTotal').innerText = result.stats.totalBad;
             document.getElementById('sumBlack').innerText = result.stats.blacklisted;
-            document.getElementById('sumWO').innerText = result.stats.workOrderCount || 0;
-            document.getElementById('sumCEM').innerText = result.stats.cemCount || 0;
-            document.getElementById('sumQoS').innerText = result.stats.qosCount || 0;
+            document.getElementById('sumWO').innerText = result.data.workOrderList.length;
+            document.getElementById('sumCEM').innerText = result.data.cemBreakdownList.length;
+            document.getElementById('sumQoS').innerText = result.data.qosBreakdownList.length;
             document.getElementById('summaryBox').style.display = 'block';
 
             const data = result.data;
@@ -424,7 +428,6 @@
 
             document.getElementById('tabContainer').style.display = 'flex';
 
-            // Mặc định kích hoạt Tab đầu tiên có dữ liệu
             let activeTab = 1;
             if (window.optData[1].length === 0) {
                 if (window.optData[2].length > 0) activeTab = 2;
@@ -449,7 +452,7 @@
         }
 
         let wb = XLSX.utils.book_new();
-        let currentWeek = document.getElementById('weekSelect').value || '2304_VNPT';
+        let currentWeek = document.getElementById('weekSelect').value || 'Bao_Cao';
         let safeWeekName = currentWeek.replace(/[\\\/\:\*\?\"\<\>\|]/g, '_').replace(/\s+/g, '_');
 
         const formatExcelData = (dataArray) => {
@@ -473,7 +476,7 @@
             }));
         };
 
-        if (window.optData[1].length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExcelData(window.optData[1])), "1_WorkOrder_3Ngay");
+        if (window.optData[1].length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExcelData(window.optData[1])), "1_WorkOrder_LienTiep");
         if (window.optData[2].length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExcelData(window.optData[2])), "2_PhanRa_CEM_MBB");
         if (window.optData[3].length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExcelData(window.optData[3])), "3_PhanRa_QoS_4G_SQI");
         if (window.optData[4].length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExcelData(window.optData[4])), "4_Tag_TheoDoi");
@@ -483,7 +486,7 @@
             return;
         }
         
-        XLSX.writeFile(wb, `Bao_Cao_Toi_Uu_4G_2304_${safeWeekName}.xlsx`);
+        XLSX.writeFile(wb, `Bao_Cao_Toi_Uu_2304_${safeWeekName}.xlsx`);
     }
 </script>
 </body>
