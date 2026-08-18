@@ -229,22 +229,21 @@ exports.getOptimizingPage = async (req, res) => {
     }
 };
 
-// =====================================================================
-// TỐI ƯU CEM / QOS THEO QUY TRÌNH & BAREM ĐIỂM SỐ 2304/VNPT-CN 4G
-// =====================================================================
+/* STREAMING_CHUNK:Executing Barem 2304 MBB Optimization... */
 exports.getOptimizingData = async (req, res) => {
+    const db = require('../models/db');
     const week = req.query.week;
     const filterBlacklist = req.query.filterBlacklist === 'true';
 
     if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
 
     try {
-        // BƯỚC 1: NHẬN DIỆN BADCELL 4G (QoE_Rank < 3 HOẶC QoS_Rank < 3)
+        // BƯỚC 1: NHẬN DIỆN BADCELL 4G (QoE_Rank < 4 HOẶC QoS_Rank < 4)
         const queryBadCells = `
             SELECT Site_Name, Cell_Name, District, MIMO, QoE_Rank, QoE_Score, QoS_Rank, QoS_Score 
             FROM qoe_qos 
-            WHERE (QoE_Rank IS NOT NULL AND QoE_Rank < 3) 
-               OR (QoS_Rank IS NOT NULL AND QoS_Rank < 3)
+            WHERE (QoE_Rank IS NOT NULL AND QoE_Rank < 4) 
+               OR (QoS_Rank IS NOT NULL AND QoS_Rank < 4)
         `;
         let badCellsRaw = [];
         try {
@@ -252,17 +251,17 @@ exports.getOptimizingData = async (req, res) => {
             badCellsRaw = rows;
         } catch (dbError) {
             console.error("Lỗi CSDL Bảng qoe_qos:", dbError);
-            return res.json({ error: "Bảng dữ liệu qoe_qos chưa tồn tại hoặc trống. Vui lòng Import dữ liệu QoE/QoS vào hệ thống." });
+            return res.json({ error: "Bảng dữ liệu qoe_qos chưa tồn tại hoặc trống." });
         }
 
         if (badCellsRaw.length === 0) {
-            return res.json({ message: "Mạng lưới đạt chuẩn 2304/VNPT-CN! Không tìm thấy Badcell 4G nào dưới 3 điểm ở cả CEM và QoS.", data: null });
+            return res.json({ message: "Mạng lưới đạt chuẩn! Không tìm thấy Badcell 4G nào dưới 4 điểm ở cả CEM và QoS.", data: null });
         }
 
         let blacklistedCount = 0;
         let validCellsObj = {};
 
-        // BƯỚC 2: LỌC NGOẠI TRỪ (BLACKLIST 4G MIỄN TRỪ 06 THÁNG)
+        // BƯỚC 2: LỌC NGOẠI TRỪ (BLACKLIST 4G)
         badCellsRaw.forEach(row => {
             const cell = row.Cell_Name;
             if (!cell) return;
@@ -281,29 +280,22 @@ exports.getOptimizingData = async (req, res) => {
             }
 
             validCellsObj[upperCell] = {
-                Cell_Name: upperCell,
-                Site_Name: row.Site_Name || '',
-                District: row.District || '',
-                MIMO: row.MIMO || '2T2R',
-                QoE_Rank: row.QoE_Rank,
-                QoE_Score: row.QoE_Score,
-                QoS_Rank: row.QoS_Rank,
-                QoS_Score: row.QoS_Score
+                Cell_Name: upperCell, Site_Name: row.Site_Name || '',
+                District: row.District || '', MIMO: row.MIMO || '2T2R',
+                QoE_Rank: row.QoE_Rank, QoE_Score: row.QoE_Score,
+                QoS_Rank: row.QoS_Rank, QoS_Score: row.QoS_Score
             };
         });
 
         const targetCells = Object.keys(validCellsObj);
         if (targetCells.length === 0) {
-            return res.json({ message: `Đã miễn trừ ${blacklistedCount} trạm Blacklist (VSAT, DAS cũ, Biên giới/Hải đảo). Hiện không còn Badcell cần xử lý.`, data: null });
+            return res.json({ message: `Đã miễn trừ ${blacklistedCount} trạm Blacklist. Hiện không còn Badcell cần xử lý.`, data: null });
         }
 
-        // BƯỚC 3 & 4: TRUY VẾT DỮ LIỆU KPI 7 NGÀY THEO CÁC BAREM BĂNG THÔNG & MIMO
+        // BƯỚC 3 & 4: TRUY VẾT DỮ LIỆU KPI 7 NGÀY
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
-        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
-            const pA = a.split('/'); const pB = b.split('/');
-            return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
-        });
-        const targetDates = dates.slice(0, 7); // 7 ngày gần nhất
+        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-')));
+        const targetDates = dates.slice(0, 7); 
 
         const placeholders = targetCells.map(() => '?').join(',');
         const datePlaceholders = targetDates.map(() => '?').join(',');
@@ -325,9 +317,7 @@ exports.getOptimizingData = async (req, res) => {
                 `;
                 const [r] = await db.query(queryKpi, [...targetCells, ...targetDates]);
                 kpiRows = r;
-            } catch (kpiError) {
-                console.error("Lỗi lấy KPI 4G:", kpiError);
-            }
+            } catch (kpiError) {}
         }
 
         let cellKpiMap = {};
@@ -337,10 +327,10 @@ exports.getOptimizingData = async (req, res) => {
             cellKpiMap[upperCell].push(row);
         });
 
-        let workOrderList = [];      // Cảnh báo chuỗi 3 ngày (Nguy kịch)
-        let cemBreakdownList = [];   // Phân rã CEM MBB (UXI 1, UXI 2, UXI 3)
-        let qosBreakdownList = [];   // Phân rã QoS 4G (SQI 1 -> SQI 5)
-        let warningList = [];        // Tag "Theo dõi" (Sát ngưỡng)
+        let workOrderList = [];      
+        let cemBreakdownList = [];   
+        let qosBreakdownList = [];   
+        let warningList = [];        
 
         targetCells.forEach(cellKey => {
             const cellInfo = validCellsObj[cellKey];
@@ -360,8 +350,7 @@ exports.getOptimizingData = async (req, res) => {
                 let sumThput = 0, sumPrb = 0, sumCqi = 0, sumDrop = 0, sumErab = 0, sumLatency = 0;
 
                 rows.forEach((r) => {
-                    const thputKbps = parseFloat(r.thput) || 0;
-                    const thputMbps = thputKbps / 1000;
+                    const thputMbps = (parseFloat(r.thput) || 0) / 1000;
                     const prb = parseFloat(r.prb) || 0;
                     const cqi = parseFloat(r.cqi) || 0;
                     const drop = parseFloat(r.drop_rate) || 0;
@@ -370,52 +359,32 @@ exports.getOptimizingData = async (req, res) => {
                     const cellType = String(r.CellType || '').toUpperCase();
                     const mimo = String(r.MIMO || cellInfo.MIMO || '').toUpperCase();
 
-                    sumThput += thputKbps;
-                    sumPrb += prb;
-                    sumCqi += cqi;
-                    sumDrop += drop;
-                    sumErab += erab;
-                    sumLatency += latency;
+                    sumThput += (parseFloat(r.thput) || 0); sumPrb += prb; sumCqi += cqi; sumDrop += drop; sumErab += erab; sumLatency += latency;
 
-                    // ĐÁNH GIÁ NGƯỠNG CẢNH BÁO ĐỎ THEO CÔNG VĂN 2304/VNPT-CN
                     let dailyViolations = 0;
 
-                    // 1. UXI 3 Video (< 3 Mbps)
+                    // BAREM ĐÁNH GIÁ ĐỎ THEO CÔNG VĂN 2304
                     if (thputMbps < 3) dailyViolations++;
-                    // 2. UXI 2 Upload Latency (> 300 ms)
                     if (latency > 300) dailyViolations++;
 
-                    // 3. SQI 5 Speed Barem:
-                    let speedThreshold = 25; // 15-20MHz
+                    let speedThreshold = 25; 
                     if (cellType.includes('10M')) speedThreshold = 18;
                     if (cellType.includes('5M') || cellType.includes('L900')) speedThreshold = 6;
                     if (thputMbps < speedThreshold) dailyViolations++;
 
-                    // 4. SQI 4 CQI Barem:
-                    let cqiThreshold = 93; // 2T2R
+                    let cqiThreshold = 93; 
                     if (mimo.includes('4T4R')) cqiThreshold = 95;
                     if (mimo.includes('1T1R') || mimo.includes('1T2R')) cqiThreshold = 92;
                     if (cqi < cqiThreshold) dailyViolations++;
 
-                    // 5. SQI 1 Resource (RB Util >= 70%)
                     if (prb >= 70) dailyViolations++;
-
-                    // 6. SQI 3 Retainability (Service Drop > 1%)
                     if (drop > 1) dailyViolations++;
-
-                    // 7. SQI 2 Accessibility (eRAB < 99%)
                     if (erab < 99) dailyViolations++;
 
-                    // Tag Nguy Kịch khi vi phạm >= 2 ngưỡng trong cùng ngày
                     if (dailyViolations >= 2) {
-                        dailyCriticalCount++;
-                        consecutiveCritical++;
-                        if (consecutiveCritical > maxConsecutiveCritical) {
-                            maxConsecutiveCritical = consecutiveCritical;
-                        }
-                    } else {
-                        consecutiveCritical = 0;
-                    }
+                        dailyCriticalCount++; consecutiveCritical++;
+                        if (consecutiveCritical > maxConsecutiveCritical) maxConsecutiveCritical = consecutiveCritical;
+                    } else { consecutiveCritical = 0; }
                 });
 
                 avgThput = (sumThput / count / 1000).toFixed(2); // Mbps
@@ -428,79 +397,47 @@ exports.getOptimizingData = async (req, res) => {
                 avgThput = '-'; avgPrb = '-'; avgCqi = '-'; avgDrop = '-'; avgErab = '-'; avgLatency = '-';
             }
 
-            // PHÂN RÃ NGUYÊN NHÂN CEM MBB
+            // PHÂN RÃ CEM MBB UXI
             if (parseFloat(avgThput) < 3) cemIssues.push('UXI 3: Video giật/vỡ nét (< 3 Mbps)');
             if (parseFloat(avgLatency) > 300) cemIssues.push('UXI 2: Độ trễ quá cao (> 300ms)');
             if (parseFloat(avgErab) < 92) cemIssues.push('UXI 1: Tỷ lệ truy cập gửi tin kém (< 92%)');
 
-            // PHÂN RÃ NGUYÊN NHÂN QOS 4G SQI
+            // PHÂN RÃ QOS 4G SQI
             if (parseFloat(avgPrb) >= 70) qosIssues.push('SQI 1: Mãn tải tài nguyên (RB Util ≥ 70%)');
             if (parseFloat(avgErab) < 99) qosIssues.push('SQI 2: Lỗi thiết lập kênh (eRAB < 99%)');
             if (parseFloat(avgDrop) > 1) qosIssues.push('SQI 3: Tỷ lệ rớt dịch vụ cao (Drop > 1%)');
             if (parseFloat(avgCqi) < 93) qosIssues.push('SQI 4: Nhiễu sóng / Vùng phủ kém (CQI < 93-95%)');
             if (parseFloat(avgThput) < 18) qosIssues.push('SQI 5: Tốc độ tải xuống thấp (< 18-25 Mbps)');
 
+            // [FIX ĐỘC QUYỀN]: Xử lý đúng logic Cảnh báo
+            let finalCemIssue = cemIssues.length > 0 ? cemIssues.join(' | ') : (cellInfo.QoE_Rank < 4 ? 'Cảnh báo CEM < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (QoE >= 4 sao)');
+            let finalQosIssue = qosIssues.length > 0 ? qosIssues.join(' | ') : (cellInfo.QoS_Rank < 4 ? 'Cảnh báo QoS < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (QoS >= 4 sao)');
+
             const item = {
-                Cell_Name: cellInfo.Cell_Name,
-                Site_Name: cellInfo.Site_Name,
-                District: cellInfo.District,
-                MIMO: cellInfo.MIMO,
+                Cell_Name: cellInfo.Cell_Name, Site_Name: cellInfo.Site_Name, District: cellInfo.District, MIMO: cellInfo.MIMO,
                 QoE_Rank: cellInfo.QoE_Rank !== null ? cellInfo.QoE_Rank : '-',
                 QoE_Score: cellInfo.QoE_Score !== null ? Number(cellInfo.QoE_Score).toFixed(2) : '-',
                 QoS_Rank: cellInfo.QoS_Rank !== null ? cellInfo.QoS_Rank : '-',
                 QoS_Score: cellInfo.QoS_Score !== null ? Number(cellInfo.QoS_Score).toFixed(2) : '-',
-                metrics: {
-                    thput: avgThput,
-                    prb: avgPrb,
-                    cqi: avgCqi,
-                    drop_rate: avgDrop,
-                    erab: avgErab,
-                    latency: avgLatency
-                },
-                cemIssues: cemIssues.join(' | ') || 'Cảnh báo CEM < 3 sao',
-                qosIssues: qosIssues.join(' | ') || 'Cảnh báo QoS < 3 sao',
-                criticalDays: dailyCriticalCount,
-                maxConsecutiveCritical: maxConsecutiveCritical
+                metrics: { thput: avgThput, prb: avgPrb, cqi: avgCqi, drop_rate: avgDrop, erab: avgErab, latency: avgLatency },
+                cemIssues: finalCemIssue,
+                qosIssues: finalQosIssue,
+                criticalDays: dailyCriticalCount, maxConsecutiveCritical: maxConsecutiveCritical
             };
 
-            // BƯỚC 5: PHÂN LOẠI TAB & CẢNH BÁO CHUỖI 3 NGÀY
-            if (maxConsecutiveCritical >= 3 || (cellInfo.QoE_Rank < 2 || cellInfo.QoS_Rank < 2)) {
-                workOrderList.push(item);
-            }
-
-            if (cellInfo.QoE_Rank !== null && cellInfo.QoE_Rank < 3) {
-                cemBreakdownList.push(item);
-            }
-
-            if (cellInfo.QoS_Rank !== null && cellInfo.QoS_Rank < 3) {
-                qosBreakdownList.push(item);
-            }
-
-            if (parseFloat(avgPrb) >= 65 || (parseFloat(avgThput) > 3 && parseFloat(avgThput) < 18)) {
-                warningList.push(item);
-            }
+            // BƯỚC 5: PHÂN LOẠI TAB (AUTOMATION LOGIC)
+            if (maxConsecutiveCritical >= 3 || (cellInfo.QoE_Rank < 2 || cellInfo.QoS_Rank < 2)) workOrderList.push(item);
+            if (cellInfo.QoE_Rank !== null && cellInfo.QoE_Rank < 4) cemBreakdownList.push(item);
+            if (cellInfo.QoS_Rank !== null && cellInfo.QoS_Rank < 4) qosBreakdownList.push(item);
+            if (parseFloat(avgPrb) >= 65 || (parseFloat(avgThput) > 3 && parseFloat(avgThput) < 18)) warningList.push(item);
         });
 
         res.json({
-            stats: {
-                totalBad: badCellsRaw.length,
-                blacklisted: blacklistedCount,
-                analyzed: targetCells.length,
-                workOrderCount: workOrderList.length,
-                cemCount: cemBreakdownList.length,
-                qosCount: qosBreakdownList.length,
-                warningCount: warningList.length
-            },
-            data: {
-                workOrderList,
-                cemBreakdownList,
-                qosBreakdownList,
-                warningList
-            }
+            stats: { totalBad: badCellsRaw.length, blacklisted: blacklistedCount, analyzed: targetCells.length },
+            data: { workOrderList, cemBreakdownList, qosBreakdownList, warningList }
         });
 
     } catch (error) {
-        console.error("Lỗi API getOptimizingData:", error);
         res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." });
     }
 };
