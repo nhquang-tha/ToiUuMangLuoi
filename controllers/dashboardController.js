@@ -1636,6 +1636,7 @@ exports.getCongestion3gData = async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Lỗi CSDL." }); }
 };
 
+/* STREAMING_CHUNK:Fetching traffic down data... */
 exports.getTrafficDownData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM traffic_down');
@@ -1644,13 +1645,26 @@ exports.getTrafficDownData = async (req, res) => {
         let lastWeekDate = "N/A";
         
         if (rows.length > 0) {
+            // Lấy ngày phân tích mới nhất
             latestDate = rows[0].latest_date || "N/A";
-            lastWeekDate = rows[0].last_week_date || "N/A";
         } else {
             try {
                 const [datesRaw] = await db.query(`SELECT MAX(Thoi_gian) as t0 FROM kpi_4g`);
                 if (datesRaw.length > 0 && datesRaw[0].t0) latestDate = datesRaw[0].t0;
             } catch(e) {}
+        }
+        
+        // [FIX]: Tự động tính toán lại chính xác ngày "Cùng kỳ tuần trước" (Lùi đúng 7 ngày trên lịch)
+        if (latestDate !== "N/A") {
+            let parts = latestDate.split('/');
+            if (parts.length === 3) {
+                let d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                d.setDate(d.getDate() - 7);
+                let dd = String(d.getDate()).padStart(2, '0');
+                let mm = String(d.getMonth() + 1).padStart(2, '0');
+                let yyyy = d.getFullYear();
+                lastWeekDate = `${dd}/${mm}/${yyyy}`;
+            }
         }
         
         let zero_1d = []; let zero_3d = []; let zero_7d = [];
