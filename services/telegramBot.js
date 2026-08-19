@@ -53,12 +53,12 @@ if (bot) {
 🏢 <code>csht &lt;mã_CSHT&gt;</code> hoặc <code>ne &lt;tên_rút_gọn&gt;</code>: Tra cứu CSHT.
 📡 <code>rf &lt;cell_code&gt;</code>: Tra thông tin RF của cell kèm link map.
 📊 <code>kpi &lt;cell_code&gt;</code>: Tra thông tin KPI mới nhất của cell.
-⭐ <code>qoe &lt;cell_code&gt;</code>: Tra thông tin QOE tuần mới nhất của cell.
-⚙️ <code>qos &lt;cell_code&gt;</code>: Tra thông tin QOS tuần mới nhất của cell.
+⭐ <code>cem &lt;cell_code&gt;</code>: Tra thông tin CEM tuần mới nhất của cell.
+⚙️ <code>qos &lt;cell_code&gt;</code>: Tra thông tin QoS tuần mới nhất của cell.
 
 <b>Vẽ Biểu đồ (Charts):</b>
 📈 <code>charkpi &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động KPI 7 ngày gần nhất.
-📉 <code>charqoe &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoE 4 tuần gần nhất.
+📉 <code>charcem &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động CEM 4 tuần gần nhất.
 📉 <code>charqos &lt;cell_code&gt;</code>: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.
         `;
         bot.sendMessage(chatId, resp, { parse_mode: 'HTML' });
@@ -282,7 +282,7 @@ if (bot) {
     });
 
     // ==========================================
-    // CÁC LỆNH TRA CỨU CSHT, RF, KPI, QOE, QOS, CHARTS
+    // CÁC LỆNH TRA CỨU CSHT, RF, KPI, CEM, QOS, CHARTS
     // ==========================================
     bot.onText(/^(?:\/)?(?:csht|ne)\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -437,15 +437,15 @@ if (bot) {
         } catch (e) { bot.sendMessage(chatId, `❌ Lỗi CSDL KPI.`); console.error(e); }
     });
 
-    bot.onText(/^(?:\/)?qoe\s+(.+)$/i, async (msg, match) => {
+    bot.onText(/^(?:\/)?cem\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         try {
             const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
-                bot.sendMessage(chatId, `⭐ <b>CHỈ SỐ TRẢI NGHIỆM (QoE)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm QoE:</b> ${r.QoE_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoE_Rank}`, { parse_mode: 'HTML' });
-            } else bot.sendMessage(chatId, `❌ Không có dữ liệu QoE.`, { parse_mode: 'HTML' });
+                bot.sendMessage(chatId, `⭐ <b>CHỈ SỐ TRẢI NGHIỆM (CEM)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm CEM:</b> ${r.QoE_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoE_Rank}`, { parse_mode: 'HTML' });
+            } else bot.sendMessage(chatId, `❌ Không có dữ liệu CEM.`, { parse_mode: 'HTML' });
         } catch (e) {}
     });
 
@@ -498,19 +498,19 @@ if (bot) {
         } catch (e) { bot.sendMessage(chatId, `❌ Lỗi vẽ biểu đồ KPI.`); console.error(e); }
     });
 
-    bot.onText(/^(?:\/)?charqoe\s+(.+)$/i, async (msg, match) => {
+    bot.onText(/^(?:\/)?charcem\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
         try {
             const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
-            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoE.`);
+            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ CEM.`);
             const data = rows.reverse();
             const chartUrl = generateChartUrl({
-                type: 'line', data: { labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), datasets: [{ label: 'Điểm QoE', data: data.map(d => d.QoE_Score), borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', fill: true, borderWidth: 3 }] },
-                options: { title: { display: true, text: `Biến động Điểm QoE (4 Tuần) - ${keyword.toUpperCase()}` } }
+                type: 'line', data: { labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), datasets: [{ label: 'Điểm CEM', data: data.map(d => d.QoE_Score), borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', fill: true, borderWidth: 3 }] },
+                options: { title: { display: true, text: `Biến động Điểm CEM (4 Tuần) - ${keyword.toUpperCase()}` } }
             });
-            bot.sendPhoto(chatId, chartUrl, { caption: `⭐ Biểu đồ Trải nghiệm QoE: ${keyword.toUpperCase()}` });
+            bot.sendPhoto(chatId, chartUrl, { caption: `⭐ Biểu đồ Trải nghiệm CEM: ${keyword.toUpperCase()}` });
         } catch (e) {}
     });
 
