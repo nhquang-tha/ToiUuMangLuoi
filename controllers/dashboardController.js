@@ -1639,63 +1639,246 @@ exports.getCongestion3gData = async (req, res) => {
 /* STREAMING_CHUNK:Fetching traffic down data... */
 exports.getTrafficDownData = async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM traffic_down');
-        
-        let latestDate = "N/A";
-        let lastWeekDate = "N/A";
-        
-        if (rows.length > 0) {
-            // Lấy ngày phân tích mới nhất
-            latestDate = rows[0].latest_date || "N/A";
-        } else {
-            try {
-                const [datesRaw] = await db.query(`SELECT MAX(Thoi_gian) as t0 FROM kpi_4g`);
-                if (datesRaw.length > 0 && datesRaw[0].t0) latestDate = datesRaw[0].t0;
-            } catch(e) {}
-        }
-        
-        // [FIX]: Tự động tính toán lại chính xác ngày "Cùng kỳ tuần trước" (Lùi đúng 7 ngày trên lịch)
-        if (latestDate !== "N/A") {
-            let parts = latestDate.split('/');
-            if (parts.length === 3) {
-                let d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-                d.setDate(d.getDate() - 7);
-                let dd = String(d.getDate()).padStart(2, '0');
-                let mm = String(d.getMonth() + 1).padStart(2, '0');
-                let yyyy = d.getFullYear();
-                lastWeekDate = `${dd}/${mm}/${yyyy}`;
-            }
-        }
-        
-        let zero_1d = []; let zero_3d = []; let zero_7d = [];
-        let droppedTrafficCells = [];
-        let droppedTrafficPOIs = [];
-
-        rows.forEach(r => {
-            if (r.category === 'zero_1d') {
-                zero_1d.push({ Cell_name: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), avgPast: Number(r.val_compare).toFixed(2) });
-            } else if (r.category === 'zero_3d') {
-                zero_3d.push({ Cell_name: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), avgPast: Number(r.val_compare).toFixed(2) });
-            } else if (r.category === 'zero_7d') {
-                zero_7d.push({ Cell_name: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), avgPast: Number(r.val_compare).toFixed(2) });
-            } else if (r.category === 'dropped_cell') {
-                droppedTrafficCells.push({ Cell_name: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), t7: Number(r.val_compare).toFixed(2), ratio: r.ratio });
-            } else if (r.category === 'dropped_poi') {
-                droppedTrafficPOIs.push({ POI: r.name, network: r.network, t0: Number(r.val_t0).toFixed(2), t7: Number(r.val_compare).toFixed(2), ratio: r.ratio });
-            }
+        // [1] LẤY 30 NGÀY MỚI NHẤT (Để đủ data quét 7 ngày + tính TB trước đó)
+        const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
+        const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => {
+            const pA = a.split('/'); const pB = b.split('/');
+            return new Date(`${pB[2]}-${pB[1]}-${pB[0]}`) - new Date(`${pA[2]}-${pA[1]}-${pA[0]}`);
         });
+
+        if (dates.length < 8) {
+            return res.json({ error: "Hệ thống cần ít nhất 8 ngày dữ liệu KPI liên tiếp để chạy thuật toán đối soát tuần và phân tích sụt giảm 7 ngày." });
+        }
+
+        const latestDate = dates[0];
+        // Lấy 30 ngày để đếm chính xác số ngày mất liên tiếp (8, 10, 15 ngày...) và tính "Traffic TB"
+        const targetDates = dates.slice(0, 30); 
+        const latest7Dates = dates.slice(0, 7);
+        const lastWeekDate = dates[7] || dates[dates.length - 1]; // Ngày cùng kỳ tuần trước (Dành cho Lọc Suy Giảm 1)
+
+        // Helper để fetch và gom nhóm dữ liệu theo Cell
+        const fetchAndMapData = async (tableName, netType, cellCol, trafficCol) => {
+            const placeholders = targetDates.map(() => '?').join(',');
+            const [rows] = await db.query(`
+                SELECT Thoi_gian, ${cellCol} as cell_name, ${trafficCol} as traffic 
+                FROM ${tableName} 
+                WHERE Thoi_gian IN (${placeholders})
+            `, targetDates);
+
+            let map = {};
+            rows.forEach(r => {
+                let c = String(r.cell_name).toUpperCase().trim();
+                if (!map[c]) map[c] = {};
+                map[c][r.Thoi_gian] = parseFloat(r.traffic) || 0;
+            });
+            return map;
+        };
+
+        const [map3g, map4g, map5g] = await Promise.all([
+            fetchAndMapData('kpi_3g', '3g', 'Ten_CELL', 'TRAFFIC'),
+            fetchAndMapData('kpi_4g', '4g', 'Cell_name', 'Total_Data_Traffic_Volume_GB'),
+            fetchAndMapData('kpi_5g', '5g', 'Ten_CELL', 'Total_Data_Traffic_Volume_GB')
+        ]);
+
+        let zeroTrafficCells = []; // Lọc 1: Mất trắng lưu lượng hôm nay
+        let downTrafficCells = []; // Lọc 2: Suy giảm < 70% so với tuần trước
+        let zeroTraffic7DaysCells = []; // [MỚI] Lọc 3: Không lưu lượng liên tiếp 7 ngày (TB trước đó > 1GB)
+
+        // XỬ LÝ MẠNG 4G & 5G (Áp dụng đủ 3 bộ lọc)
+        const processNet = (mapData, netType) => {
+            for (let cell in mapData) {
+                const row = mapData[cell];
+                
+                // --- ĐIỀU KIỆN TIÊN QUYẾT: CELL PHẢI TỒN TẠI TRONG NGÀY MỚI NHẤT ---
+                if (row[latestDate] === undefined) continue; 
+                
+                const t0 = row[latestDate] || 0;
+                
+                // ---------------------------------------------------------
+                // BỘ LỌC 1: Mất trắng lưu lượng hôm nay (Traffic = 0)
+                // Điều kiện: Hôm nay = 0 VÀ Trung bình 7 ngày trước đó > 0
+                // ---------------------------------------------------------
+                if (t0 === 0) {
+                    let sum7 = 0; let count7 = 0;
+                    for (let i = 1; i <= 7; i++) {
+                        if (dates[i] && row[dates[i]] !== undefined) {
+                            sum7 += row[dates[i]];
+                            count7++;
+                        }
+                    }
+                    let avg7 = count7 > 0 ? (sum7 / count7) : 0;
+                    if (avg7 > 0) {
+                        zeroTrafficCells.push({
+                            network: netType, Cell_name: cell, 
+                            t0: 0, avg7: avg7.toFixed(2)
+                        });
+                    }
+                }
+
+                // ---------------------------------------------------------
+                // BỘ LỌC 2: Suy giảm lưu lượng (< 70% Tuần trước)
+                // ---------------------------------------------------------
+                if (t0 > 0 && dates.length >= 10) {
+                    const t_week_ago = row[dates[7]] || 0;
+                    if (t_week_ago > 5 && t0 < t_week_ago * 0.7) {
+                        const t1 = row[dates[1]] || 0; const t_week_ago_1 = row[dates[8]] || 0;
+                        const t2 = row[dates[2]] || 0; const t_week_ago_2 = row[dates[9]] || 0;
+                        
+                        if ((t_week_ago_1 > 0 && t1 < t_week_ago_1) && (t_week_ago_2 > 0 && t2 < t_week_ago_2)) {
+                            downTrafficCells.push({
+                                network: netType, Cell_name: cell,
+                                t0: t0.toFixed(2), t_week_ago: t_week_ago.toFixed(2),
+                                ratio: ((t0 / t_week_ago) * 100).toFixed(1)
+                            });
+                        }
+                    }
+                }
+
+                // ---------------------------------------------------------
+                // [MỚI] BỘ LỌC 3: KHÔNG LƯU LƯỢNG >= 7 NGÀY
+                // Điều kiện: 
+                // 1. Lưu lượng = 0 liên tiếp từ ngày mới nhất (>= 7 ngày)
+                // 2. Traffic TB (của các ngày có dữ liệu trước lúc mất) > 1GB
+                // Đảm bảo: Cell phải có trong file kpi ngày mới nhất (đã check điều kiện tiên quyết ở trên)
+                // ---------------------------------------------------------
+                let zeroDays = 0;
+                let sumBefore = 0;
+                let countBefore = 0;
+                let isStillZero = true;
+
+                for (let i = 0; i < targetDates.length; i++) {
+                    let d = targetDates[i];
+                    let val = row[d] || 0;
+                    
+                    if (isStillZero) {
+                        if (val === 0) {
+                            zeroDays++;
+                        } else {
+                            isStillZero = false;
+                            sumBefore += val;
+                            countBefore++;
+                        }
+                    } else {
+                        sumBefore += val;
+                        countBefore++;
+                    }
+                }
+
+                if (zeroDays >= 7) {
+                    let avgBefore = countBefore > 0 ? (sumBefore / countBefore) : 0;
+                    
+                    if (avgBefore > 1) { // Traffic TB > 1 GB
+                        zeroTraffic7DaysCells.push({
+                            network: netType,
+                            Cell_name: cell,
+                            zeroDaysCount: zeroDays, // Hiển thị số ngày chính xác
+                            avgBefore: avgBefore.toFixed(2)
+                        });
+                    }
+                }
+            }
+        };
+
+        processNet(map4g, '4g');
+        processNet(map5g, '5g');
+
+        // XỬ LÝ MẠNG 3G (Chỉ áp dụng Lọc 1: Mất trắng hôm nay và Lọc 3: Mất trắng 7 ngày)
+        for (let cell in map3g) {
+            const row = map3g[cell];
+            if (row[latestDate] === undefined) continue; 
+
+            const t0 = row[latestDate] || 0;
+            
+            // Lọc 1 (3G)
+            if (t0 === 0) {
+                let sum7 = 0; let count7 = 0;
+                for (let i = 1; i <= 7; i++) {
+                    if (dates[i] && row[dates[i]] !== undefined) {
+                        sum7 += row[dates[i]];
+                        count7++;
+                    }
+                }
+                let avg7 = count7 > 0 ? (sum7 / count7) : 0;
+                if (avg7 > 0) {
+                    zeroTrafficCells.push({ network: '3g', Cell_name: cell, t0: 0, avg7: avg7.toFixed(2) });
+                }
+            }
+
+            // Lọc 3 (3G): Không lưu lượng >= 7 ngày
+            let zeroDays = 0;
+            let sumBefore = 0;
+            let countBefore = 0;
+            let isStillZero = true;
+
+            for (let i = 0; i < targetDates.length; i++) {
+                let d = targetDates[i];
+                let val = row[d] || 0;
+                
+                if (isStillZero) {
+                    if (val === 0) {
+                        zeroDays++;
+                    } else {
+                        isStillZero = false;
+                        sumBefore += val;
+                        countBefore++;
+                    }
+                } else {
+                    sumBefore += val;
+                    countBefore++;
+                }
+            }
+
+            if (zeroDays >= 7) {
+                let avgBefore = countBefore > 0 ? (sumBefore / countBefore) : 0;
+                
+                if (avgBefore > 1) { // 3G cũng áp dụng Traffic TB > 1 (Erl/GB)
+                    zeroTraffic7DaysCells.push({
+                        network: '3g',
+                        Cell_name: cell,
+                        zeroDaysCount: zeroDays,
+                        avgBefore: avgBefore.toFixed(2)
+                    });
+                }
+            }
+        }
+
+        // ==========================================
+        // XỬ LÝ BỘ LỌC POI SUY GIẢM (Ánh xạ từ Cell sang POI)
+        // ==========================================
+// ... existing code ...
+        let downPoiList = [];
+        if (dates.length >= 10) {
+            for (let poi in poiMap) {
+                const t0 = poiMap[poi][latestDate] || 0;
+                const t_week_ago = poiMap[poi][dates[7]] || 0;
+
+                if (t_week_ago > 5 && t0 < t_week_ago * 0.7) {
+                    const t1 = poiMap[poi][dates[1]] || 0; const t_week_ago_1 = poiMap[poi][dates[8]] || 0;
+                    const t2 = poiMap[poi][dates[2]] || 0; const t_week_ago_2 = poiMap[poi][dates[9]] || 0;
+                    
+                    if ((t_week_ago_1 > 0 && t1 < t_week_ago_1) && (t_week_ago_2 > 0 && t2 < t_week_ago_2)) {
+                        downPoiList.push({
+                            POI: poi,
+                            t0: t0.toFixed(2), t_week_ago: t_week_ago.toFixed(2),
+                            ratio: ((t0 / t_week_ago) * 100).toFixed(1)
+                        });
+                    }
+                }
+            }
+        }
 
         res.json({
-            latestDate, lastWeekDate,
-            zero_1d: zero_1d.sort((a,b) => b.avgPast - a.avgPast),
-            zero_3d: zero_3d.sort((a,b) => b.avgPast - a.avgPast),
-            zero_7d: zero_7d.sort((a,b) => b.avgPast - a.avgPast),
-            droppedTrafficCells: droppedTrafficCells.sort((a,b) => a.ratio - b.ratio),
-            droppedTrafficPOIs: droppedTrafficPOIs.sort((a,b) => a.ratio - b.ratio)
+            latestDate: latestDate,
+            lastWeekDate: lastWeekDate,
+            zeroTrafficCells: zeroTrafficCells,
+            downTrafficCells: downTrafficCells,
+            downPoiList: downPoiList,
+            zeroTraffic7DaysCells: zeroTraffic7DaysCells // Trả về data mới
         });
-    } catch (error) { 
-        console.error("Lỗi API Traffic Down:", error);
-        res.status(500).json({ error: "Lỗi truy xuất hệ thống máy chủ CSDL." }); 
+
+    } catch (error) {
+        console.error("Lỗi API getTrafficDownData:", error);
+        res.status(500).json({ error: "Lỗi hệ thống khi quét ma trận Traffic." });
     }
 };
 
