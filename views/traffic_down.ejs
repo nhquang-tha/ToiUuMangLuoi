@@ -1,4 +1,3 @@
-
 <%- include('partials/head') %>
 <%
     let activeUser = locals.currentUser || locals.user || (typeof currentUser !== 'undefined' ? currentUser : null);
@@ -75,12 +74,12 @@
 
             <!-- HƯỚNG DẪN / THÔNG BÁO TIÊU CHÍ LỌC -->
             <div id="initMsg" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; font-size: 14px; color: #34495e;">
-                <strong>💡 Các tiêu chí Lọc Traffic:</strong><br>
-                <span style="color: #e74c3c">1. Không Lưu Lượng 7 Ngày:</span> Traffic từ 7 ngày trở lên (mới nhất) = 0 GB <strong>VÀ</strong> Traffic TB > 1 GB.<br>
-                <span style="color: #e67e22">2. Không Lưu Lượng 3 Ngày:</span> Traffic từ 3 đến dưới 7 ngày = 0 GB <strong>VÀ</strong> Traffic TB > 1 GB.<br>
-                <span style="color: #f1c40f">3. Không Lưu Lượng 1 Ngày:</span> Traffic ngày mới nhất = 0 GB, ngày liền trước đó > 0 GB <strong>VÀ</strong> Traffic TB > 1 GB.<br>
+                <strong>💡 Các tiêu chí Lọc Traffic (Luôn xét KPI của ngày mới nhất):</strong><br>
+                <span style="color: #e74c3c">1. Không Lưu Lượng ≥ 7 Ngày:</span> Traffic từ 7 ngày trở lên bằng 0 GB <strong>VÀ</strong> Traffic TB lúc trạm còn sống > 1 GB.<br>
+                <span style="color: #e67e22">2. Không Lưu Lượng ≥ 3 Ngày:</span> Traffic từ 3 đến dưới 7 ngày = 0 GB <strong>VÀ</strong> Traffic TB lúc trạm còn sống > 1 GB.<br>
+                <span style="color: #f1c40f">3. Không Lưu Lượng Mới 1 Ngày:</span> Traffic ngày mới nhất = 0 GB, ngày liền trước đó > 0 GB <strong>VÀ</strong> Traffic TB > 1 GB.<br>
                 <span style="color: #3498db">4. Cell Suy Giảm (4G/5G):</span> T0 < 70% T7 <strong>VÀ</strong> T7 > 1 GB <strong>VÀ</strong> 3 ngày gần nhất đều giảm so với cùng kỳ.<br>
-                <span style="color: #8e44ad">5. POI Suy Giảm (Gộp chung):</span> Traffic POI T0 < 70% T7 <strong>VÀ</strong> 3 ngày gần nhất đều giảm so với cùng kỳ.
+                <span style="color: #8e44ad">5. POI Suy Giảm (Gộp chung 4G+5G):</span> Traffic POI T0 < 70% T7 <strong>VÀ</strong> 3 ngày gần nhất đều giảm so với cùng kỳ.
             </div>
 
             <div id="loadingMsg" style="display: none; text-align: center; padding: 30px; color: #8e44ad; font-size: 16px; font-weight: bold; background: white; border-radius: 8px; margin-bottom: 15px;">
@@ -91,8 +90,8 @@
             <div id="dashboardArea" style="display: none;">
                 <!-- HỆ THỐNG TABS -->
                 <div class="tab-header">
-                    <button class="tab-btn active" onclick="openTab(event, 'Z7')">Zero 7 Ngày <span class="badge-count" id="cZ7">0</span></button>
-                    <button class="tab-btn" onclick="openTab(event, 'Z3')">Zero 3 Ngày <span class="badge-count" id="cZ3" style="background:#e67e22;">0</span></button>
+                    <button class="tab-btn active" onclick="openTab(event, 'Z7')">Zero ≥ 7 Ngày <span class="badge-count" id="cZ7">0</span></button>
+                    <button class="tab-btn" onclick="openTab(event, 'Z3')">Zero ≥ 3 Ngày <span class="badge-count" id="cZ3" style="background:#e67e22;">0</span></button>
                     <button class="tab-btn" onclick="openTab(event, 'Z1')">Zero 1 Ngày <span class="badge-count" id="cZ1" style="background:#f1c40f;">0</span></button>
                     <button class="tab-btn" onclick="openTab(event, 'DC')">Sụt Giảm (Cell) <span class="badge-count" id="cDC" style="background:#3498db;">0</span></button>
                     <button class="tab-btn" onclick="openTab(event, 'DP')">Sụt Giảm (POI) <span class="badge-count" id="cDP" style="background:#1abc9c;">0</span></button>
@@ -100,12 +99,12 @@
 
                 <!-- CÁC KHUNG BẢNG -->
                 <div id="tabZ7" class="tab-content active">
-                    <div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Tên Cell (Mất lưu lượng)</th><th>Mạng</th><th>Hôm nay (GB)</th><th>TB 7 ngày trước (GB)</th><th>Thao Tác</th></tr></thead><tbody id="bodyZ7"></tbody></table></div>
+                    <div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Tên Cell (Mất lưu lượng)</th><th>Mạng</th><th>Số Ngày Mất</th><th>Hôm nay (GB)</th><th>TB Lịch sử (GB)</th><th>Thao Tác</th></tr></thead><tbody id="bodyZ7"></tbody></table></div>
                     <div class="pagination-bar"><div class="page-info">Hiển thị <select id="sizeZ7" onchange="changePageSize('Z7')"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select> dòng</div><div class="page-controls" id="pageControlsZ7"></div></div>
                 </div>
 
                 <div id="tabZ3" class="tab-content">
-                    <div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Tên Cell (Mất lưu lượng)</th><th>Mạng</th><th>Hôm nay (GB)</th><th>TB 3 ngày trước (GB)</th><th>Thao Tác</th></tr></thead><tbody id="bodyZ3"></tbody></table></div>
+                    <div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Tên Cell (Mất lưu lượng)</th><th>Mạng</th><th>Số Ngày Mất</th><th>Hôm nay (GB)</th><th>TB Lịch sử (GB)</th><th>Thao Tác</th></tr></thead><tbody id="bodyZ3"></tbody></table></div>
                     <div class="pagination-bar"><div class="page-info">Hiển thị <select id="sizeZ3" onchange="changePageSize('Z3')"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select> dòng</div><div class="page-controls" id="pageControlsZ3"></div></div>
                 </div>
 
@@ -167,6 +166,7 @@
 
             document.getElementById('dateInfo').innerHTML = `Ngày phân tích: <span style="color:#e74c3c;">${data.latestDate}</span> | Cùng kỳ tuần trước: <span style="color:#e74c3c;">${data.lastWeekDate}</span>`;
 
+            // Data trả về từ API (Cột ratio lưu số ngày cho bảng Zero)
             T_STATE['Z7'].data = data.zero_7d || []; document.getElementById('cZ7').innerText = T_STATE['Z7'].data.length;
             T_STATE['Z3'].data = data.zero_3d || []; document.getElementById('cZ3').innerText = T_STATE['Z3'].data.length;
             T_STATE['Z1'].data = data.zero_1d || []; document.getElementById('cZ1').innerText = T_STATE['Z1'].data.length;
@@ -178,7 +178,7 @@
             document.getElementById('dashboardArea').style.display = 'block';
             document.getElementById('btnExport').style.display = 'block';
 
-        } catch (error) { document.getElementById('loadingMsg').style.display = 'none'; document.getElementById('errorMsg').innerText = 'Lỗi hệ thống'; document.getElementById('errorMsg').style.display = 'block'; }
+        } catch (error) { document.getElementById('loadingMsg').style.display = 'none'; document.getElementById('errorMsg').innerText = 'Lỗi hệ thống CSDL'; document.getElementById('errorMsg').style.display = 'block'; }
     }
 
     function getNetBadge(net) {
@@ -199,7 +199,9 @@
         let html = '';
         pageData.forEach((row, i) => {
             let stt = start + i + 1;
-            if (type.startsWith('Z')) {
+            if (type === 'Z7' || type === 'Z3') {
+                html += `<tr><td>${stt}</td><td><b style="color:#c0392b">${row.Cell_name}</b></td><td>${getNetBadge(row.network)}</td><td style="color:#c0392b;font-weight:bold">${row.ratio || '>7'} ngày</td><td style="color:#e74c3c;font-weight:bold">${row.t0}</td><td style="color:#27ae60">${row.avgPast}</td><td style="text-align:center"><a href="/kpi-analytics?network=${row.network}&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a></td></tr>`;
+            } else if (type === 'Z1') {
                 html += `<tr><td>${stt}</td><td><b style="color:#c0392b">${row.Cell_name}</b></td><td>${getNetBadge(row.network)}</td><td style="color:#e74c3c;font-weight:bold">${row.t0}</td><td style="color:#27ae60">${row.avgPast}</td><td style="text-align:center"><a href="/kpi-analytics?network=${row.network}&cell=${encodeURIComponent(row.Cell_name)}" target="_blank" class="btn-kpi">📊 Xem KPI</a></td></tr>`;
             } else if (type === 'DC') {
                 let badge = row.ratio < 30 ? `background:#e74c3c; color:white;` : `background:#fbeeeeb0; color:#e74c3c; border:1px solid #fad2d2;`;
@@ -254,8 +256,10 @@
             if(T_STATE[type].data.length === 0) return;
             let exportData = T_STATE[type].data.map((r,i) => {
                 let row = { "STT": i+1, "Mạng": r.network ? r.network.toUpperCase() : '' };
-                if (type.startsWith('Z')) {
-                    row["Tên Cell"] = r.Cell_name; row["Hôm nay (GB)"] = parseFloat(r.t0); row["Trung bình kỳ trước (GB)"] = parseFloat(r.avgPast);
+                if (type === 'Z7' || type === 'Z3') {
+                    row["Tên Cell"] = r.Cell_name; row["Số Ngày Mất"] = r.ratio; row["Hôm nay (GB)"] = parseFloat(r.t0); row["TB Lịch Sử (GB)"] = parseFloat(r.avgPast);
+                } else if (type === 'Z1') {
+                    row["Tên Cell"] = r.Cell_name; row["Hôm nay (GB)"] = parseFloat(r.t0); row["Hôm qua (GB)"] = parseFloat(r.avgPast);
                 } else if (type === 'DC') {
                     row["Tên Cell"] = r.Cell_name; row["Hôm nay (GB)"] = parseFloat(r.t0); row["Tuần trước (GB)"] = parseFloat(r.t7); row["Tỷ lệ Đạt (%)"] = r.ratio;
                 } else {
@@ -267,7 +271,7 @@
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
         };
 
-        exportTab('Z7', "Zero_7_Ngay"); exportTab('Z3', "Zero_3_Ngay"); exportTab('Z1', "Zero_1_Ngay");
+        exportTab('Z7', "Zero_Lon_Hon_7_Ngay"); exportTab('Z3', "Zero_Tu_3_Den_6_Ngay"); exportTab('Z1', "Zero_1_Ngay");
         exportTab('DC', "Suy_Giam_Cell"); exportTab('DP', "Suy_Giam_POI");
 
         if(wb.SheetNames.length === 0) { alert("Không có dữ liệu để xuất"); return; }
