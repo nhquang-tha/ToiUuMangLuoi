@@ -441,12 +441,14 @@ if (bot) {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         try {
-            const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoE_Score, QoE_Rank FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
+            const [rows] = await db.query(`SELECT Tuan, Cell_Name, CEI_1_5, CEI_Percent FROM mbb_cem WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 1`, [`%${parsed.kw}%`, `%${parsed.kw}%`]);
             if (rows.length > 0) {
                 const r = rows[0];
-                bot.sendMessage(chatId, `⭐ <b>CHỈ SỐ TRẢI NGHIỆM (CEM)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm CEM:</b> ${r.QoE_Score}\n🏅 <b>Hạng (Rank):</b> ${r.QoE_Rank}`, { parse_mode: 'HTML' });
+                bot.sendMessage(chatId, `⭐ <b>CHỈ SỐ TRẢI NGHIỆM (CEM)</b>\n🔹 Cell: <code>${r.Cell_Name}</code>\n📅 Tuần đánh giá: <b>${r.Tuan}</b>\n---------------------------\n🏆 <b>Điểm CEM (1-5):</b> ${r.CEI_1_5}\n🏅 <b>Tỷ lệ CEI:</b> ${r.CEI_Percent}%`, { parse_mode: 'HTML' });
             } else bot.sendMessage(chatId, `❌ Không có dữ liệu CEM.`, { parse_mode: 'HTML' });
-        } catch (e) {}
+        } catch (e) {
+            console.error("Lỗi tra cứu CEM:", e);
+        }
     });
 
     bot.onText(/^(?:\/)?qos\s+(.+)$/i, async (msg, match) => {
@@ -504,7 +506,7 @@ if (bot) {
         const keyword = parsed.kw;
         bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ CEM cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
         try {
-            const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
+            const [rows] = await db.query(`SELECT Tuan, CEI_1_5 FROM mbb_cem WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ CEM.`);
             
             const data = rows.reverse();
@@ -514,7 +516,7 @@ if (bot) {
                     labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
                     datasets: [{ 
                         label: 'Điểm CEM', 
-                        data: data.map(d => d.QoE_Score), 
+                        data: data.map(d => d.CEI_1_5), 
                         borderColor: '#f1c40f', 
                         backgroundColor: 'rgba(241, 196, 15, 0.2)', 
                         fill: true, 
