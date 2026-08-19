@@ -363,7 +363,7 @@ async function syncCongestion3G() {
     }
 }
 
-/* STREAMING_CHUNK:Syncing traffic down caching... */
+/* STREAMING_CHUNK:Executing dynamic zero traffic counter... */
 async function syncTrafficDown() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Traffic Down...");
@@ -402,9 +402,9 @@ async function syncTrafficDown() {
             });
         };
 
-        const dates3g = getSortedDates(dates3gRaw).slice(0, 15);
-        const dates4g = getSortedDates(dates4gRaw).slice(0, 15);
-        const dates5g = getSortedDates(dates5gRaw).slice(0, 15);
+        const dates3g = getSortedDates(dates3gRaw).slice(0, 30);
+        const dates4g = getSortedDates(dates4gRaw).slice(0, 30);
+        const dates5g = getSortedDates(dates5gRaw).slice(0, 30);
 
         if (dates3g.length === 0 && dates4g.length === 0 && dates5g.length === 0) {
             console.log("⚠️ Không có dữ liệu KPI nào để tính Traffic Down.");
@@ -437,7 +437,6 @@ async function syncTrafficDown() {
         let droppedTrafficPOIs = [];
         let poiTrafficMap = {}; 
 
-        // Hàm hỗ trợ: Tính chính xác ngày lùi lại trên lịch (T-offset)
         const getOffsetDateStr = (dateStr, offsetDays) => {
             if (!dateStr) return null;
             let parts = dateStr.split('/');
@@ -452,16 +451,8 @@ async function syncTrafficDown() {
 
         const analyzeData = (dataArray, network, targetDates) => {
             if (targetDates.length === 0) return;
-            const t0 = targetDates[0]; // Ngày mới nhất trong DB (Đã được Sort desc)
+            const t0 = targetDates[0]; 
             
-            // Tính toán CHÍNH XÁC các ngày trong lịch
-            const t1 = getOffsetDateStr(t0, 1);
-            const t2 = getOffsetDateStr(t0, 2);
-            const t3 = getOffsetDateStr(t0, 3);
-            const t7 = getOffsetDateStr(t0, 7); // Cùng kỳ tuần trước
-            const t8 = getOffsetDateStr(t0, 8); // T-1 của cùng kỳ tuần trước
-            const t9 = getOffsetDateStr(t0, 9); // T-2 của cùng kỳ tuần trước
-
             const cellMap = {};
             
             dataArray.forEach(row => {
@@ -488,18 +479,27 @@ async function syncTrafficDown() {
             for (let cell in cellMap) {
                 const c = cellMap[cell];
                 
-                // CHẶN TUYỆT ĐỐI KHÔNG BỎ SÓT LỖI: Chỉ đánh giá các cell xuất hiện ở T0 (Ngày mới nhất của hệ thống)
                 if (c[t0] === undefined) continue; 
-                
                 const v0 = c[t0]; 
-                const v1 = c[t1] !== undefined ? c[t1] : 0;
-                const v2 = c[t2] !== undefined ? c[t2] : 0;
-                const v3 = c[t3] !== undefined ? c[t3] : 0;
-                const v4 = c[getOffsetDateStr(t0, 4)] !== undefined ? c[getOffsetDateStr(t0, 4)] : 0;
-                const v5 = c[getOffsetDateStr(t0, 5)] !== undefined ? c[getOffsetDateStr(t0, 5)] : 0;
-                const v6 = c[getOffsetDateStr(t0, 6)] !== undefined ? c[getOffsetDateStr(t0, 6)] : 0;
+                
+                const isZero = (val) => val < 0.01; 
 
-                // Hàm tính trung bình cộng an toàn
+                // THUẬT TOÁN ĐẾM NGÀY MẤT LƯU LƯỢNG THỰC TẾ (Quét tối đa 30 ngày)
+                let zeroDays = 0;
+                for (let i = 0; i <= 30; i++) {
+                    let dStr = getOffsetDateStr(t0, i);
+                    if (c[dStr] !== undefined) {
+                        if (isZero(c[dStr])) {
+                            zeroDays++;
+                        } else {
+                            break; 
+                        }
+                    } else {
+                        break; 
+                    }
+                }
+
+                // Hàm tính trung bình
                 const getAvg = (startOffset, endOffset) => {
                     let sum = 0, count = 0;
                     for (let i = startOffset; i <= endOffset; i++) {
@@ -509,27 +509,27 @@ async function syncTrafficDown() {
                     return count > 0 ? sum / count : 0;
                 };
 
-                // Tính TB 7 ngày TRƯỚC thời điểm sự cố (Để so sánh Traffic TB > 1 GB)
-                let avgPast1 = getAvg(1, 7);   
-                let avgPast3 = getAvg(3, 9);   
-                let avgPast7 = getAvg(7, 13);  
+                // Lấy Traffic TB của 7 ngày TRƯỚC KHI bị mất lưu lượng để so sánh (> 1GB)
+                let avgBeforeFail = getAvg(zeroDays, zeroDays + 6);
 
-                const isZero = (val) => val < 0.01; 
-
-                // 1. Lọc Cell Không Lưu Lượng 7 ngày (Từ 7 ngày trở lên)
-                if (isZero(v0) && isZero(v1) && isZero(v2) && isZero(v3) && isZero(v4) && isZero(v5) && isZero(v6) && avgPast7 > 1) {
-                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast7, date_t0: t0, date_t7: t7 });
-                }
-                // 2. Lọc Cell Không Lưu Lượng 3 ngày (Từ 3 ngày đến dưới 7 ngày)
-                else if (isZero(v0) && isZero(v1) && isZero(v2) && avgPast3 > 1) {
-                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast3, date_t0: t0, date_t7: t3 });
-                }
-                // 3. Lọc Cell Không Lưu Lượng 1 ngày (Chỉ mới mất 1 ngày, ngày trước đó phải > 0)
-                else if (isZero(v0) && !isZero(v1) && avgPast1 > 1) {
-                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgPast1, date_t0: t0, date_t7: t1 });
+                // PHÂN LOẠI NHÓM ZERO TRAFFIC ĐỘNG (Lưu số ngày thực tế vào cột ratio)
+                if (zeroDays >= 7 && avgBeforeFail > 1) {
+                    zeroTrafficCells.push({ category: 'zero_7d', Cell_name: cell, network: network, t0: 0, avgPast: avgBeforeFail, zeroDays: zeroDays, date_t0: t0, date_t7: getOffsetDateStr(t0, 7) });
+                } else if (zeroDays >= 3 && zeroDays < 7 && avgBeforeFail > 1) {
+                    zeroTrafficCells.push({ category: 'zero_3d', Cell_name: cell, network: network, t0: 0, avgPast: avgBeforeFail, zeroDays: zeroDays, date_t0: t0, date_t7: getOffsetDateStr(t0, 3) });
+                } else if (zeroDays >= 1 && zeroDays < 3 && avgBeforeFail > 1) {
+                    zeroTrafficCells.push({ category: 'zero_1d', Cell_name: cell, network: network, t0: 0, avgPast: avgBeforeFail, zeroDays: zeroDays, date_t0: t0, date_t7: getOffsetDateStr(t0, 1) });
                 }
 
                 if (network === '4g' || network === '5g') {
+                    const t1 = getOffsetDateStr(t0, 1);
+                    const t2 = getOffsetDateStr(t0, 2);
+                    const t7 = getOffsetDateStr(t0, 7); 
+                    const t8 = getOffsetDateStr(t0, 8); 
+                    const t9 = getOffsetDateStr(t0, 9); 
+                    
+                    const v1 = c[t1] !== undefined ? c[t1] : 0;
+                    const v2 = c[t2] !== undefined ? c[t2] : 0;
                     const v7 = c[t7] !== undefined ? c[t7] : 0; 
                     const v8 = c[t8] !== undefined ? c[t8] : 0;
                     const v9 = c[t9] !== undefined ? c[t9] : 0;
@@ -557,8 +557,6 @@ async function syncTrafficDown() {
             for (let poi in poiTrafficMap) {
                 const p = poiTrafficMap[poi];
                 if (!p.has_data) continue;
-                
-                // CHẶN POI KHÔNG CÓ TRONG NGÀY MỚI NHẤT
                 if (p[t0_poi] === undefined) continue;
 
                 const v0 = p[t0_poi]; 
@@ -568,7 +566,6 @@ async function syncTrafficDown() {
                 const v8 = p[t8_poi] !== undefined ? p[t8_poi] : 0; 
                 const v9 = p[t9_poi] !== undefined ? p[t9_poi] : 0;
                 
-                // 3. ĐIỀU KIỆN LỌC POI SUY GIẢM: Tổng T0 < 70% T7 và 3 ngày liên tiếp đều giảm
                 if (v7 > 0 && v0 < 0.7 * v7 && v1 < v8 && v2 < v9) {
                     droppedTrafficPOIs.push({ POI: poi, network: '4g_5g', t0: v0.toFixed(2), t7: v7.toFixed(2), ratio: Math.round((v0/v7)*100), date_t0: t0_poi, date_t7: t7_poi });
                 }
@@ -577,7 +574,8 @@ async function syncTrafficDown() {
         
         let insertData = [];
 
-        zeroTrafficCells.forEach(r => insertData.push([r.date_t0, r.date_t7, r.category, r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.avgPast), 0]));
+        // Mượn cột ratio để lưu số ngày mất lưu lượng thực tế (zeroDays)
+        zeroTrafficCells.forEach(r => insertData.push([r.date_t0, r.date_t7, r.category, r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.avgPast), getSafeFloat(r.zeroDays)]));
         droppedTrafficCells.forEach(r => insertData.push([r.date_t0, r.date_t7, 'dropped_cell', r.network, r.Cell_name, getSafeFloat(r.t0), getSafeFloat(r.t7), getSafeFloat(r.ratio)]));
         droppedTrafficPOIs.forEach(r => insertData.push([r.date_t0, r.date_t7, 'dropped_poi', r.network, r.POI, getSafeFloat(r.t0), getSafeFloat(r.t7), getSafeFloat(r.ratio)]));
 
