@@ -466,27 +466,46 @@ if (bot) {
     bot.onText(/^(?:\/)?charkpi\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
-            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 ngày để vẽ biểu đồ KPI.`);
+        const keyword = parsed.kw;
+        const targetNet = parsed.net;
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ KPI 7 ngày cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
+
+        try {
+            let title1 = 'Traffic (GB)', title2 = 'Throughput DL (Kbps)', title3 = 'CQI (%)';
+            let rows = [];
+
+            if (!targetNet || targetNet === '4g') {
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, User_DL_Avg_Throughput_Kbps as thput, CQI_4G as cqi FROM kpi_4g WHERE LOWER(Cell_name) LIKE LOWER(?) ORDER BY LENGTH(Cell_name) ASC, Cell_name ASC, id DESC LIMIT 7`, [`%${keyword}%`]);
+            }
+            if (rows.length < 2 && (!targetNet || targetNet === '5g')) {
+                [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, A_User_DL_Avg_Throughput as thput, CQI_5G as cqi FROM kpi_5g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CELL_ID) LIKE LOWER(?) ORDER BY LENGTH(Ten_CELL) ASC, Ten_CELL ASC, id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
+                title2 = 'Throughput DL (Mbps)';
+            }
+            if (rows.length < 2 && (!targetNet || targetNet === '3g')) {
+                [rows] = await db.query(`SELECT Thoi_gian, TRAFFIC as traf, CSSR as thput, DCR as cqi FROM kpi_3g WHERE LOWER(Ten_CELL) LIKE LOWER(?) OR LOWER(CI) LIKE LOWER(?) ORDER BY LENGTH(Ten_CELL) ASC, Ten_CELL ASC, id DESC LIMIT 7`, [`%${keyword}%`, `%${keyword}%`]);
+                title1 = 'Traffic (Erl/GB)'; title2 = 'CSSR (%)'; title3 = 'Drop Rate (%)';
+            }
+
+            if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất 2 ngày dữ liệu để vẽ biểu đồ KPI.`, { parse_mode: 'HTML' });
 
             const data = rows.reverse();
             const labels = data.map(d => d.Thoi_gian.substring(0, 5)); 
             const cellFound = parsed.kw.toUpperCase();
 
-            // Cập nhật biểu đồ hiển thị mượt mà với Tension, Fill color và BorderWidth
             const chart1 = generateChartUrl({ 
                 type: 'line', 
-                data: { labels: labels, datasets: [{ label: title1, data: data.map(d => d.traf), borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, borderWidth: 3, tension: 0.4 }] }, 
-                options: { title: { display: true, text: `Biến động ${title1} - ${cellFound}` } } 
+                data: { labels: labels, datasets: [{ label: title1, data: data.map(d => d.traf), borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, borderWidth: 3, lineTension: 0.4, pointRadius: 4, pointBackgroundColor: '#ffffff', pointBorderColor: '#3498db', pointBorderWidth: 2 }] }, 
+                options: { title: { display: true, text: `Biến động ${title1} - ${cellFound}`, fontSize: 16, fontColor: '#2c3e50' }, legend: { display: false }, scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] } } 
             });
             const chart2 = generateChartUrl({ 
                 type: 'line', 
-                data: { labels: labels, datasets: [{ label: title2, data: data.map(d => d.thput), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, borderWidth: 3, tension: 0.4 }] }, 
-                options: { title: { display: true, text: `Biến động ${title2} - ${cellFound}` } } 
+                data: { labels: labels, datasets: [{ label: title2, data: data.map(d => d.thput), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, borderWidth: 3, lineTension: 0.4, pointRadius: 4, pointBackgroundColor: '#ffffff', pointBorderColor: '#9b59b6', pointBorderWidth: 2 }] }, 
+                options: { title: { display: true, text: `Biến động ${title2} - ${cellFound}`, fontSize: 16, fontColor: '#2c3e50' }, legend: { display: false }, scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] } } 
             });
             const chart3 = generateChartUrl({ 
                 type: 'line', 
-                data: { labels: labels, datasets: [{ label: title3, data: data.map(d => d.cqi), borderColor: '#2ecc71', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, borderWidth: 3, tension: 0.4 }] }, 
-                options: { title: { display: true, text: `Biến động ${title3} - ${cellFound}` } } 
+                data: { labels: labels, datasets: [{ label: title3, data: data.map(d => d.cqi), borderColor: '#2ecc71', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, borderWidth: 3, lineTension: 0.4, pointRadius: 4, pointBackgroundColor: '#ffffff', pointBorderColor: '#2ecc71', pointBorderWidth: 2 }] }, 
+                options: { title: { display: true, text: `Biến động ${title3} - ${cellFound}`, fontSize: 16, fontColor: '#2c3e50' }, legend: { display: false }, scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] } } 
             });
 
             bot.sendMediaGroup(chatId, [ 
