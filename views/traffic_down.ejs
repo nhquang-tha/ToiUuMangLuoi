@@ -164,9 +164,15 @@
             const data = await response.json();
             document.getElementById('loadingMsg').style.display = 'none';
 
+            // [FIX]: Bắt lỗi trực tiếp từ Backend để hiển thị thay vì hiện 'undefined'
+            if (data.error) {
+                document.getElementById('errorMsg').innerText = data.error;
+                document.getElementById('errorMsg').style.display = 'block';
+                return;
+            }
+
             document.getElementById('dateInfo').innerHTML = `Ngày phân tích: <span style="color:#e74c3c;">${data.latestDate}</span> | Cùng kỳ tuần trước: <span style="color:#e74c3c;">${data.lastWeekDate}</span>`;
 
-            // Data trả về từ API (Cột ratio lưu số ngày cho bảng Zero)
             T_STATE['Z7'].data = data.zero_7d || []; document.getElementById('cZ7').innerText = T_STATE['Z7'].data.length;
             T_STATE['Z3'].data = data.zero_3d || []; document.getElementById('cZ3').innerText = T_STATE['Z3'].data.length;
             T_STATE['Z1'].data = data.zero_1d || []; document.getElementById('cZ1').innerText = T_STATE['Z1'].data.length;
@@ -178,7 +184,11 @@
             document.getElementById('dashboardArea').style.display = 'block';
             document.getElementById('btnExport').style.display = 'block';
 
-        } catch (error) { document.getElementById('loadingMsg').style.display = 'none'; document.getElementById('errorMsg').innerText = 'Lỗi hệ thống CSDL'; document.getElementById('errorMsg').style.display = 'block'; }
+        } catch (error) { 
+            document.getElementById('loadingMsg').style.display = 'none'; 
+            document.getElementById('errorMsg').innerText = 'Lỗi mất kết nối với máy chủ CSDL'; 
+            document.getElementById('errorMsg').style.display = 'block'; 
+        }
     }
 
     function getNetBadge(net) {
