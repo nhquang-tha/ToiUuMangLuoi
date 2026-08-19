@@ -502,32 +502,82 @@ if (bot) {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ CEM cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
         try {
             const [rows] = await db.query(`SELECT Tuan, QoE_Score FROM mbb_qoe WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ CEM.`);
+            
             const data = rows.reverse();
             const chartUrl = generateChartUrl({
-                type: 'line', data: { labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), datasets: [{ label: 'Điểm CEM', data: data.map(d => d.QoE_Score), borderColor: '#f1c40f', backgroundColor: 'rgba(241, 196, 15, 0.1)', fill: true, borderWidth: 3 }] },
-                options: { title: { display: true, text: `Biến động Điểm CEM (4 Tuần) - ${keyword.toUpperCase()}` } }
+                type: 'line', 
+                data: { 
+                    labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
+                    datasets: [{ 
+                        label: 'Điểm CEM', 
+                        data: data.map(d => d.QoE_Score), 
+                        borderColor: '#f1c40f', 
+                        backgroundColor: 'rgba(241, 196, 15, 0.2)', 
+                        fill: true, 
+                        borderWidth: 3,
+                        lineTension: 0.4, 
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#f1c40f',
+                        pointBorderWidth: 2
+                    }] 
+                },
+                options: { 
+                    title: { display: true, text: `Biến động Điểm CEM (4 Tuần) - ${keyword.toUpperCase()}`, fontSize: 16, fontColor: '#2c3e50' },
+                    legend: { display: false },
+                    scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] }
+                }
             });
+            
             bot.sendPhoto(chatId, chartUrl, { caption: `⭐ Biểu đồ Trải nghiệm CEM: ${keyword.toUpperCase()}` });
-        } catch (e) {}
+        } catch (e) {
+            bot.sendMessage(chatId, `❌ Lỗi kết nối CSDL khi vẽ biểu đồ.`);
+        }
     });
 
     bot.onText(/^(?:\/)?charqos\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
+        bot.sendMessage(chatId, `⏳ Đang vẽ biểu đồ QoS cho: <b>${escapeHTML(match[1])}</b>...`, { parse_mode: 'HTML' });
         try {
             const [rows] = await db.query(`SELECT Tuan, Cell_Name, QoS_Score, QoS_Rank FROM mbb_qos WHERE LOWER(Cell_Name) LIKE LOWER(?) OR LOWER(Cell_ID) LIKE LOWER(?) ORDER BY LENGTH(Cell_Name) ASC, Cell_Name ASC, id DESC LIMIT 4`, [`%${keyword}%`, `%${keyword}%`]);
             if (rows.length < 2) return bot.sendMessage(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
+            
             const data = rows.reverse();
             const chartUrl = generateChartUrl({
-                type: 'bar', data: { labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), datasets: [{ label: 'Điểm QoS', data: data.map(d => d.QoS_Score), backgroundColor: '#e74c3c' }] },
-                options: { title: { display: true, text: `Biến động Điểm QoS (4 Tuần) - ${keyword.toUpperCase()}` } }
+                type: 'line', 
+                data: { 
+                    labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
+                    datasets: [{ 
+                        label: 'Điểm QoS', 
+                        data: data.map(d => d.QoS_Score), 
+                        borderColor: '#e74c3c', 
+                        backgroundColor: 'rgba(231, 76, 60, 0.15)', 
+                        fill: true, 
+                        borderWidth: 3,
+                        lineTension: 0.4, 
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#e74c3c',
+                        pointBorderWidth: 2
+                    }] 
+                },
+                options: { 
+                    title: { display: true, text: `Biến động Điểm QoS (4 Tuần) - ${keyword.toUpperCase()}`, fontSize: 16, fontColor: '#2c3e50' },
+                    legend: { display: false },
+                    scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] }
+                }
             });
+            
             bot.sendPhoto(chatId, chartUrl, { caption: `⚙️ Biểu đồ Dịch vụ QoS: ${keyword.toUpperCase()}` });
-        } catch (e) {}
+        } catch (e) {
+            bot.sendMessage(chatId, `❌ Lỗi kết nối CSDL khi vẽ biểu đồ.`);
+        }
     });
 
     bot.on("polling_error", (err) => console.log("Lỗi Polling Telegram:", err.message));
