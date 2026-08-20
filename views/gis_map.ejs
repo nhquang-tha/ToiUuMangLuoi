@@ -528,18 +528,40 @@
         return polygon;
     }
 
+    // [MỚI] Hàm xử lý ẩn/hiện bảng Legend (Click để thu gọn)
+    window.toggleLegend = function(headerElement) {
+        let body = headerElement.nextElementSibling;
+        let icon = headerElement.querySelector('.legend-toggle-icon');
+        if (body.style.display === 'none') {
+            body.style.display = 'block';
+            icon.innerText = '▼';
+            headerElement.style.borderBottom = '2px solid var(--primary)';
+            headerElement.style.marginBottom = '10px';
+        } else {
+            body.style.display = 'none';
+            icon.innerText = '▲';
+            headerElement.style.borderBottom = 'none';
+            headerElement.style.marginBottom = '0';
+        }
+    };
+
     function addTALegend() {
         if (legendControl) map.removeControl(legendControl);
         legendControl = L.control({position: 'bottomright'});
         legendControl.onAdd = function(map) {
             let div = L.DomUtil.create('div', 'info legend');
             div.innerHTML = `
-                <h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; font-weight: bold; border-bottom: 2px solid var(--primary); padding-bottom: 5px;">Biểu đồ Mật độ TA (UE)</h4>
-                <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#e74c3c; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Rất cao (80 - 100%)</span></div>
-                <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#e67e22; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Cao (60 - 80%)</span></div>
-                <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#f1c40f; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Trung bình (40 - 60%)</span></div>
-                <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#2ecc71; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Thấp (20 - 40%)</span></div>
-                <div style="display:flex; align-items:center;"><i style="background:#3498db; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold;">Rất thấp (0 - 20%)</span></div>
+                <div class="legend-header" onclick="toggleLegend(this)" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); padding-bottom: 5px; margin-bottom: 10px;">
+                    <h4 style="margin: 0; color: var(--text-main); font-size: 13px; font-weight: bold;">Biểu đồ Mật độ TA (UE)</h4>
+                    <span class="legend-toggle-icon" style="font-size: 16px; margin-left: 10px; color: var(--text-muted);">▼</span>
+                </div>
+                <div class="legend-body" style="display: block;">
+                    <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#e74c3c; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold; color:var(--text-main);">Rất cao (80 - 100%)</span></div>
+                    <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#e67e22; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold; color:var(--text-main);">Cao (60 - 80%)</span></div>
+                    <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#f1c40f; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold; color:var(--text-main);">Trung bình (40 - 60%)</span></div>
+                    <div style="display:flex; align-items:center; margin-bottom:5px;"><i style="background:#2ecc71; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold; color:var(--text-main);">Thấp (20 - 40%)</span></div>
+                    <div style="display:flex; align-items:center;"><i style="background:#3498db; width:14px; height:14px; border-radius:3px; margin-right:8px;"></i><span style="font-size:11px; font-weight:bold; color:var(--text-main);">Rất thấp (0 - 20%)</span></div>
+                </div>
             `;
             return div;
         };
@@ -814,39 +836,46 @@
     // ====================================================
     // ĐỌC VÀ VẼ LOG FILE ITS (MULTI FILES)
     // ====================================================
-    // SỬA LỖI MÀU SẮC & NGƯỠNG ĐO THEO HÌNH ẢNH YÊU CẦU
     function getColor4G(level) {
-        if (level >= -65) return '#0000FF'; // Rất tốt: Blue
-        if (level >= -85) return '#008000'; // Tốt: Dark Green
-        if (level >= -95) return '#00FF00'; // Trung bình: Lime (Sáng)
-        if (level >= -105) return '#FFFF00'; // Kém: Yellow
-        if (level >= -110) return '#FF0000'; // Rất kém: Red
-        return '#000000'; // Điểm đen: Black
+        if (level >= -65) return '#0000FF'; 
+        if (level >= -85) return '#008000'; 
+        if (level >= -95) return '#00FF00'; 
+        if (level >= -105) return '#FFFF00'; 
+        if (level >= -110) return '#FF0000'; 
+        return '#000000'; 
     }
     
     function getColor3G(level) {
-        if (level >= -65) return '#0000FF'; // Rất tốt: Blue
-        if (level >= -75) return '#008000'; // Tốt: Dark Green
-        if (level >= -85) return '#00FF00'; // Trung bình: Lime (Sáng)
-        if (level >= -95) return '#FFFF00'; // Kém: Yellow
-        if (level >= -105) return '#FF0000'; // Rất kém: Red
-        return '#000000'; // Điểm đen: Black
+        if (level >= -65) return '#0000FF'; 
+        if (level >= -75) return '#008000'; 
+        if (level >= -85) return '#00FF00'; 
+        if (level >= -95) return '#FFFF00'; 
+        if (level >= -105) return '#FF0000'; 
+        return '#000000'; 
     }
 
-    // BỔ SUNG THAM SỐ STATS ĐỂ HIỂN THỊ THỐNG KÊ SỐ MẪU ĐO
     function addLegend(is3G, is4G, stats = null) {
         if (legendControl) map.removeControl(legendControl);
         legendControl = L.control({position: 'bottomright'});
         legendControl.onAdd = function (map) {
             let div = L.DomUtil.create('div', 'info legend'); let labels = [];
-            let title = is4G ? 'Mức thu 4G (RSRP)' : 'Mức thu 3G (RSCP)';
+            let titleStr = is4G ? 'Mức thu 4G (RSRP)' : 'Mức thu 3G (RSCP)';
             
-            // Nếu có dữ liệu thống kê, in thêm tổng số mẫu đo lên tiêu đề
+            let totalHtml = '';
             if (stats && stats.total > 0) {
-                title += `<br><span style="font-size: 11px; font-weight: normal; color: #7f8c8d;">Tổng số: <b>${stats.total.toLocaleString('vi-VN')}</b> mẫu đo</span>`;
+                totalHtml = `<div style="font-size: 11px; font-weight: normal; color: var(--text-muted); margin-top:2px;">Tổng: <b>${stats.total.toLocaleString('vi-VN')}</b> mẫu đo</div>`;
             }
             
-            div.innerHTML = `<h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 13px; font-weight: bold; border-bottom: 2px solid #3498db; padding-bottom: 5px;">${title}</h4>`;
+            let headerHtml = `
+                <div class="legend-header" onclick="toggleLegend(this)" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); padding-bottom: 5px; margin-bottom: 10px;">
+                    <div>
+                        <h4 style="margin: 0; color: var(--text-main); font-size: 13px; font-weight: bold;">${titleStr}</h4>
+                        ${totalHtml}
+                    </div>
+                    <span class="legend-toggle-icon" style="font-size: 16px; margin-left: 10px; color: var(--text-muted);">▼</span>
+                </div>
+                <div class="legend-body" style="display: block;">
+            `;
             
             const ranges4G = [ 
                 { text: 'Rất tốt [-65: 0)', color: '#0000FF' }, 
@@ -865,7 +894,6 @@
                 { text: 'Điểm đen [--: -105)', color: '#000000' }
             ];
             
-            // Gắn số liệu vào từng hạng mức
             if (stats) {
                 ranges4G[0].count = stats.cat1; ranges3G[0].count = stats.cat1;
                 ranges4G[1].count = stats.cat2; ranges3G[1].count = stats.cat2;
@@ -877,25 +905,27 @@
             
             const ranges = is4G ? ranges4G : ranges3G;
 
-            // Đặt min-width rộng hơn để chứa các số liệu không bị xuống dòng
-            div.style.minWidth = "260px";
+            div.style.minWidth = "240px";
 
             ranges.forEach(r => {
                 let countHtml = '';
                 if (r.count !== undefined && stats.total > 0) {
                     let pct = ((r.count / stats.total) * 100).toFixed(1);
-                    countHtml = `<span style="margin-left: auto; font-size: 11px; color: #34495e; font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
+                    countHtml = `<span style="margin-left: auto; font-size: 11px; color: var(--text-main); font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
                 }
                 
                 labels.push(`
                     <div style="display: flex; align-items: center; margin-bottom: 5px; width: 100%;">
                         <i style="background:${r.color}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></i> 
-                        <span style="font-size: 12px; font-weight: bold; color: #34495e; white-space: nowrap;">${r.text}</span>
+                        <span style="font-size: 12px; font-weight: bold; color: var(--text-main); white-space: nowrap;">${r.text}</span>
                         ${countHtml}
                     </div>
                 `);
             });
-            div.innerHTML += labels.join(''); return div;
+            
+            headerHtml += labels.join('') + `</div>`; 
+            div.innerHTML = headerHtml;
+            return div;
         };
         legendControl.addTo(map);
     }
