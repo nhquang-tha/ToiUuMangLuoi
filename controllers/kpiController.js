@@ -229,21 +229,29 @@ exports.getOptimizingPage = async (req, res) => {
     }
 };
 
-/* STREAMING_CHUNK:Executing Barem 2304 MBB Optimization... */
+// =====================================================================
+// TỐI ƯU CEM / QOS THEO QUY TRÌNH & BAREM ĐIỂM SỐ 2304/VNPT-CN 4G
+// =====================================================================
 exports.getOptimizingData = async (req, res) => {
-    const db = require('../models/db');
     const week = req.query.week;
     const filterBlacklist = req.query.filterBlacklist === 'true';
 
     if (!week) return res.json({ error: "Vui lòng chọn Tuần cần phân tích." });
 
     try {
-        // BƯỚC 1: NHẬN DIỆN BADCELL 4G (QoE_Rank < 4 HOẶC QoS_Rank < 4)
+        // BƯỚC 1: NHẬN DIỆN BADCELL 4G (QoE_Rank < 3 HOẶC QoS_Rank < 3)
+        // [CẬP NHẬT]: Dùng LEFT JOIN với bảng rf_4g để kéo thông tin Equipment và MIMO về
         const queryBadCells = `
-            SELECT Site_Name, Cell_Name, District, MIMO, QoE_Rank, QoE_Score, QoS_Rank, QoS_Score 
-            FROM qoe_qos 
-            WHERE (QoE_Rank IS NOT NULL AND QoE_Rank < 4) 
-               OR (QoS_Rank IS NOT NULL AND QoS_Rank < 4)
+            SELECT q.Site_Name, q.Cell_Name, q.District, q.MIMO, q.QoE_Rank, q.QoE_Score, q.QoS_Rank, q.QoS_Score,
+                   r.Equipment, r.MIMO as rf_mimo
+            FROM qoe_qos q
+            LEFT JOIN (
+                SELECT Cell_code, MAX(Equipment) as Equipment, MAX(MIMO) as MIMO 
+                FROM rf_4g 
+                GROUP BY Cell_code
+            ) r ON q.Cell_Name = r.Cell_code
+            WHERE (q.QoE_Rank IS NOT NULL AND q.QoE_Rank < 3) 
+               OR (q.QoS_Rank IS NOT NULL AND q.QoS_Rank < 3)
         `;
         let badCellsRaw = [];
         try {
@@ -251,28 +259,36 @@ exports.getOptimizingData = async (req, res) => {
             badCellsRaw = rows;
         } catch (dbError) {
             console.error("Lỗi CSDL Bảng qoe_qos:", dbError);
-            return res.json({ error: "Bảng dữ liệu qoe_qos chưa tồn tại hoặc trống." });
+            return res.json({ error: "Bảng dữ liệu qoe_qos chưa tồn tại hoặc trống. Vui lòng Import dữ liệu QoE/QoS vào hệ thống." });
         }
 
         if (badCellsRaw.length === 0) {
-            return res.json({ message: "Mạng lưới đạt chuẩn! Không tìm thấy Badcell 4G nào dưới 4 điểm ở cả CEM và QoS.", data: null });
+            return res.json({ message: "Mạng lưới đạt chuẩn 2304/VNPT-CN! Không tìm thấy Badcell 4G nào dưới 3 điểm ở cả CEM và QoS.", data: null });
         }
 
         let blacklistedCount = 0;
         let validCellsObj = {};
 
-        // BƯỚC 2: LỌC NGOẠI TRỪ (BLACKLIST 4G)
+        // BƯỚC 2: LỌC NGOẠI TRỪ (BLACKLIST 4G MIỄN TRỪ 06 THÁNG)
         badCellsRaw.forEach(row => {
             const cell = row.Cell_Name;
             if (!cell) return;
 
             const upperCell = cell.toUpperCase();
+            
+            // Lấy thông tin Phần cứng & MIMO từ bảng RF (nếu có), nếu không dùng dự phòng từ bảng qoe_qos
+            const mimo = String(row.rf_mimo || row.MIMO || '').toUpperCase();
+            const equip = String(row.Equipment || '').toUpperCase();
+
+            // [CẬP NHẬT LOGIC]: Bổ sung luật lọc MIMO 1T1R và Thiết bị NOKIA
             const isBlacklisted = upperCell.includes('IBS') || 
                                   upperCell.includes('DAS') || 
                                   upperCell.includes('VSAT') || 
                                   upperCell.includes('BOOSTER') ||
                                   upperCell.startsWith('MBF_TH') ||
-                                  upperCell.startsWith('VNP-4G');
+                                  upperCell.startsWith('VNP-4G') ||
+                                  mimo.includes('1T1R') || 
+                                  equip.includes('NOKIA');
 
             if (filterBlacklist && isBlacklisted) {
                 blacklistedCount++;
@@ -280,16 +296,20 @@ exports.getOptimizingData = async (req, res) => {
             }
 
             validCellsObj[upperCell] = {
-                Cell_Name: upperCell, Site_Name: row.Site_Name || '',
-                District: row.District || '', MIMO: row.MIMO || '2T2R',
-                QoE_Rank: row.QoE_Rank, QoE_Score: row.QoE_Score,
-                QoS_Rank: row.QoS_Rank, QoS_Score: row.QoS_Score
+                Cell_Name: upperCell,
+                Site_Name: row.Site_Name || '',
+                District: row.District || '',
+                MIMO: row.MIMO || '2T2R',
+                QoE_Rank: row.QoE_Rank,
+                QoE_Score: row.QoE_Score,
+                QoS_Rank: row.QoS_Rank,
+                QoS_Score: row.QoS_Score
             };
         });
 
         const targetCells = Object.keys(validCellsObj);
         if (targetCells.length === 0) {
-            return res.json({ message: `Đã miễn trừ ${blacklistedCount} trạm Blacklist. Hiện không còn Badcell cần xử lý.`, data: null });
+            return res.json({ message: `Đã miễn trừ ${blacklistedCount} trạm Blacklist (VSAT, DAS cũ, Biên giới/Hải đảo). Hiện không còn Badcell cần xử lý.`, data: null });
         }
 
         // BƯỚC 3 & 4: TRUY VẾT DỮ LIỆU KPI 7 NGÀY
