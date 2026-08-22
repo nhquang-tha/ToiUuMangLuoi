@@ -65,7 +65,7 @@
     <%- include('partials/sidebar', { currentUser: sidebarUser }) %>
     <main class="main-content">
         <header class="topbar">
-            <h1>🛠️ Tối Ưu CEM/QoS (Chuẩn hóa Barem 2304)</h1>
+            <h1>🛠️ Tối Ưu CEM/QoS (Chuẩn hóa 2304/VNPT-CN)</h1>
         </header>
         
         <div class="content-body">
@@ -75,10 +75,11 @@
                 <div class="step-desc">
                     Hệ thống tự động hóa phễu lọc theo <b>Văn bản 2304/VNPT-CN</b>:
                     <ul>
-                        <li><b>Bước 1: Nhận diện "Badcell 4G"</b> (QoE_Rank < 4 HOẶC QoS_Rank < 4). Đưa vào danh sách theo dõi đặc biệt.</li>
-                        <li><b>Bước 2: Lọc ngoại trừ (Blacklist 4G)</b> Miễn xử lý 6 tháng đối với trạm Vùng hở, VSAT-IP, Booster, IBS/DAS cũ 2T2R.</li>
-                        <li><b>Bước 3 & 4: Truy vết Barem</b> Phân rã nguyên nhân trải nghiệm (Network CEM) và kỹ thuật vô tuyến (QoS SQI 1-5).</li>
-                        <li><b>Tự động Cảnh Báo Chuỗi (Automation):</b> Xuất báo cáo Work Order khi bị Tag "Nguy kịch" 3 ngày liên tiếp.</li>
+                        <li><b>Bước 1: Badcell 4G</b> (CEM < 3 sao HOẶC QoS < 3 sao). Kiểm soát tỷ lệ Badcell ≤ 3% (Tỉnh) & ≤ 5% (Miền núi/Hải đảo).</li>
+                        <!-- [CẬP NHẬT] Text mô tả Bước 2 -->
+                        <li><b>Bước 2: Blacklist 4G</b> (Gạt bỏ các trạm có cấu hình phần cứng cũ: <b>MIMO 1T1R</b> hoặc Thiết bị <b>NOKIA</b>, cùng với các trạm VSAT-IP, Booster, IBS/DAS).</li>
+                        <li><b>Bước 3 & 4: Truy vết Barem</b> (Đối chiếu 7 ngày KPI với barem Băng thông 5-20MHz và MIMO 1T1R/2T2R/4T4R).</li>
+                        <li><b>Tự động Cảnh Báo Chuỗi 3 Ngày (Work Order):</b> Xuất danh sách khẩn giao việc UCTT/RNO khi bị Tag "Nguy kịch" 3 ngày liên tiếp.</li>
                     </ul>
                 </div>
                 
@@ -98,7 +99,8 @@
                     <div style="flex: 1; min-width: 250px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #ecf0f1; display: flex; align-items: center; height: 46px; box-sizing: border-box;">
                         <label style="display:flex; align-items: center; cursor: pointer; font-weight: bold; color: #34495e; margin: 0;">
                             <input type="checkbox" id="blacklistCheck" checked style="width: 18px; height: 18px; margin-right: 10px;">
-                            Khóa màng lọc Blacklist 4G
+                            <!-- [CẬP NHẬT] Text label checkbox -->
+                            Khóa màng lọc Blacklist 4G (1T1R, NOKIA, VSAT...)
                         </label>
                     </div>
                     
