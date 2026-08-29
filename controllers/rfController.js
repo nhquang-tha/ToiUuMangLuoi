@@ -142,13 +142,29 @@ exports.saveData = async (req, res) => {
 
 exports.deleteData = async (req, res) => {
     const network = req.params.network;
-    const id = req.params.id;
+    // [FIX]: Ép kiểu ID về số nguyên để tránh lỗi truyền chuỗi gây lỗi MySQL
+    const id = parseInt(req.params.id, 10);
+    
+    if (!network || isNaN(id)) {
+        return res.status(400).send("Dữ liệu không hợp lệ. Thiếu mạng lưới hoặc ID.");
+    }
+
+    // [FIX]: Whitelist để bảo mật SQL Injection
+    const allowedNetworks = ['3g', '4g', '5g'];
+    if (!allowedNetworks.includes(network)) {
+        return res.status(403).send("Bảng mạng lưới không hợp lệ.");
+    }
+
     try {
-        await db.query(`DELETE FROM rf_${network} WHERE id = ?`, [id]);
-        res.redirect(`/rf-database?network=${network}`);
+        const [result] = await db.query(`DELETE FROM rf_${network} WHERE id = ?`, [id]);
+        if (result.affectedRows > 0) {
+            res.redirect(`/rf-database?network=${network}`);
+        } else {
+            res.status(404).send("Không tìm thấy dữ liệu để xóa.");
+        }
     } catch (error) {
-        console.error(error);
-        res.status(500).send("Lỗi xóa dữ liệu");
+        console.error("Lỗi xóa dữ liệu RF:", error);
+        res.status(500).send("Lỗi xóa dữ liệu. Hãy đảm bảo Database đang hoạt động.");
     }
 };
 
