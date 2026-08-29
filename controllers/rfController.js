@@ -168,7 +168,7 @@ exports.deleteData = async (req, res) => {
             query = `DELETE FROM rf_${network} WHERE id = ?`;
             params = [parseInt(rowIdentifier, 10)];
         } else {
-            // Xóa bằng Tên Cell / Tên Site
+            // Xóa bằng Tên Cell
             query = `DELETE FROM rf_${network} WHERE Cell_code = ? OR CELL_NAME = ?`;
             params = [rowIdentifier, rowIdentifier];
         }
@@ -178,12 +178,17 @@ exports.deleteData = async (req, res) => {
         if (result.affectedRows > 0) {
             res.redirect(`/rf-database?network=${network}`);
         } else {
-            // Nếu Mạng 5G dùng Site_code thay vì Cell_code, thử fallback xóa tiếp
-            const [result2] = await db.query(`DELETE FROM rf_${network} WHERE Site_code = ? OR SITE_NAME = ?`, [rowIdentifier, rowIdentifier]);
-            if (result2.affectedRows > 0) {
-                res.redirect(`/rf-database?network=${network}`);
-            } else {
-                res.status(404).send(`Không tìm thấy dữ liệu để xóa (Giá trị nhận diện: ${rowIdentifier}).`);
+            // [FIX]: Fallback xử lý an toàn cho 3G/5G khi xóa bằng Tên Trạm (SITE_NAME)
+            try {
+                const [result2] = await db.query(`DELETE FROM rf_${network} WHERE SITE_NAME = ?`, [rowIdentifier]);
+                if (result2.affectedRows > 0) {
+                    res.redirect(`/rf-database?network=${network}`);
+                } else {
+                    res.status(404).send(`Không tìm thấy dữ liệu để xóa (Giá trị nhận diện: ${rowIdentifier}).`);
+                }
+            } catch (fallbackError) {
+                // Bắt lỗi nếu bảng không có cột SITE_NAME
+                res.status(404).send(`Không tìm thấy ID để xóa hoặc giá trị nhận diện không đúng.`);
             }
         }
     } catch (error) {
