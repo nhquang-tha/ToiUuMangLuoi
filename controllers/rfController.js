@@ -141,30 +141,54 @@ exports.saveData = async (req, res) => {
 };
 
 exports.deleteData = async (req, res) => {
-    const network = req.params.network;
-    // [FIX]: Ép kiểu ID về số nguyên để tránh lỗi truyền chuỗi gây lỗi MySQL
-    const id = parseInt(req.params.id, 10);
+    let network = req.params.network;
+    network = network.replace(/^rf_/i, ''); // Tự động cắt bỏ chữ rf_ nếu frontend lỡ gửi nhầm rf_4g
     
-    if (!network || isNaN(id)) {
-        return res.status(400).send("Dữ liệu không hợp lệ. Thiếu mạng lưới hoặc ID.");
+    const rowIdentifier = req.params.id; // Giá trị định danh truyền từ Frontend
+    
+    if (!network || !rowIdentifier) {
+        return res.status(400).send("Dữ liệu không hợp lệ. Thiếu mạng lưới hoặc ID nhận diện.");
     }
 
-    // [FIX]: Whitelist để bảo mật SQL Injection
+    // Whitelist bảo mật
     const allowedNetworks = ['3g', '4g', '5g'];
     if (!allowedNetworks.includes(network)) {
         return res.status(403).send("Bảng mạng lưới không hợp lệ.");
     }
 
     try {
-        const [result] = await db.query(`DELETE FROM rf_${network} WHERE id = ?`, [id]);
+        // Thuật toán nhận diện thông minh: Kiểm tra xem Identifier là ID (Số) hay là Cell_Code (Chứa chữ cái)
+        const isNumeric = !isNaN(rowIdentifier) && !String(rowIdentifier).match(/[a-zA-Z]/);
+        
+        let query = '';
+        let params = [];
+        
+        if (isNumeric) {
+            // Xóa bằng ID nguyên thủy
+            query = `DELETE FROM rf_${network} WHERE id = ?`;
+            params = [parseInt(rowIdentifier, 10)];
+        } else {
+            // Xóa bằng Tên Cell / Tên Site
+            query = `DELETE FROM rf_${network} WHERE Cell_code = ? OR CELL_NAME = ?`;
+            params = [rowIdentifier, rowIdentifier];
+        }
+
+        const [result] = await db.query(query, params);
+        
         if (result.affectedRows > 0) {
             res.redirect(`/rf-database?network=${network}`);
         } else {
-            res.status(404).send("Không tìm thấy dữ liệu để xóa.");
+            // Nếu Mạng 5G dùng Site_code thay vì Cell_code, thử fallback xóa tiếp
+            const [result2] = await db.query(`DELETE FROM rf_${network} WHERE Site_code = ? OR SITE_NAME = ?`, [rowIdentifier, rowIdentifier]);
+            if (result2.affectedRows > 0) {
+                res.redirect(`/rf-database?network=${network}`);
+            } else {
+                res.status(404).send(`Không tìm thấy dữ liệu để xóa (Giá trị nhận diện: ${rowIdentifier}).`);
+            }
         }
     } catch (error) {
         console.error("Lỗi xóa dữ liệu RF:", error);
-        res.status(500).send("Lỗi xóa dữ liệu. Hãy đảm bảo Database đang hoạt động.");
+        res.status(500).send("Lỗi cơ sở dữ liệu khi thực hiện lệnh xóa.");
     }
 };
 
