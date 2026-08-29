@@ -65,7 +65,10 @@ router.get('/rf-database', isAuthenticated, rfController.getList);
 router.get('/rf-database/export', isAuthenticated, rfController.exportData); 
 router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
 router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, rfController.saveData);
-router.post('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
+
+// [FIX]: Đổi router.post thành router.all để nút Xóa bằng thẻ <a> trên giao diện Web cũng hoạt động được
+router.all('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
+
 router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
 
 router.get('/api/dashboard-data', isAuthenticated, dashboardController.getDashboardData);
