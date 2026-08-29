@@ -1413,6 +1413,19 @@ exports.handleImportData = async (req, res) => {
                 let firstCellStr = String(row[0] || '').toLowerCase().trim();
                 if (firstCellStr === 'summary' || firstCellStr.includes('không thành công') || firstCellStr.includes('phân trang')) continue; 
 
+                // [FIX]: BẪY LỖI NGĂN CHẶN DÒNG TIÊU ĐỀ (HEADER) LỌT VÀO DATABASE
+                // Nếu một dòng có từ 2 ô trở lên trùng với tên cột trong Database -> Chắc chắn là dòng tiêu đề -> Bỏ qua
+                let matchHeaderCount = 0;
+                colMapping.forEach(map => {
+                    let cellVal = String(row[map.excelIdx] || '').toLowerCase().trim().replace(/_/g, ' ');
+                    let dbName = map.dbCol.toLowerCase().replace(/_/g, ' ');
+                    if (cellVal === dbName) matchHeaderCount++;
+                });
+                if (matchHeaderCount >= 2) {
+                    console.log(`Bỏ qua dòng ${i+1} vì nhận diện đây là dòng Tiêu đề (Header).`);
+                    continue; 
+                }
+
                 const rowObj = {}; 
                 let hasKpiData = false;
                 let hasValidIdentifier = false;
