@@ -63,13 +63,15 @@ router.post('/kpi-data/reset/:network', isAuthenticated, isAdmin, async (req, re
 
 router.get('/rf-database', isAuthenticated, rfController.getList);
 router.get('/rf-database/export', isAuthenticated, rfController.exportData); 
+
+// [FIX QUAN TRỌNG]: Chuyển các Route cụ thể (delete, reset) LÊN TRƯỚC Route động (:action)
+// Điều này ngăn chặn biến :action nuốt nhầm chữ "delete" hoặc "reset"
+router.all('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
+router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
+
+// CÁC ROUTE ĐỘNG (Bắt tham số :action) PHẢI ĐẶT Ở DƯỚI CÙNG NHÓM RF
 router.get('/rf-database/:action/:network/:id?', isAuthenticated, rfController.getForm);
 router.post('/rf-database/:action/:network/:id?', isAuthenticated, isAdmin, rfController.saveData);
-
-// [FIX]: Đổi router.post thành router.all để nút Xóa bằng thẻ <a> trên giao diện Web cũng hoạt động được
-router.all('/rf-database/delete/:network/:id', isAuthenticated, isAdmin, rfController.deleteData);
-
-router.post('/rf-database/reset/:network', isAuthenticated, isAdmin, rfController.resetData);
 
 router.get('/api/dashboard-data', isAuthenticated, dashboardController.getDashboardData);
 router.get('/api/districts', isAuthenticated, dashboardController.getDistricts); 
