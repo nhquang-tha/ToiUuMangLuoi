@@ -806,9 +806,9 @@ exports.handleImportData = async (req, res) => {
     const networkType = req.body.networkType; 
     let isKpiImported = networkType.startsWith('kpi_');
 
-    // [FIX 1]: Bổ sung mbb_cem vào danh sách nhận diện Tuần
+    // Bổ sung p1_high_load vào danh sách nhận diện Tuần
     let weekPrefix = "";
-    if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem') {
+    if (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem' || networkType === 'p1_high_load') {
         const wNum = req.body.weekNumber;
         const wYear = req.body.year;
         if(wNum && wYear) weekPrefix = `Tuần ${wNum} (${wYear})`;
@@ -816,6 +816,19 @@ exports.handleImportData = async (req, res) => {
 
     let totalImported = 0;
     let errorLogs = [];
+
+    // [Tự động khởi tạo bảng P1 nếu chưa có]
+    if (networkType === 'p1_high_load') {
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS p1_high_load (
+                    id INT AUTO_INCREMENT PRIMARY KEY, Tuan VARCHAR(50) NOT NULL, Ma_Tinh VARCHAR(50),
+                    Site_Name VARCHAR(150), Cell_Name VARCHAR(150) NOT NULL,
+                    So_Ngay_Vi_Pham INT DEFAULT 5, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+        } catch (e) { console.error("Lỗi tạo bảng P1 High Load:", e); }
+    }
 
     let dbCols = [];
     try {
@@ -847,8 +860,8 @@ exports.handleImportData = async (req, res) => {
         }
     }
 
-    // [FIX 2]: Bổ sung mbb_cem vào danh sách Xóa đè dữ liệu cũ
-    if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem')) {
+    // Bổ sung p1_high_load vào danh sách Xóa đè dữ liệu cũ
+    if (weekPrefix && (networkType === 'mbb_qoe' || networkType === 'mbb_qos' || networkType === 'mbb_cem' || networkType === 'p1_high_load')) {
         try { await db.query(`DELETE FROM ${networkType} WHERE Tuan = ?`, [weekPrefix]); } catch (e) {}
     }
 
@@ -894,8 +907,27 @@ exports.handleImportData = async (req, res) => {
             let dataStartIdx = -1;
             let colMapping = [];
 
+            // XỬ LÝ RIÊNG CHO BẢNG P1 HIGH LOAD
+            if (networkType === 'p1_high_load') {
+                let headerRowIdx = 0; dataStartIdx = 1;
+                for (let i = 0; i < Math.min(10, rawData.length); i++) {
+                    const str = JSON.stringify(rawData[i]).toLowerCase();
+                    if (str.includes('tên cell') || str.includes('cell_name') || str.includes('cell name') || str.includes('cell')) {
+                        headerRowIdx = i; dataStartIdx = i + 1; break;
+                    }
+                }
+                
+                let headers = rawData[headerRowIdx] || [];
+                headers.forEach((h, idx) => {
+                    let cleanH = String(h).toLowerCase().trim();
+                    if (cleanH.includes('tỉnh') || cleanH.includes('ma_tinh') || cleanH.includes('tinh')) colMapping.push({ excelIdx: idx, dbCol: 'Ma_Tinh' });
+                    else if (cleanH.includes('tên trạm') || cleanH.includes('site name') || cleanH.includes('site_name') || cleanH.includes('nodeb name') || cleanH.includes('enodeb name') || cleanH.includes('ne name')) colMapping.push({ excelIdx: idx, dbCol: 'Site_Name' });
+                    else if (cleanH === 'cell name' || cleanH === 'cell_name' || cleanH === 'tên cell' || cleanH === 'cell' || cleanH === 'cellid') colMapping.push({ excelIdx: idx, dbCol: 'Cell_Name' });
+                    else if (cleanH.includes('ngày') || cleanH.includes('ngay')) colMapping.push({ excelIdx: idx, dbCol: 'So_Ngay_Vi_Pham' });
+                });
+            }
             // [CHIẾN LƯỢC MỚI]: XỬ LÝ RIÊNG CHO BẢNG CEM MỚI
-            if (networkType === 'mbb_cem') {
+            else if (networkType === 'mbb_cem') {
                 // Theo cấu trúc Excel thực tế có 4 dòng tiêu đề:
                 // rawData[0] (Dòng 1): Tiêu đề nhóm lớn (UXI chuẩn hóa, Điểm UXI, UXI) + Tiêu đề của các ô gộp dọc (Mã Tỉnh, Cell Name...)
                 // rawData[1] (Dòng 2): Tiêu đề nhóm con
@@ -1536,6 +1568,18 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
+            // Lọc trùng lặp danh sách Cell tải cao từ file Log Export hàng giờ/ngày
+            if (networkType === 'p1_high_load' && insertData.length > 0) {
+                const uniqueP1 = [];
+                const seenP1 = new Set();
+                insertData.forEach(row => {
+                    let c = row['Cell_Name'];
+                    if (c && !seenP1.has(c)) { seenP1.add(c); uniqueP1.push(row); }
+                });
+                insertData.length = 0;
+                insertData.push(...uniqueP1);
+            }
+
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
@@ -1553,7 +1597,7 @@ exports.handleImportData = async (req, res) => {
                     
                     let sql = `INSERT INTO ${networkType} (${keys.map(k => `\`${k}\``).join(',')}) VALUES ?`;
                     
-                    if (['alarm_data', 'csht_data', 'vat_tu'].includes(networkType)) {
+                    if (['alarm_data', 'csht_data', 'vat_tu', 'p1_high_load'].includes(networkType)) {
                         let updateCols = keys.map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(', ');
                         sql += ` ON DUPLICATE KEY UPDATE ${updateCols}`;
                     }
