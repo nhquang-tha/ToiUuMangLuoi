@@ -1,11 +1,6 @@
 const express = require('express');
 const session = require('express-session');
-// [MỚI] Nhúng thư viện lưu session vào MySQL
-const MySQLStore = require('express-mysql-session')(session); 
 const path = require('path');
-// [MỚI] Gọi file cấu hình DB hiện tại của bạn ra
-const db = require('./models/db'); 
-
 const app = express();
 
 // Cấu hình Express và giới hạn kích thước file upload (cho file Excel nặng)
@@ -15,17 +10,9 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// [MỚI] Cấu hình Kho lưu trữ Session vào Database
-const sessionStore = new MySQLStore({
-    clearExpired: true,
-    checkExpirationInterval: 900000 // Tự động dọn dẹp rác session mỗi 15 phút
-}, db); // Tái sử dụng luôn biến kết nối 'db' ở trên!
-
 // Cấu hình Session (Phiên đăng nhập)
 app.use(session({
-    key: 'vnpt_session',
     secret: 'vnpt-telecom-secret-key-2026',
-    store: sessionStore,     // [QUAN TRỌNG] Gắn Store MySQL vào đây để dập tắt cảnh báo rò rỉ RAM
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // Thời hạn 1 ngày
