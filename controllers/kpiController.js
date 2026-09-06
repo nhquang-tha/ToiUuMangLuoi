@@ -351,6 +351,15 @@ exports.getOptimizingData = async (req, res) => {
         const cemMap = {};
         cemRows.forEach(r => cemMap[r.Cell_Name.toUpperCase()] = r);
 
+        // [MỚI] 3.3 Lấy danh sách trạm P1 Tải cao Đã Import từ hệ thống
+        let p1Rows = [];
+        try {
+            const [pRows] = await db.query(`SELECT Cell_Name FROM p1_high_load WHERE Tuan = ?`, [week]);
+            p1Rows = pRows;
+        } catch (e) {}
+        // Chuyển thành tập hợp Set để tra cứu tốc độ cao O(1)
+        const p1Set = new Set(p1Rows.map(r => r.Cell_Name.toUpperCase()));
+
         let cellKpiMap = {};
         kpiRows.forEach(row => {
             const upperCell = String(row.Cell_name).toUpperCase();
@@ -486,7 +495,12 @@ exports.getOptimizingData = async (req, res) => {
             if (cellKey.startsWith('MBF_TH') || cellKey.startsWith('VNP_4G') || cellKey.startsWith('VNP-4G')) {
                 tier5Tags.push('RAN Sharing');
             }
-            if (parseFloat(avgPrb) >= 70) {
+            
+            // [CẬP NHẬT LỚN]: Tra cứu trực tiếp từ File Báo cáo Tải Cao hệ thống 
+            if (p1Set.has(cellKey)) {
+                tier5Tags.push('P1 Tải Cao');
+            } else if (parseFloat(avgPrb) >= 75) {
+                // Fallback dự phòng: Nếu chưa import file P1, hệ thống vẫn gắn mác P1 cho trạm có PRB trung bình 7 ngày > 75%
                 tier5Tags.push('P1 Tải Cao');
             }
 
