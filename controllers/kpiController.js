@@ -312,7 +312,7 @@ exports.getOptimizingData = async (req, res) => {
             return res.json({ message: `Đã miễn trừ ${blacklistedCount} trạm Blacklist (VSAT, DAS cũ, Biên giới/Hải đảo). Hiện không còn Badcell cần xử lý.`, data: null });
         }
 
-        // BƯỚC 3 & 4: TRUY VẾT DỮ LIỆU KPI 7 NGÀY & DỮ LIỆU CEM
+        // BƯỚC 3 & 4: TRUY VẾT DỮ LIỆU KPI 7 NGÀY
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
         const dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-')));
         const targetDates = dates.slice(0, 7); 
@@ -320,7 +320,6 @@ exports.getOptimizingData = async (req, res) => {
         const placeholders = targetCells.map(() => '?').join(',');
         const datePlaceholders = targetDates.map(() => '?').join(',');
 
-        // 3.1 Lấy dữ liệu KPI 4G
         let kpiRows = [];
         if (targetDates.length > 0) {
             try {
@@ -341,25 +340,6 @@ exports.getOptimizingData = async (req, res) => {
             } catch (kpiError) {}
         }
 
-        // 3.2 Lấy dữ liệu chi tiết từ bảng CEM để phân rã UXI
-        let cemRows = [];
-        try {
-            const [cRows] = await db.query(`SELECT * FROM mbb_cem WHERE Tuan = ? AND UPPER(Cell_Name) IN (${placeholders})`, [week, ...targetCells]);
-            cemRows = cRows;
-        } catch (e) {}
-
-        const cemMap = {};
-        cemRows.forEach(r => cemMap[r.Cell_Name.toUpperCase()] = r);
-
-        // [MỚI] 3.3 Lấy danh sách trạm P1 Tải cao Đã Import từ hệ thống
-        let p1Rows = [];
-        try {
-            const [pRows] = await db.query(`SELECT Cell_Name FROM p1_high_load WHERE Tuan = ?`, [week]);
-            p1Rows = pRows;
-        } catch (e) {}
-        // Chuyển thành tập hợp Set để tra cứu tốc độ cao O(1)
-        const p1Set = new Set(p1Rows.map(r => r.Cell_Name.toUpperCase()));
-
         let cellKpiMap = {};
         kpiRows.forEach(row => {
             const upperCell = String(row.Cell_name).toUpperCase();
@@ -375,7 +355,6 @@ exports.getOptimizingData = async (req, res) => {
         targetCells.forEach(cellKey => {
             const cellInfo = validCellsObj[cellKey];
             const rows = cellKpiMap[cellKey] || [];
-            const cemData = cemMap[cellKey] || {}; // Lấy dữ liệu CEM tương ứng
 
             let avgThput = 0, avgPrb = 0, avgCqi = 0, avgDrop = 0, avgErab = 100, avgLatency = 0;
             let count = rows.length;
@@ -386,7 +365,6 @@ exports.getOptimizingData = async (req, res) => {
 
             let cemIssues = [];
             let qosIssues = [];
-            let tier5Tags = [];
 
             if (count > 0) {
                 let sumThput = 0, sumPrb = 0, sumCqi = 0, sumDrop = 0, sumErab = 0, sumLatency = 0;
@@ -405,27 +383,23 @@ exports.getOptimizingData = async (req, res) => {
 
                     let dailyViolations = 0;
 
-                    // ============================================
-                    // BAREM ĐÁNH GIÁ ĐỎ THEO CÔNG VĂN 6945/VNPT-CN
-                    // ============================================
+                    // BAREM ĐÁNH GIÁ ĐỎ THEO CÔNG VĂN 2304
+                    if (thputMbps < 3) dailyViolations++;
+                    if (latency > 300) dailyViolations++;
+
                     let speedThreshold = 25; 
                     if (cellType.includes('10M')) speedThreshold = 18;
-                    if (cellType.includes('5M') || cellType.includes('L900')) speedThreshold = 4;
+                    if (cellType.includes('5M') || cellType.includes('L900')) speedThreshold = 6;
                     if (thputMbps < speedThreshold) dailyViolations++;
 
-                    let is900 = cellType.includes('L900') || cellKey.includes('U9') || cellKey.includes('L9');
                     let cqiThreshold = 93; 
-                    // THUẬT TOÁN CQI ĐỘNG MỚI
-                    if (mimo.includes('4T4R')) cqiThreshold = is900 ? 90 : 95;
-                    else if (mimo.includes('1T1R') || mimo.includes('1T2R')) cqiThreshold = is900 ? 86 : 92;
-                    else cqiThreshold = is900 ? 88 : 93; // Default 2T2R
-
+                    if (mimo.includes('4T4R')) cqiThreshold = 95;
+                    if (mimo.includes('1T1R') || mimo.includes('1T2R')) cqiThreshold = 92;
                     if (cqi < cqiThreshold) dailyViolations++;
 
-                    // Ngưỡng phạt mới
-                    if (prb > 60) dailyViolations++;
-                    if (drop > 0.5) dailyViolations++;
-                    if (erab < 99.5) dailyViolations++;
+                    if (prb >= 70) dailyViolations++;
+                    if (drop > 1) dailyViolations++;
+                    if (erab < 99) dailyViolations++;
 
                     if (dailyViolations >= 2) {
                         dailyCriticalCount++; consecutiveCritical++;
@@ -443,69 +417,21 @@ exports.getOptimizingData = async (req, res) => {
                 avgThput = '-'; avgPrb = '-'; avgCqi = '-'; avgDrop = '-'; avgErab = '-'; avgLatency = '-';
             }
 
-            // ============================================
-            // TẦNG 3: PHÂN RÃ BỆNH CEM UXI (Dựa trên mbb_cem)
-            // ============================================
-            let thputCem = parseFloat(cemData.Val_User_Download_Throughput) || 0; 
-            let videoBuf = parseFloat(cemData.Val_Video_Buffering_Rate) || 0;
-            let initBuf = parseFloat(cemData.Val_Init_Buffering_Time) || 0;
-            let packetLoss = parseFloat(cemData.Val_Download_Packet_Loss) || 0;
-            let ulLatencyCem = parseFloat(cemData.Val_Upload_Latency) || 0;
-            let chatSuccess = parseFloat(cemData.Val_Chat_Success_Sending_Message) || 100;
+            // PHÂN RÃ CEM MBB UXI
+            if (parseFloat(avgThput) < 3) cemIssues.push('UXI 3: Video giật/vỡ nét (< 3 Mbps)');
+            if (parseFloat(avgLatency) > 300) cemIssues.push('UXI 2: Độ trễ quá cao (> 300ms)');
+            if (parseFloat(avgErab) < 92) cemIssues.push('UXI 1: Tỷ lệ truy cập gửi tin kém (< 92%)');
 
-            if ((thputCem > 0 && thputCem < 15) || videoBuf > 15 || initBuf > 10) {
-                cemIssues.push(`UXI 3 (Video): Buffer >15% hoặc Init >10s`);
-            } else if (parseFloat(avgThput) < 15) { // Fallback 
-                cemIssues.push(`UXI 3 (Video): Tốc độ < 15Mbps`);
-            }
+            // PHÂN RÃ QOS 4G SQI
+            if (parseFloat(avgPrb) >= 70) qosIssues.push('SQI 1: Mãn tải tài nguyên (RB Util ≥ 70%)');
+            if (parseFloat(avgErab) < 99) qosIssues.push('SQI 2: Lỗi thiết lập kênh (eRAB < 99%)');
+            if (parseFloat(avgDrop) > 1) qosIssues.push('SQI 3: Tỷ lệ rớt dịch vụ cao (Drop > 1%)');
+            if (parseFloat(avgCqi) < 93) qosIssues.push('SQI 4: Nhiễu sóng / Vùng phủ kém (CQI < 93-95%)');
+            if (parseFloat(avgThput) < 18) qosIssues.push('SQI 5: Tốc độ tải xuống thấp (< 18-25 Mbps)');
 
-            if (packetLoss > 1.6 || ulLatencyCem > 100) {
-                cemIssues.push(`UXI 2 (Data): Packet Loss > 1.6% hoặc Độ trễ > 100ms`);
-            }
-
-            if (chatSuccess > 0 && chatSuccess < 95) {
-                cemIssues.push(`UXI 1 (Chat): Gửi tin thành công < 95%`);
-            }
-
-            // ============================================
-            // TẦNG 4: CHẨN ĐOÁN KỸ THUẬT QOS SQI
-            // ============================================
-            const cellType = String(rows[0]?.CellType || '').toUpperCase();
-            const mimo = String(rows[0]?.MIMO || cellInfo.MIMO || '').toUpperCase();
-            let is900 = cellType.includes('L900') || cellKey.includes('U9') || cellKey.includes('L9');
-
-            let speedThreshold = 25; 
-            if (cellType.includes('10M')) speedThreshold = 18;
-            if (cellType.includes('5M') || cellType.includes('L900')) speedThreshold = 4;
-            if (parseFloat(avgThput) < speedThreshold) qosIssues.push(`SQI 5 (Speed): < ${speedThreshold}Mbps`);
-
-            let cqiThreshold = 93; 
-            if (mimo.includes('4T4R')) cqiThreshold = is900 ? 90 : 95;
-            else if (mimo.includes('1T1R') || mimo.includes('1T2R')) cqiThreshold = is900 ? 86 : 92;
-            else cqiThreshold = is900 ? 88 : 93;
-            if (parseFloat(avgCqi) < cqiThreshold) qosIssues.push(`SQI 4 (CQI): < ${cqiThreshold}% (${mimo})`);
-
-            if (parseFloat(avgPrb) > 60) qosIssues.push(`SQI 1 (Resource): PRB > 60%`);
-            if (parseFloat(avgErab) < 99.5) qosIssues.push(`SQI 2 (Setup): eRAB < 99.5%`);
-            if (parseFloat(avgDrop) > 0.5) qosIssues.push(`SQI 3 (Retainability): Drop > 0.5%`);
-
-            // ============================================
-            // TẦNG 5: PHÂN LOẠI RAN SHARING & TẢI CAO (P1)
-            // ============================================
-            if (cellKey.startsWith('MBF_TH') || cellKey.startsWith('VNP_4G') || cellKey.startsWith('VNP-4G')) {
-                tier5Tags.push('RAN Sharing');
-            }
-            
-            // [CẬP NHẬT LỚN]: Tra cứu trực tiếp từ File Báo cáo Tải Cao hệ thống 
-            if (p1Set.has(cellKey)) {
-                tier5Tags.push('P1 Tải Cao');
-            } else if (parseFloat(avgPrb) >= 75) {
-                // Fallback dự phòng: Nếu chưa import file P1, hệ thống vẫn gắn mác P1 cho trạm có PRB trung bình 7 ngày > 75%
-                tier5Tags.push('P1 Tải Cao');
-            }
-
-            let finalCemIssue = cemIssues.length > 0 ? cemIssues.join(' | ') : (cellInfo.QoE_Rank < 4 ? 'Cảnh báo CEM (Ngoài KPI)' : 'Bình thường');
-            let finalQosIssue = qosIssues.length > 0 ? qosIssues.join(' | ') : (cellInfo.QoS_Rank < 4 ? 'Cảnh báo QoS (Ngoài KPI)' : 'Bình thường');
+            // [FIX ĐỘC QUYỀN]: Xử lý đúng logic Cảnh báo
+            let finalCemIssue = cemIssues.length > 0 ? cemIssues.join(' | ') : (cellInfo.QoE_Rank < 4 ? 'Cảnh báo CEM < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (CEM >= 4 sao)');
+            let finalQosIssue = qosIssues.length > 0 ? qosIssues.join(' | ') : (cellInfo.QoS_Rank < 4 ? 'Cảnh báo QoS < 4 sao (Do các yếu tố ngoài KPI)' : 'Bình thường (QoS >= 4 sao)');
 
             const item = {
                 Cell_Name: cellInfo.Cell_Name, Site_Name: cellInfo.Site_Name, District: cellInfo.District, MIMO: cellInfo.MIMO,
@@ -516,15 +442,14 @@ exports.getOptimizingData = async (req, res) => {
                 metrics: { thput: avgThput, prb: avgPrb, cqi: avgCqi, drop_rate: avgDrop, erab: avgErab, latency: avgLatency },
                 cemIssues: finalCemIssue,
                 qosIssues: finalQosIssue,
-                tier5Tags: tier5Tags,
                 criticalDays: dailyCriticalCount, maxConsecutiveCritical: maxConsecutiveCritical
             };
 
-            // LỌC ĐẦU RA CHO TỪNG TAB
-            if (tier5Tags.includes('P1 Tải Cao') || maxConsecutiveCritical >= 3) workOrderList.push(item);
+            // BƯỚC 5: PHÂN LOẠI TAB (AUTOMATION LOGIC)
+            if (maxConsecutiveCritical >= 3 || (cellInfo.QoE_Rank < 2 || cellInfo.QoS_Rank < 2)) workOrderList.push(item);
             if (cellInfo.QoE_Rank !== null && cellInfo.QoE_Rank < 4) cemBreakdownList.push(item);
             if (cellInfo.QoS_Rank !== null && cellInfo.QoS_Rank < 4) qosBreakdownList.push(item);
-            if (tier5Tags.includes('RAN Sharing') || (parseFloat(avgPrb) > 60 && parseFloat(avgPrb) < 70)) warningList.push(item);
+            if (parseFloat(avgPrb) >= 65 || (parseFloat(avgThput) > 3 && parseFloat(avgThput) < 18)) warningList.push(item);
         });
 
         res.json({
