@@ -71,15 +71,15 @@
         <div class="content-body">
             
             <div class="filter-card">
-                <div class="step-badge">QUY TRÌNH 4 BƯỚC THỰC CHIẾN MẠNG 4G LTE</div>
+                <div class="step-badge">QUY TRÌNH 5 TẦNG LỌC (6945/VNPT-CN)</div>
                 <div class="step-desc">
-                    Hệ thống tự động hóa phễu lọc theo <b>Văn bản 2304/VNPT-CN</b>:
+                    Hệ thống tự động hóa phễu lọc theo <b>Văn bản 6945/VNPT-CN mới nhất</b>:
                     <ul>
-                        <li><b>Bước 1: Badcell 4G</b> (CEM < 3 sao HOẶC QoS < 3 sao). Kiểm soát tỷ lệ Badcell ≤ 3% (Tỉnh) & ≤ 5% (Miền núi/Hải đảo).</li>
-                        <!-- [CẬP NHẬT] Text mô tả Bước 2 -->
-                        <li><b>Bước 2: Blacklist 4G</b> (Gạt bỏ các trạm có cấu hình phần cứng cũ: <b>MIMO 1T1R</b> hoặc Thiết bị <b>NOKIA</b>, cùng với các trạm VSAT-IP, Booster, IBS/DAS).</li>
-                        <li><b>Bước 3 & 4: Truy vết Barem</b> (Đối chiếu 7 ngày KPI với barem Băng thông 5-20MHz và MIMO 1T1R/2T2R/4T4R).</li>
-                        <li><b>Tự động Cảnh Báo Chuỗi 3 Ngày (Work Order):</b> Xuất danh sách khẩn giao việc UCTT/RNO khi bị Tag "Nguy kịch" 3 ngày liên tiếp.</li>
+                        <li><b>Tầng 1: Badcell 4G</b> (CEM < 3 sao HOẶC QoS < 3 sao). Kiểm soát tỷ lệ Badcell ≤ 3%.</li>
+                        <li><b>Tầng 2: Blacklist</b> (Gạt bỏ IBS/DAS cũ không MIMO, VSAT, Booster, Vùng hở biên giới).</li>
+                        <li><b>Tầng 3: Bệnh CEM UXI</b> (Vi phạm Phễu Video > 15%, Phễu Data Packet Loss > 1.6%, Phễu Chat < 95%).</li>
+                        <li><b>Tầng 4: Bệnh QoS SQI</b> (Đánh giá CQI linh hoạt theo <b>4T4R/2T2R/1T1R</b> và Băng tần, kiểm soát Băng thông 5-20MHz).</li>
+                        <li><b>Tầng 5: Phân hạng P1</b> (Tách riêng trạm RAN Sharing và lập phiếu Cấp cứu P1 cho trạm mãn tải PRB > 70%).</li>
                     </ul>
                 </div>
                 
@@ -127,22 +127,22 @@
 
             <!-- TAB CONTAINER -->
             <div class="nav-tabs" id="tabContainer" style="display: none;">
-                <button class="nav-tab-btn active" onclick="switchTab(1)">🚨 Cảnh Báo Chuỗi (Work Order) (<span id="cntTab1">0</span>)</button>
-                <button class="nav-tab-btn" onclick="switchTab(2)">⭐ Phân Rã CEM MBB (<span id="cntTab2">0</span>)</button>
-                <button class="nav-tab-btn" onclick="switchTab(3)">⚙️ Phân Rã QoS 4G SQI (<span id="cntTab3">0</span>)</button>
-                <button class="nav-tab-btn" onclick="switchTab(4)">⚠️ Tag "Theo Dõi" Sát Ngưỡng (<span id="cntTab4">0</span>)</button>
+                <button class="nav-tab-btn active" onclick="switchTab(1)">🚨 Phiếu Khẩn P1 / Nguy Kịch (<span id="cntTab1">0</span>)</button>
+                <button class="nav-tab-btn" onclick="switchTab(2)">⭐ Bệnh CEM UXI (<span id="cntTab2">0</span>)</button>
+                <button class="nav-tab-btn" onclick="switchTab(3)">⚙️ Bệnh QoS SQI (<span id="cntTab3">0</span>)</button>
+                <button class="nav-tab-btn" onclick="switchTab(4)">⚠️ RAN Sharing & Theo Dõi (<span id="cntTab4">0</span>)</button>
             </div>
 
             <!-- TAB 1: WORK ORDER CHUỖI 3 NGÀY NGUY KỊCH -->
             <div class="group-card" id="group1">
                 <div class="group-header g-workorder">
-                    <div>🚨 PHIẾU KHẨN WORK ORDER: TAG NGUY KỊCH 3 NGÀY LIÊN TIẾP (HOẶC < 2 SAO)</div>
+                    <div>🚨 PHIẾU KHẨN WORK ORDER: TRẠM P1 MÃN TẢI HOẶC NGUY KỊCH CHUỖI</div>
                 </div>
                 <div class="action-box">
                     <span class="action-badge" style="background:#c0392b">GIAO UCTT / RNO</span> <b>Hành động khẩn cấp:</b>
                     <ul>
-                        <li>Xuất phiếu xử lý ngay lập tức. Đội UCTT ra hiện trường đo PIM, kiểm tra VSWR Feeder/SFP, đo quét nhiễu ngoài.</li>
-                        <li>Kỹ sư RNO kiểm tra luồng truyền dẫn, cấu hình Neighbor List và san tải mềm khẩn cấp.</li>
+                        <li>Xuất phiếu xử lý ngay lập tức cho các trạm P1 (Tải cao > 70%). Đề xuất nâng cấp phần cứng hoặc san tải mềm.</li>
+                        <li>Với các trạm nguy kịch chuỗi, đội UCTT ra hiện trường đo PIM, kiểm tra VSWR Feeder/SFP, đo quét nhiễu ngoài.</li>
                     </ul>
                 </div>
                 <div class="table-toolbar">
@@ -154,7 +154,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>STT</th><th>Tên Cell</th><th>Quận/Huyện</th><th>MIMO</th><th>CEM Rank</th><th>QoS Rank</th>
+                                <th>STT</th><th>Tên Cell</th><th>Quận/Huyện</th><th>MIMO</th><th>Tag Tầng 5</th><th>QoS Rank</th>
                                 <th>Thput DL<br><small style="color:#7f8c8d">Mbps</small></th>
                                 <th>PRB DL<br><small style="color:#7f8c8d">%</small></th>
                                 <th>CQI<br><small style="color:#7f8c8d">%</small></th>
@@ -171,14 +171,14 @@
             <!-- TAB 2: PHÂN RÃ CEM MBB -->
             <div class="group-card" id="group2">
                 <div class="group-header g-cem">
-                    <div>⭐ BƯỚC 3: PHÂN RÃ NGUYÊN NHÂN TRẢI NGHIỆM KHÁCH HÀNG (NETWORK CEM MBB)</div>
+                    <div>⭐ TẦNG 3: PHÂN RÃ NGUYÊN NHÂN TRẢI NGHIỆM KHÁCH HÀNG (UXI CEM)</div>
                 </div>
                 <div class="action-box">
-                    <span class="action-badge" style="background:#8e44ad">PHÂN TÍCH UXI</span> <b>Ngưỡng Barem 2304/VNPT-CN:</b>
+                    <span class="action-badge" style="background:#8e44ad">PHÂN TÍCH UXI</span> <b>Ngưỡng Barem 6945/VNPT-CN:</b>
                     <ul>
-                        <li><b>UXI 3 (Video - 70%):</b> User DL Throughput < 3 Mbps | Video Buffering > 25% | Init Buffer > 20s.</li>
-                        <li><b>UXI 1 (Truy cập - 20%):</b> Success Sending Message (Chat/Social) < 92%.</li>
-                        <li><b>UXI 2 (Data - 10%):</b> Data Completion < 91% | Download Packet Loss > 5% | Upload Latency > 300ms.</li>
+                        <li><b>UXI 3 (Video):</b> Tốc độ < 15 Mbps | Video Buffering > 15% | Init Buffer > 10s.</li>
+                        <li><b>UXI 2 (Data):</b> Packet Loss > 1.6% | Độ trễ Upload > 100ms.</li>
+                        <li><b>UXI 1 (Chat):</b> Gửi tin thành công < 95%.</li>
                     </ul>
                 </div>
                 <div class="table-toolbar">
@@ -190,10 +190,10 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>STT</th><th>Tên Cell</th><th>CEM Rank</th><th>Chỉ Số CEM Nhận Diện</th>
-                                <th>Thput DL<br><small style="color:#7f8c8d">< 3 Mbps</small></th>
-                                <th>Latency<br><small style="color:#7f8c8d">> 300 ms</small></th>
-                                <th>eRAB Setup<br><small style="color:#7f8c8d">< 92%</small></th>
+                                <th>STT</th><th>Tên Cell</th><th>CEM Rank</th><th>Chẩn Đoán Bệnh UXI CEM</th>
+                                <th>Thput DL<br><small style="color:#7f8c8d">< 15 Mbps</small></th>
+                                <th>Latency<br><small style="color:#7f8c8d">> 100 ms</small></th>
+                                <th>eRAB Setup<br><small style="color:#7f8c8d">KPI Cơ bản</small></th>
                                 <th style="text-align: center;">CHI TIẾT KPI</th>
                             </tr>
                         </thead>
@@ -206,14 +206,15 @@
             <!-- TAB 3: PHÂN RÃ QOS 4G SQI -->
             <div class="group-card" id="group3">
                 <div class="group-header g-qos">
-                    <div>⚙️ BƯỚC 4: TRUY VẾT KỸ THUẬT VÔ TUYẾN (QOS 4G SQI)</div>
+                    <div>⚙️ TẦNG 4: TRUY VẾT KỸ THUẬT VÔ TUYẾN (QOS SQI)</div>
                 </div>
                 <div class="action-box">
-                    <span class="action-badge" style="background:#2980b9">PHÂN TÍCH SQI</span> <b>Ngưỡng Barem 2304/VNPT-CN:</b>
+                    <span class="action-badge" style="background:#2980b9">PHÂN TÍCH SQI</span> <b>Ngưỡng CQI theo 6945/VNPT-CN:</b>
                     <ul>
-                        <li><b>SQI 5 (Speed Barem):</b> BW 15-20MHz < 25 Mbps | BW 10MHz < 18 Mbps | BW 5MHz/L900 < 6 Mbps.</li>
-                        <li><b>SQI 4 (CQI Barem):</b> 4T4R < 95% | 2T2R < 93% | 1T1R < 92%.</li>
-                        <li><b>SQI 1 (Resource):</b> RB Util ≥ 70% (Mãn tải) | <b>SQI 3 (Retainability):</b> Drop Rate > 1% | <b>SQI 2:</b> eRAB < 99%.</li>
+                        <li><b>SQI 4 (CQI 4T4R):</b> < 95% (1800/2100MHz) hoặc < 90% (900MHz).</li>
+                        <li><b>SQI 4 (CQI 2T2R):</b> < 93% (1800/2100MHz) hoặc < 88% (900MHz).</li>
+                        <li><b>SQI 4 (CQI 1T1R):</b> < 92% (1800/2100MHz) hoặc < 86% (900MHz).</li>
+                        <li><b>SQI 5 (Speed Barem):</b> BW 15-20MHz < 25Mbps | BW 10MHz < 18Mbps | BW 5MHz/L900 < 4Mbps.</li>
                     </ul>
                 </div>
                 <div class="table-toolbar">
@@ -242,13 +243,13 @@
             <!-- TAB 4: TAG THEO DÕI SÁT NGƯỠNG -->
             <div class="group-card" id="group4">
                 <div class="group-header g-warning">
-                    <div>⚠️ TAG "THEO DÕI": DANH SÁCH MẤP MÉ SÁT NGƯỠNG NGUY HẠI (PRB 65-69%)</div>
+                    <div>⚠️ TẦNG 5: RAN SHARING & THEO DÕI CẢNH BÁO SỚM</div>
                 </div>
                 <div class="action-box">
-                    <span class="action-badge" style="background:#d35400">TỐI ƯU SỚM</span> <b>Cảnh báo sớm:</b>
+                    <span class="action-badge" style="background:#d35400">TÁCH RAN SHARING & TỐI ƯU SỚM</span>
                     <ul>
-                        <li>Các trạm này chưa bị quét thành Badcell nhưng chỉ số PRB đã chạm 65-69% hoặc Tốc độ đang suy giảm.</li>
-                        <li><b>Hành động:</b> Tinh chỉnh tham số Cân bằng tải (Load Balancing) sớm để tránh trạm rơi vào Badcell trong tuần tới.</li>
+                        <li>Trạm RAN Sharing (MOCN/MORAN) được tách riêng thành một cụm đánh giá để dễ theo dõi sự cố do Partner.</li>
+                        <li>Trạm có mức tải (PRB Util) từ 60% đến 69% được đưa vào diện cảnh báo sớm, cần tinh chỉnh Load Balancing.</li>
                     </ul>
                 </div>
                 <div class="table-toolbar">
@@ -261,7 +262,7 @@
                         <thead>
                             <tr>
                                 <th>STT</th><th>Tên Cell</th><th>District</th><th>MIMO</th>
-                                <th>PRB DL (%)</th><th>Thput DL (Mbps)</th><th>CQI 4G (%)</th>
+                                <th>Tag Tầng 5</th><th>PRB DL (%)</th><th>CQI 4G (%)</th>
                                 <th style="text-align: center;">CHI TIẾT KPI</th>
                             </tr>
                         </thead>
@@ -312,19 +313,22 @@
         let m = r.metrics;
         let btn = `<a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.Cell_Name)}" target="_blank" class="btn-kpi">📈 Trích Xuất KPI</a>`;
         
-        if(type === 1) return `<tr><td>${index}</td><td><b style="color:#c0392b">${r.Cell_Name}</b></td><td>${r.District}</td><td>${r.MIMO}</td><td>${r.QoE_Rank}</td><td>${r.QoS_Rank}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) >= 70 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 1 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
+        // Render Tag Tầng 5 
+        let tagHtml = r.tier5Tags && r.tier5Tags.length > 0 ? r.tier5Tags.map(t => `<span style="background:#f39c12; color:#fff; padding:2px 5px; border-radius:3px; font-size:10px; margin-right:3px;">${t}</span>`).join('') : '<span style="color:#95a5a6">-</span>';
+        
+        if(type === 1) return `<tr><td>${index}</td><td><b style="color:#c0392b">${r.Cell_Name}</b></td><td>${r.District}</td><td>${r.MIMO}</td><td>${tagHtml}</td><td>${r.QoS_Rank}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) >= 70 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 1 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
         
         if(type === 2) {
-            let isCemOk = !r.cemIssues.includes('< 3 Mbps') && !r.cemIssues.includes('> 300ms') && !r.cemIssues.includes('< 92%');
-            return `<tr><td>${index}</td><td><b style="color:#8e44ad">${r.Cell_Name}</b></td><td>${r.QoE_Rank}</td><td style="font-size:12px; font-weight:bold; color:${isCemOk ? '#27ae60' : '#c0392b'};">${r.cemIssues}</td><td class="${parseFloat(m.thput) < 3 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.latency) > 300 ? 'metric-bad' : ''}">${m.latency}</td><td class="${parseFloat(m.erab) < 92 ? 'metric-bad' : ''}">${m.erab}</td><td style="text-align:center;">${btn}</td></tr>`;
+            let isCemOk = !r.cemIssues.includes('UXI');
+            return `<tr><td>${index}</td><td><b style="color:#8e44ad">${r.Cell_Name}</b></td><td>${r.QoE_Rank}</td><td style="font-size:12px; font-weight:bold; color:${isCemOk ? '#27ae60' : '#c0392b'};">${r.cemIssues}</td><td class="${parseFloat(m.thput) < 15 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.latency) > 100 ? 'metric-bad' : ''}">${m.latency}</td><td>${m.erab}</td><td style="text-align:center;">${btn}</td></tr>`;
         }
 
         if(type === 3) {
             let isQosOk = !r.qosIssues.includes('SQI');
-            return `<tr><td>${index}</td><td><b style="color:#2980b9">${r.Cell_Name}</b></td><td>${r.MIMO}</td><td>${r.QoS_Rank}</td><td style="font-size:12px; font-weight:bold; color:${isQosOk ? '#27ae60' : '#c0392b'};">${r.qosIssues}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) >= 70 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 1 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
+            return `<tr><td>${index}</td><td><b style="color:#2980b9">${r.Cell_Name}</b></td><td>${r.MIMO}</td><td>${r.QoS_Rank}</td><td style="font-size:12px; font-weight:bold; color:${isQosOk ? '#27ae60' : '#c0392b'};">${r.qosIssues}</td><td class="${parseFloat(m.thput) < 18 ? 'metric-bad' : ''}">${m.thput}</td><td class="${parseFloat(m.prb) > 60 ? 'metric-bad' : ''}">${m.prb}</td><td class="${parseFloat(m.cqi) < 93 ? 'metric-bad' : ''}">${m.cqi}</td><td class="${parseFloat(m.drop_rate) > 0.5 ? 'metric-bad' : ''}">${m.drop_rate}</td><td style="text-align:center;">${btn}</td></tr>`;
         }
 
-        if(type === 4) return `<tr><td>${index}</td><td><b style="color:#d35400">${r.Cell_Name}</b></td><td>${r.District}</td><td>${r.MIMO}</td><td class="${parseFloat(m.prb) >= 65 ? 'metric-bad' : ''}">${m.prb}</td><td>${m.thput}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
+        if(type === 4) return `<tr><td>${index}</td><td><b style="color:#d35400">${r.Cell_Name}</b></td><td>${r.District}</td><td>${r.MIMO}</td><td>${tagHtml}</td><td class="${parseFloat(m.prb) >= 60 ? 'metric-bad' : ''}">${m.prb}</td><td>${m.cqi}</td><td style="text-align:center;">${btn}</td></tr>`;
         
         return '';
     };
