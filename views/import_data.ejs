@@ -181,15 +181,18 @@
                         </form>
                     </div>
 
-                    <!-- TAB 4: IMPORT CEM / QoS -->
+                    <!-- TAB 4: IMPORT QoE / QoS / P1 -->
                     <div id="tab-qoe" class="tab-content">
-                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp CEM / QoS (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Lưu ý: Nếu Import lại một Tuần đã có, dữ liệu cũ của Tuần đó sẽ tự động bị ghi đè.</i></p>
+                        <p style="margin-bottom: 15px; color: #666; font-size: 13px;">Nhập dữ liệu tổng hợp QoE / QoS / CEM / P1 (Phân rã theo Tuần Lịch). <br><i style="color:#e74c3c">Lưu ý: Nếu Import lại một Tuần đã có, dữ liệu cũ của Tuần đó sẽ tự động bị ghi đè.</i></p>
                         <form action="/import-data" method="POST" enctype="multipart/form-data">
                             <div class="form-group">
                                 <label>Chọn Loại File:</label>
                                 <select name="networkType" class="form-control" required style="width: 100%; padding: 10px; border-color: #1abc9c; margin-bottom: 15px;">
-                                    <option value="mbb_cem">Dữ liệu Báo cáo CEM</option>
+                                    <option value="mbb_cem">Dữ liệu Báo cáo CEM (Mới)</option>
+                                    <option value="mbb_qoe">Dữ liệu Trải nghiệm QoE (Cũ)</option>
                                     <option value="mbb_qos">Dữ liệu Dịch vụ QoS</option>
+                                    <!-- [MỚI] Thêm tùy chọn Upload File P1 -->
+                                    <option value="p1_high_load" style="font-weight:bold; color:#c0392b;">🚨 Danh sách Trạm Tải Cao P1 (TSD ≥ 70%)</option>
                                 </select>
                             </div>
 
