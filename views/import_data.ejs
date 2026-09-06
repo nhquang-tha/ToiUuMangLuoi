@@ -100,6 +100,8 @@
                         <form action="/import-data/reset/mbb_cem" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu CEM?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset CEM</button></form>
                         <form action="/import-data/reset/mbb_qos" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Dịch vụ QoS?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset QoS</button></form>
                         <form action="/import-data/reset/ta_query" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ dữ liệu Timing Advance (TA)?');"><button type="submit" class="btn-sm btn-danger" style="background:#8e44ad;">⚠ Reset TA</button></form>
+                        <span style="color: #ccc;">|</span>
+                        <form action="/import-data/reset/p1_high_load" method="POST" style="margin: 0;" onsubmit="return confirm('CẢNH BÁO: Xóa SẠCH toàn bộ danh sách P1 Tải Cao?');"><button type="submit" class="btn-sm btn-danger" style="background:#d35400;">⚠ Reset Tải Cao P1</button></form>
                     </div>
                 </div>
             <% } %>
@@ -188,8 +190,10 @@
                             <div class="form-group">
                                 <label>Chọn Loại File:</label>
                                 <select name="networkType" class="form-control" required style="width: 100%; padding: 10px; border-color: #1abc9c; margin-bottom: 15px;">
-                                    <option value="mbb_cem">Dữ liệu Báo cáo CEM</option>
+                                    <option value="mbb_cem">Dữ liệu Báo cáo CEM (Mới)</option>
+                                    <option value="mbb_qoe">Dữ liệu Trải nghiệm QoE (Cũ)</option>
                                     <option value="mbb_qos">Dữ liệu Dịch vụ QoS</option>
+                                    <option value="p1_high_load" style="font-weight:bold; color:#c0392b;">🚨 Danh sách Trạm Tải Cao P1 (TSD ≥ 70%)</option>
                                 </select>
                             </div>
 
