@@ -928,8 +928,11 @@ exports.handleImportData = async (req, res) => {
                 headers.forEach((h, idx) => {
                     let cleanH = String(h).toLowerCase().trim();
                     if (cleanH.includes('tỉnh') || cleanH.includes('ma_tinh') || cleanH.includes('tinh')) colMapping.push({ excelIdx: idx, dbCol: 'Ma_Tinh' });
-                    else if (cleanH.includes('tên trạm') || cleanH.includes('site name') || cleanH.includes('site_name')) colMapping.push({ excelIdx: idx, dbCol: 'Site_Name' });
-                    else if (cleanH.includes('tên cell') || cleanH.includes('cell name') || cleanH.includes('cell_name') || cleanH === 'cell' || cleanH === 'cellid') colMapping.push({ excelIdx: idx, dbCol: 'Cell_Name' });
+                    
+                    // [FIX 1]: Mở rộng nhận diện cột Site_Name chuẩn Huawei/ZTE
+                    else if (cleanH.includes('tên trạm') || cleanH.includes('site name') || cleanH.includes('site_name') || cleanH.includes('nodeb name') || cleanH.includes('enodeb name') || cleanH.includes('ne name')) colMapping.push({ excelIdx: idx, dbCol: 'Site_Name' });
+                    
+                    else if (cleanH === 'cell name' || cleanH === 'cell_name' || cleanH === 'tên cell' || cleanH === 'cell') colMapping.push({ excelIdx: idx, dbCol: 'Cell_Name' });
                     else if (cleanH.includes('ngày') || cleanH.includes('ngay')) colMapping.push({ excelIdx: idx, dbCol: 'So_Ngay_Vi_Pham' });
                 });
             }
@@ -1575,6 +1578,21 @@ exports.handleImportData = async (req, res) => {
                 }
             }
 
+            // [FIX 2]: Lọc trùng lặp danh sách Cell tải cao từ file Log Export hàng giờ/ngày
+            if (networkType === 'p1_high_load' && insertData.length > 0) {
+                const uniqueP1 = [];
+                const seenP1 = new Set();
+                insertData.forEach(row => {
+                    let c = row['Cell_Name'];
+                    if (c && !seenP1.has(c)) {
+                        seenP1.add(c);
+                        uniqueP1.push(row);
+                    }
+                });
+                insertData.length = 0;
+                insertData.push(...uniqueP1); // Chỉ giữ lại các Cell duy nhất
+            }
+
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
@@ -1592,7 +1610,8 @@ exports.handleImportData = async (req, res) => {
                     
                     let sql = `INSERT INTO ${networkType} (${keys.map(k => `\`${k}\``).join(',')}) VALUES ?`;
                     
-                    if (['alarm_data', 'csht_data', 'vat_tu'].includes(networkType)) {
+                    // [FIX 3]: Bổ sung p1_high_load vào danh sách cho phép ghi đè khi trùng lặp Key Database
+                    if (['alarm_data', 'csht_data', 'vat_tu', 'p1_high_load'].includes(networkType)) {
                         let updateCols = keys.map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(', ');
                         sql += ` ON DUPLICATE KEY UPDATE ${updateCols}`;
                     }
@@ -1601,8 +1620,7 @@ exports.handleImportData = async (req, res) => {
                 }
                 totalImported += insertData.length;
             }
-        } catch (error) { console.error(`Lỗi file:`, error); }
-    } 
+        } catch (error) { console.error(`Lỗi file:`, error); } 
 
     const runBackgroundSync = async () => {
         try {
