@@ -817,17 +817,24 @@ exports.handleImportData = async (req, res) => {
     let totalImported = 0;
     let errorLogs = [];
 
-    // [Tự động khởi tạo bảng P1 nếu chưa có]
+   // [AUTO-MIGRATION MỚI]: Tự động tạo bảng P1 High Load nếu chưa tồn tại
     if (networkType === 'p1_high_load') {
         try {
             await db.query(`
                 CREATE TABLE IF NOT EXISTS p1_high_load (
-                    id INT AUTO_INCREMENT PRIMARY KEY, Tuan VARCHAR(50) NOT NULL, Ma_Tinh VARCHAR(50),
-                    Site_Name VARCHAR(150), Cell_Name VARCHAR(150) NOT NULL,
-                    So_Ngay_Vi_Pham INT DEFAULT 5, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    Tuan VARCHAR(50) NOT NULL,
+                    Ma_Tinh VARCHAR(100),
+                    Site_Name VARCHAR(150),
+                    Cell_Name VARCHAR(150) NOT NULL,
+                    So_Ngay_Vi_Pham INT DEFAULT 5,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_tuan_cell (Tuan, Cell_Name)
                 )
             `);
-        } catch (e) { console.error("Lỗi tạo bảng P1 High Load:", e); }
+        } catch (e) {
+            console.error("Lỗi tự động khởi tạo bảng P1 High Load:", e);
+        }
     }
 
     let dbCols = [];
@@ -907,12 +914,13 @@ exports.handleImportData = async (req, res) => {
             let dataStartIdx = -1;
             let colMapping = [];
 
-            // XỬ LÝ RIÊNG CHO BẢNG P1 HIGH LOAD
+                    // [CHIẾN LƯỢC MỚI]: XỬ LÝ RIÊNG CHO BẢNG P1 HIGH LOAD (FILE CHUẨN HUAWEI)
             if (networkType === 'p1_high_load') {
                 let headerRowIdx = 0; dataStartIdx = 1;
+                // Nhận diện dòng chứa đúng 3 từ khóa của cột file
                 for (let i = 0; i < Math.min(10, rawData.length); i++) {
                     const str = JSON.stringify(rawData[i]).toLowerCase();
-                    if (str.includes('tên cell') || str.includes('cell_name') || str.includes('cell name') || str.includes('cell')) {
+                    if (str.includes('cell name') && str.includes('site name') && str.includes('district code')) {
                         headerRowIdx = i; dataStartIdx = i + 1; break;
                     }
                 }
@@ -920,10 +928,11 @@ exports.handleImportData = async (req, res) => {
                 let headers = rawData[headerRowIdx] || [];
                 headers.forEach((h, idx) => {
                     let cleanH = String(h).toLowerCase().trim();
-                    if (cleanH.includes('tỉnh') || cleanH.includes('ma_tinh') || cleanH.includes('tinh')) colMapping.push({ excelIdx: idx, dbCol: 'Ma_Tinh' });
-                    else if (cleanH.includes('tên trạm') || cleanH.includes('site name') || cleanH.includes('site_name') || cleanH.includes('nodeb name') || cleanH.includes('enodeb name') || cleanH.includes('ne name')) colMapping.push({ excelIdx: idx, dbCol: 'Site_Name' });
-                    else if (cleanH === 'cell name' || cleanH === 'cell_name' || cleanH === 'tên cell' || cleanH === 'cell' || cleanH === 'cellid') colMapping.push({ excelIdx: idx, dbCol: 'Cell_Name' });
-                    else if (cleanH.includes('ngày') || cleanH.includes('ngay')) colMapping.push({ excelIdx: idx, dbCol: 'So_Ngay_Vi_Pham' });
+                    if (cleanH === 'district code' || cleanH === 'district_code' || cleanH === 'ma_tinh' || cleanH.includes('tỉnh')) colMapping.push({ excelIdx: idx, dbCol: 'Ma_Tinh' });
+                    else if (cleanH === 'site name' || cleanH === 'site_name' || cleanH === 'nodeb name' || cleanH === 'enodeb name') colMapping.push({ excelIdx: idx, dbCol: 'Site_Name' });
+                    else if (cleanH === 'cell name' || cleanH === 'cell_name' || cleanH === 'tên cell' || cleanH === 'cell') colMapping.push({ excelIdx: idx, dbCol: 'Cell_Name' });
+                    // Nhận diện cột dài chứa chuỗi thông tin số ngày
+                    else if (cleanH.includes('chi tiet') || cleanH.includes('chi tiết') || cleanH.includes('vi pham') || cleanH.includes('vi phạm')) colMapping.push({ excelIdx: idx, dbCol: 'So_Ngay_Vi_Pham' });
                 });
             }
             // [CHIẾN LƯỢC MỚI]: XỬ LÝ RIÊNG CHO BẢNG CEM MỚI
@@ -1433,7 +1442,8 @@ exports.handleImportData = async (req, res) => {
                 'MIMO', 'Mimo', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
                 'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name',
                 // Bổ sung các cột chuỗi của CEM:
-                'Ma_Tinh_TP', 'Ten_Tinh_TP', 'Ma_PX', 'Ten_PX', 'Ten_tram', 'Cell_Name'
+                'Ma_Tinh_TP', 'Ten_Tinh_TP', 'Ma_PX', 'Ten_PX', 'Ten_tram', 'Cell_Name',
+                'So_Ngay_Vi_Pham' // Bắt buộc cho vào đây để không bị mất chữ khi Import P1
             ];
 
             // BẮT BUỘC QUÉT TỪ DÒNG DỮ LIỆU THỰC TẾ
@@ -1533,6 +1543,20 @@ exports.handleImportData = async (req, res) => {
                 // [CHẶN RÁC]: Nếu là file KPI ngày mà bị rỗng ngày (do là hàng Header) thì vứt bỏ
                 if (isDailyKpi && !rowObj['Thoi_gian']) {
                     hasKpiData = false;
+                }
+                
+                // TÍNH TOÁN SỐ NGÀY VI PHẠM TỪ CHUỖI BÁO CÁO HUAWEI
+                if (networkType === 'p1_high_load' && rowObj['So_Ngay_Vi_Pham']) {
+                    let chiTiet = String(rowObj['So_Ngay_Vi_Pham']);
+                    // Đếm số lần xuất hiện cụm "hours(" (mỗi lần đại diện cho 1 ngày vi phạm)
+                    let matchDays = chiTiet.match(/hours\(/g);
+                    if (matchDays) {
+                        rowObj['So_Ngay_Vi_Pham'] = matchDays.length;
+                    } else if (!isNaN(parseInt(chiTiet))) {
+                        rowObj['So_Ngay_Vi_Pham'] = parseInt(chiTiet) || 5;
+                    } else {
+                        rowObj['So_Ngay_Vi_Pham'] = 5; // Mặc định nếu không phân tích được chuỗi
+                    }
                 }
 
                 if (hasKpiData && hasValidIdentifier) {
