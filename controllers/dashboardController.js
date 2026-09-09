@@ -837,6 +837,25 @@ exports.handleImportData = async (req, res) => {
         }
     }
 
+    // [ĐÃ SỬA]: Tự động tạo bảng CSHT với cấu trúc chuẩn mới nhất (Không có cột 2G)
+    if (networkType === 'csht_data') {
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS csht_data (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    Ma_CSHT VARCHAR(100) UNIQUE, Ten_CSHT VARCHAR(255), Dia_Chi TEXT,
+                    Longitude VARCHAR(50), Latitude VARCHAR(50), Loai_Nha_Tram VARCHAR(100), Don_Vi_Quan_Ly VARCHAR(150),
+                    Ma_Tram_3G VARCHAR(50), Ma_Tram_4G VARCHAR(50), Ma_Tram_5G VARCHAR(50),
+                    IP_3G VARCHAR(50), IP_4G VARCHAR(50), IP_5G VARCHAR(50),
+                    Chieu_Cao_Cot VARCHAR(50), Chieu_Cao_Mat_Dat VARCHAR(50), Hinh_Thuc_So_Huu VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+        } catch (e) {
+            console.error("Lỗi tự động khởi tạo bảng CSHT:", e);
+        }
+    }
+
     let dbCols = [];
     try {
         const [cols] = await db.query(`SHOW COLUMNS FROM ${networkType}`);
@@ -1176,7 +1195,8 @@ exports.handleImportData = async (req, res) => {
                 if (headerRowIdx === -1 || !rawData[headerRowIdx]) continue;
                 let excelHeaders = rawData[headerRowIdx].map(h => String(h || '').replace(/['"]/g, '').trim());
 
-                if (['rf_3g', 'rf_4g', 'rf_5g', 'csht_data', 'vat_tu', 'alarm_data', 'ta_query'].includes(networkType)) {
+                // [ĐÃ SỬA]: Bỏ csht_data ra khỏi Auto-migration cũ để không sinh ra các cột rác
+                if (['rf_3g', 'rf_4g', 'rf_5g', 'vat_tu', 'alarm_data', 'ta_query'].includes(networkType)) {
                     let isSchemaChanged = false;
                     for (let h of excelHeaders) {
                         let lastWord = h.split('|').pop().trim();
@@ -1440,9 +1460,11 @@ exports.handleImportData = async (req, res) => {
                 'Ma_Tinh', 'Don_Vi', 'Phuong_Xa', 'Ten_GNODEB', 'CellType', 'District_code', 
                 'MIMO', 'Mimo', 'CI', 'CELL_ID', 'Cell_ID', 'Tuan', 'POI', 'Cell_Code', 'Site_Code',
                 'eNodeB_Name', 'Cell_FDD_TDD_Indication', 'LocalCell_Id', 'eNodeB_Function_Name',
-                // Bổ sung các cột chuỗi của CEM:
                 'Ma_Tinh_TP', 'Ten_Tinh_TP', 'Ma_PX', 'Ten_PX', 'Ten_tram', 'Cell_Name',
-                'So_Ngay_Vi_Pham' // Bắt buộc cho vào đây để không bị mất chữ khi Import P1
+                'So_Ngay_Vi_Pham',
+                // [ĐÃ SỬA]: Bảo vệ tuyệt đối các cột của CSHT không bị ép thành số học
+                'Ma_CSHT', 'Ten_CSHT', 'Dia_Chi', 'Loai_Nha_Tram', 'Don_Vi_Quan_Ly', 
+                'Ma_Tram_3G', 'Ma_Tram_4G', 'Ma_Tram_5G', 'IP_3G', 'IP_4G', 'IP_5G', 'Hinh_Thuc_So_Huu'
             ];
 
             // BẮT BUỘC QUÉT TỪ DÒNG DỮ LIỆU THỰC TẾ
