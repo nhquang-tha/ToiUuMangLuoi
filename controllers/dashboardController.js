@@ -1384,7 +1384,6 @@ exports.handleImportData = async (req, res) => {
                             else if (h.match(/\blat\b|\blatitude\b|\bvĩ độ\b/)) mappedCol = 'Latitude';
                             else if (h.includes('loại nhà trạm')) mappedCol = 'Loai_Nha_Tram';
                             else if (h.includes('đơn vị quản lý')) mappedCol = 'Don_Vi_Quan_Ly';
-                            else if (h.includes('mã trạm 2g') || h.includes('tram 2g')) mappedCol = 'Ma_Tram_2G';
                             else if (h.includes('mã trạm 3g') || h.includes('tram 3g')) mappedCol = 'Ma_Tram_3G';
                             else if (h.includes('mã trạm 4g') || h.includes('tram 4g')) mappedCol = 'Ma_Tram_4G';
                             else if (h.includes('mã trạm 5g') || h.includes('tram 5g')) mappedCol = 'Ma_Tram_5G';
