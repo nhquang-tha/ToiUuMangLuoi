@@ -222,14 +222,7 @@ if (bot) {
                     coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
                 }
 
-                const [cshtRows] = await db.query(
-                    `SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data 
-                     WHERE LOWER(Ma_CSHT) LIKE LOWER(?) 
-                     OR LOWER(Ma_Tram_2G) LIKE LOWER(?) OR LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) 
-                     ORDER BY LENGTH(COALESCE(Ten_CSHT, Ma_CSHT)) ASC 
-                     LIMIT 1`,
-                    [`%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`]
-                );
+                const [cshtRows] = await db.query(`SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data WHERE Ma_Tram_3G LIKE ? OR Ma_Tram_4G LIKE ? OR Ma_Tram_5G LIKE ? LIMIT 1`, [`%${baseCode}%`, `%${baseCode}%`, `%${baseCode}%`]);
 
                 if (cshtRows.length > 0) {
                     let r = cshtRows[0];
@@ -292,18 +285,7 @@ if (bot) {
         bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            const [rows] = await db.query(
-                `SELECT * FROM csht_data 
-                 WHERE LOWER(Ma_CSHT) LIKE LOWER(?) 
-                 OR LOWER(Ten_CSHT) LIKE LOWER(?) 
-                 OR LOWER(Ma_Tram_2G) LIKE LOWER(?) 
-                 OR LOWER(Ma_Tram_3G) LIKE LOWER(?) 
-                 OR LOWER(Ma_Tram_4G) LIKE LOWER(?) 
-                 OR LOWER(Ma_Tram_5G) LIKE LOWER(?) 
-                 ORDER BY LENGTH(COALESCE(Ten_CSHT, Ma_CSHT)) ASC 
-                 LIMIT 1`, 
-                [`%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`, `%${fuzzyKeyword}%`]
-            );
+            const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? OR Ma_Tram_3G LIKE ? OR Ma_Tram_4G LIKE ? OR Ma_Tram_5G LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`]);
             
             if (rows.length > 0) {
                 let r = rows[0];
@@ -318,7 +300,7 @@ if (bot) {
                 if (r.Don_Vi_Quan_Ly) text += `▪️ <b>Đơn vị QL:</b> ${escapeHTML(r.Don_Vi_Quan_Ly)}\n`;
                 
                 let tramList = [];
-                if (r.Ma_Tram_2G) tramList.push(`2G: ${r.Ma_Tram_2G}`);
+                
                 if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
                 if (r.Ma_Tram_4G) tramList.push(`4G: ${r.Ma_Tram_4G}`);
                 if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
