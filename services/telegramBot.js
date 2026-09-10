@@ -222,7 +222,8 @@ if (bot) {
                     coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
                 }
 
-                const [cshtRows] = await db.query(`SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data WHERE Ma_Tram_3G LIKE ? OR Ma_Tram_4G LIKE ? OR Ma_Tram_5G LIKE ? LIMIT 1`, [`%${baseCode}%`, `%${baseCode}%`, `%${baseCode}%`]);
+                // [ĐÃ SỬA]: Bọc LOWER vào các điều kiện LIKE
+                const [cshtRows] = await db.query(`SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data WHERE LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) LIMIT 1`, [`%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`]);
 
                 if (cshtRows.length > 0) {
                     let r = cshtRows[0];
@@ -285,7 +286,8 @@ if (bot) {
         bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            const [rows] = await db.query(`SELECT * FROM csht_data WHERE Ma_CSHT LIKE ? OR Ten_CSHT LIKE ? OR Ma_Tram_3G LIKE ? OR Ma_Tram_4G LIKE ? OR Ma_Tram_5G LIKE ? LIMIT 1`, [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`]);
+            // [ĐÃ SỬA]: Bọc LOWER vào tất cả các điều kiện LIKE
+            const [rows] = await db.query(`SELECT * FROM csht_data WHERE LOWER(Ma_CSHT) LIKE LOWER(?) OR LOWER(Ten_CSHT) LIKE LOWER(?) OR LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) LIMIT 1`, [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`]);
             
             if (rows.length > 0) {
                 let r = rows[0];
