@@ -260,6 +260,3 @@ router.post('/api/zalo-webhook', async (req, res) => {
 });
 
 module.exports = router;
-```eof
-
-Nhớ điền lại đúng Token bạn đang có trên Zalo Bot Creator vào biến `ZALO_TOKEN` ở dòng số 6. Sau đó khởi động lại server là xong!
