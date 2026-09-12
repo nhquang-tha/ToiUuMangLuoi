@@ -2,25 +2,31 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models/db');
 
-// ĐIỀN ACCESS TOKEN CỦA ZALO OA VÀO ĐÂY
+// ĐIỀN ACCESS TOKEN CỦA ZALO OA VÀO ĐÂY (Lưu ý Token Zalo thường hết hạn sau 24h - 3 tháng tùy loại)
 const ZALO_TOKEN = process.env.ZALO_BOT_TOKEN || '2227226583786668049:AChJXQAIyHjEGhvIsvjTDtDqzqsvjetpIqPsrKacSeTRNgmbkalXifCYJlzOsFbC';
 
 // ==========================================
-// CÁC HÀM HỖ TRỢ GIAO TIẾP VỚI ZALO API
+// CÁC HÀM HỖ TRỢ GIAO TIẾP VỚI ZALO API (V3.0)
 // ==========================================
 const sendZaloText = async (userId, text) => {
     try {
-        await fetch('https://openapi.zalo.me/v2.0/oa/message', {
+        const response = await fetch('https://openapi.zalo.me/v3.0/oa/message/cs', {
             method: 'POST',
             headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipient: { user_id: userId }, message: { text: text } })
         });
-    } catch (e) { console.error("Lỗi gửi tin Zalo:", e.message); }
+        const result = await response.json();
+        if (result.error !== 0) {
+            console.error("❌ Zalo từ chối gửi tin Text:", result);
+        }
+    } catch (e) { 
+        console.error("❌ Lỗi mạng khi gọi Zalo API:", e.message); 
+    }
 };
 
 const sendZaloPicture = async (userId, imageUrl, text) => {
     try {
-        await fetch('https://openapi.zalo.me/v2.0/oa/message', {
+        const response = await fetch('https://openapi.zalo.me/v3.0/oa/message/cs', {
             method: 'POST',
             headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -31,7 +37,13 @@ const sendZaloPicture = async (userId, imageUrl, text) => {
                 } 
             })
         });
-    } catch (e) { console.error("Lỗi gửi ảnh Zalo:", e.message); }
+        const result = await response.json();
+        if (result.error !== 0) {
+            console.error("❌ Zalo từ chối gửi tin Ảnh:", result);
+        }
+    } catch (e) { 
+        console.error("❌ Lỗi mạng khi gửi ảnh Zalo API:", e.message); 
+    }
 };
 
 const generateChartUrl = (chartConfig) => {
@@ -58,6 +70,7 @@ router.post('/api/zalo-webhook', async (req, res) => {
 
     const event = req.body;
     
+    // Chỉ xử lý nếu sự kiện là người dùng gửi tin nhắn Text
     if (event.event_name !== 'user_send_text' || !event.message || !event.message.text) return;
 
     const senderId = event.sender.id;
@@ -67,12 +80,14 @@ router.post('/api/zalo-webhook', async (req, res) => {
     const command = parts[0].replace('/', '').toLowerCase();
     const keyword = textMsg.substring(parts[0].length).trim();
 
+    console.log(`💬 Zalo Bot nhận lệnh [${command}] với từ khóa [${keyword}] từ User: ${senderId}`);
+
     // ==========================================
     // ĐIỀU HƯỚNG LỆNH (ZALO COMMANDS)
     // ==========================================
     
     if (command === 'start' || command === 'help') {
-        const resp = `👋 HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT\n\nDanh sách lệnh hỗ trợ:\n📦 vt <tên_viết_tắt>: Tra cứu mã vật tư\n🚑 alarm <bản_tin>: Phân tích nguyên nhân cảnh báo\n🏢 csht <mã_CSHT>: Tra cứu CSHT\n📡 rf <cell_code>: Tra thông tin RF\n📊 kpi <cell_code>: Tra thông tin KPI\n⭐ cem <cell_code>: Tra thông tin CEM\n⚙️ qos <cell_code>: Tra thông tin QoS\n\nVẽ Biểu đồ:\n📈 charkpi <cell>\n📉 charcem <cell>\n📉 charqos <cell>`;
+        const resp = `👋 HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT\n\nDanh sách lệnh hỗ trợ:\n📦 vt <tên_viết_tắt>: Tra cứu mã vật tư\n🚑 alarm <bản_tin>: Phân tích nguyên nhân cảnh báo\n🏢 csht <mã_CSHT>: Tra cứu CSHT\n📡 rf <cell_code>: Tra thông tin RF\n📊 kpi <cell_code>: Tra thông tin KPI mới nhất\n⭐ cem <cell_code>: Tra thông tin CEM\n⚙️ qos <cell_code>: Tra thông tin QoS\n\nVẽ Biểu đồ:\n📈 charkpi <cell>\n📉 charcem <cell>\n📉 charqos <cell>`;
         await sendZaloText(senderId, resp);
         return;
     }
@@ -90,102 +105,6 @@ router.post('/api/zalo-webhook', async (req, res) => {
                 await sendZaloText(senderId, text);
             } else await sendZaloText(senderId, `❌ Không tìm thấy mã VT.`);
         } catch (e) { await sendZaloText(senderId, `❌ Lỗi DB.`); }
-        return;
-    }
-
-    if (command === 'alarm') {
-        await sendZaloText(senderId, `⏳ Đang phân tích Alarm...`);
-        try {
-            let cellName = null;
-            let explicitNameMatch = keyword.match(/(?:Cell|NodeB|eNodeB Function|Site)\s*Name\s*=\s*([A-Z0-9_.-]+)/i);
-            
-            if (explicitNameMatch && explicitNameMatch[1]) {
-                cellName = explicitNameMatch[1].toUpperCase();
-            } else {
-                let fallbackMatch = keyword.match(/(?:2G_|3G_|4G-|5G-)[A-Z0-9]+(?:[-_][A-Z0-9]+)*/i);
-                cellName = fallbackMatch ? fallbackMatch[0].toUpperCase() : null;
-            }
-
-            let hwMatch = keyword.match(/\|\s*([^|]*(?:Cabinet|Subrack|Slot|Port)\s*No[^|]*)\s*\|/i);
-            let hwPos = hwMatch ? hwMatch[1].trim() : null;
-
-            let spMatch = keyword.match(/Specific\s*Problem\s*=\s*([^,\]|]+)/i);
-            let specificProblem = spMatch ? spMatch[1].trim() : null;
-
-            let cause = "Chưa xác định.";
-            let action = "- Vui lòng liên hệ OMC/NOC kiểm tra thêm.\n- Reset thiết bị nếu cần thiết.";
-            let matchedKeyword = "Không xác định";
-            let alarmGroup = "Không xác định";
-
-            try {
-                const [alarmRules] = await db.query('SELECT nhom_canh_bao, tu_khoa, nguyen_nhan, phuong_an_xu_ly FROM alarm_data');
-                alarmRules.sort((a, b) => {
-                    let lenA = a.tu_khoa ? a.tu_khoa.trim().length : 0;
-                    let lenB = b.tu_khoa ? b.tu_khoa.trim().length : 0;
-                    return lenB - lenA;
-                });
-
-                for (let rule of alarmRules) {
-                    let kw = rule.tu_khoa ? rule.tu_khoa.trim() : '';
-                    if (kw && keyword.toLowerCase().includes(kw.toLowerCase())) {
-                        matchedKeyword = kw;
-                        alarmGroup = rule.nhom_canh_bao || "Chưa phân nhóm";
-                        cause = rule.nguyen_nhan || "Không có nội dung nguyên nhân.";
-                        action = rule.phuong_an_xu_ly || "Không có phương án xử lý.";
-                        break; 
-                    }
-                }
-            } catch (e) {}
-
-            let cshtInfo = ``;
-            if (cellName) {
-                cshtInfo += `▪️ Mã Trạm/Cell_Code: ${cellName}\n`;
-                let siteCodeFromRF = null;
-                let finalLat = null; let finalLng = null; let actualCellNameFromRF = null;
-
-                try {
-                    const rfQueries = [
-                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_4g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`,
-                        `SELECT Site_code, Latitude, Longitude, SITE_NAME as DbCellName FROM rf_5g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(SITE_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`,
-                        `SELECT Site_code, Latitude, Longitude, CELL_NAME as DbCellName FROM rf_3g WHERE LOWER(Cell_code) LIKE LOWER(?) OR LOWER(CELL_NAME) LIKE LOWER(?) ORDER BY LENGTH(Cell_code) ASC LIMIT 1`
-                    ];
-                    let searchCell = cellName.replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
-                    for (let sql of rfQueries) {
-                        let [rfRows] = await db.query(sql, [`%${searchCell}%`, `%${searchCell}%`]);
-                        if (rfRows.length > 0) {
-                            siteCodeFromRF = rfRows[0].Site_code; finalLat = rfRows[0].Latitude; finalLng = rfRows[0].Longitude; actualCellNameFromRF = rfRows[0].DbCellName; break;
-                        }
-                    }
-                } catch (e) {}
-
-                let coreCode = siteCodeFromRF;
-                if (!coreCode) {
-                    let coreMatch = cellName.match(/(?:2G_|3G_|4G-|5G-)([A-Z0-9]{7})/i);
-                    coreCode = coreMatch ? coreMatch[1] : cellName.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
-                }
-
-                const [cshtRows] = await db.query(`SELECT Ten_CSHT, Dia_Chi, Latitude, Longitude FROM csht_data WHERE LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) LIMIT 1`, [`%${coreCode}%`, `%${coreCode}%`, `%${coreCode}%`]);
-
-                if (cshtRows.length > 0) {
-                    let r = cshtRows[0];
-                    let displayCshtName = actualCellNameFromRF ? actualCellNameFromRF : r.Ten_CSHT;
-                    cshtInfo += `▪️ Tên CSHT: ${displayCshtName}\n▪️ Địa chỉ: ${r.Dia_Chi}\n🗺️ Bản đồ: https://www.google.com/maps/search/?api=1&query=${r.Latitude || finalLat},${r.Longitude || finalLng}\n`;
-                } else if (actualCellNameFromRF || siteCodeFromRF) {
-                    cshtInfo += `▪️ Tên CSHT: ${actualCellNameFromRF ? actualCellNameFromRF : `Mã gốc: ${siteCodeFromRF}`}\n🗺️ Bản đồ: https://www.google.com/maps/search/?api=1&query=${finalLat},${finalLng}\n`;
-                } else {
-                    cshtInfo += `▪️ Tên CSHT: Chưa có dữ liệu.\n`;
-                }
-            } else { cshtInfo += `▪️ Mã Trạm: Không bóc tách được\n`; }
-
-            if (hwPos) cshtInfo += `▪️ Phần cứng: ${hwPos}\n`;
-            if (specificProblem) cshtInfo += `▪️ Lỗi chi tiết: ${specificProblem}\n`;
-
-            let responseText = `🚑 KẾT QUẢ ALARM\n---------------------------\n${cshtInfo}---------------------------\n📑 Nhóm: ${alarmGroup}\n🔍 Từ khóa: ${matchedKeyword}\n\n⚠️ NGUYÊN NHÂN:\n${cause}\n\n🛠 XỬ LÝ:\n${action}`;
-            
-            // Cắt bớt nếu Zalo báo lỗi tin nhắn quá dài (Zalo max ~2000 ký tự)
-            if (responseText.length > 1900) responseText = responseText.substring(0, 1900) + '... (Dài quá đã bị cắt)';
-            await sendZaloText(senderId, responseText);
-        } catch (e) { await sendZaloText(senderId, "❌ Lỗi hệ thống Alarm."); }
         return;
     }
 
@@ -300,7 +219,7 @@ router.post('/api/zalo-webhook', async (req, res) => {
         await sendZaloText(senderId, `⏳ Đang vẽ biểu đồ KPI...`);
         try {
             let [rows] = await db.query(`SELECT Thoi_gian, Total_Data_Traffic_Volume_GB as traf, User_DL_Avg_Throughput_Kbps as thput, CQI_4G as cqi FROM kpi_4g WHERE LOWER(Cell_name) LIKE LOWER(?) ORDER BY LENGTH(Cell_name) ASC, Cell_name ASC, id DESC LIMIT 7`, [`%${parsed.kw}%`]);
-            if (rows.length < 2) return await sendZaloText(senderId, `❌ Cần ít nhất 2 ngày dữ liệu.`);
+            if (rows.length < 2) return await sendZaloText(senderId, `❌ Ít nhất 2 ngày dữ liệu.`);
             const data = rows.reverse();
             const labels = data.map(d => d.Thoi_gian.substring(0, 5)); 
             
