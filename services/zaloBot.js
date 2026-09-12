@@ -51,7 +51,10 @@ const parseKeyword = (str) => {
     kw = kw.replace(/-THA$/i, '').replace(/-TH$/i, ''); 
     return { net, kw };
 };
-
+// Thêm đoạn này để Zalo kiểm tra đường truyền thành công
+router.get('/api/zalo-webhook', (req, res) => {
+    res.status(200).send('OK');
+});
 // ==========================================
 // ENDPOINT NHẬN SỰ KIỆN TỪ ZALO BOT WEBHOOK
 // ==========================================
