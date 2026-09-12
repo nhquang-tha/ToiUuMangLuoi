@@ -37,8 +37,29 @@ const sendZaloPicture = async (chatId, imageUrl, caption) => {
     }
 };
 
-const generateChartUrl = (chartConfig) => {
-    return `https://quickchart.io/chart?w=600&h=350&c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
+const generateChartUrl = async (chartConfig) => {
+    try {
+        // Gửi POST request để lấy Short URL (Link rút gọn) thân thiện với Zalo Điện thoại
+        const response = await fetch('https://quickchart.io/chart/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chart: chartConfig,
+                width: 600,
+                height: 350,
+                backgroundColor: 'white', // Ép nền trắng chống lỗi Dark Mode trên Zalo
+                format: 'png'
+            })
+        });
+        const data = await response.json();
+        if (data.success && data.url) {
+            return data.url; // Trả về link ngắn dạng: https://quickchart.io/chart/render/xxx
+        }
+    } catch (e) {
+        console.error("Lỗi tạo Short URL QuickChart:", e.message);
+    }
+    // Fallback dự phòng nếu lỗi API
+    return `https://quickchart.io/chart?w=600&h=350&bkg=white&c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
 };
 
 const parseKeyword = (str) => {
@@ -378,17 +399,17 @@ Vẽ Biểu đồ (Charts):
             const labels = data.map(d => d.Thoi_gian.substring(0, 5)); 
             const cellFound = parsed.kw.toUpperCase();
 
-            const chart1 = generateChartUrl({ 
+            const chart1 = await generateChartUrl({ 
                 type: 'line', 
                 data: { labels: labels, datasets: [{ label: title1, data: data.map(d => d.traf), borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, borderWidth: 3, lineTension: 0.4, pointRadius: 4, pointBackgroundColor: '#ffffff', pointBorderColor: '#3498db', pointBorderWidth: 2 }] }, 
                 options: { title: { display: true, text: `Biến động ${title1} - ${cellFound}`, fontSize: 16, fontColor: '#2c3e50' }, legend: { display: false }, scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] } } 
             });
-            const chart2 = generateChartUrl({ 
+            const chart2 = await generateChartUrl({ 
                 type: 'line', 
                 data: { labels: labels, datasets: [{ label: title2, data: data.map(d => d.thput), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, borderWidth: 3, lineTension: 0.4, pointRadius: 4, pointBackgroundColor: '#ffffff', pointBorderColor: '#9b59b6', pointBorderWidth: 2 }] }, 
                 options: { title: { display: true, text: `Biến động ${title2} - ${cellFound}`, fontSize: 16, fontColor: '#2c3e50' }, legend: { display: false }, scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] } } 
             });
-            const chart3 = generateChartUrl({ 
+            const chart3 = await generateChartUrl({ 
                 type: 'line', 
                 data: { labels: labels, datasets: [{ label: title3, data: data.map(d => d.cqi), borderColor: '#2ecc71', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, borderWidth: 3, lineTension: 0.4, pointRadius: 4, pointBackgroundColor: '#ffffff', pointBorderColor: '#2ecc71', pointBorderWidth: 2 }] }, 
                 options: { title: { display: true, text: `Biến động ${title3} - ${cellFound}`, fontSize: 16, fontColor: '#2c3e50' }, legend: { display: false }, scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] } } 
@@ -410,7 +431,7 @@ Vẽ Biểu đồ (Charts):
             if (rows.length < 2) return await sendZaloText(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ CEM.`);
             
             const data = rows.reverse();
-            const chartUrl = generateChartUrl({
+            const chartUrl = await generateChartUrl({
                 type: 'line', 
                 data: { 
                     labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
@@ -446,7 +467,7 @@ Vẽ Biểu đồ (Charts):
             if (rows.length < 2) return await sendZaloText(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
             
             const data = rows.reverse();
-            const chartUrl = generateChartUrl({
+            const chartUrl = await generateChartUrl({
                 type: 'bar', data: { labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), datasets: [{ label: 'Điểm QoS', data: data.map(d => d.QoS_Score), backgroundColor: '#e74c3c' }] },
                 options: { title: { display: true, text: `Biến động Điểm QoS (4 Tuần) - ${parsed.kw.toUpperCase()}`, fontSize: 16, fontColor: '#2c3e50' } }
             });
