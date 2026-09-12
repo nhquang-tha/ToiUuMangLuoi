@@ -82,6 +82,19 @@ try {
     console.error('⚠️ Chưa tìm thấy module Viber Bot (Bỏ qua nếu bạn không dùng tính năng này).');
 }
 
+// 4. Kích hoạt Zalo Bot Webhook
+try {
+    const zaloBotRoutes = require('./services/zaloBot');
+    if (typeof zaloBotRoutes !== 'function') {
+        console.error('❌ LỖI NGHIÊM TRỌNG: zaloBotRoutes không hợp lệ.');
+    } else {
+        app.use('/', zaloBotRoutes);
+        console.log('✅ Đã nạp thành công module Zalo Bot vào máy chủ.');
+    }
+} catch (error) {
+    console.error('⚠️ Chưa tìm thấy module Zalo Bot (Bỏ qua nếu bạn không dùng Zalo).');
+}
+
 // ==========================================
 // XỬ LÝ LỖI 404 (Trang không tồn tại)
 // ==========================================
