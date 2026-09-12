@@ -18,7 +18,7 @@ const ZALO_SECRET_TOKEN = process.env.ZALO_SECRET_TOKEN || 'uv7Ul-z70-kGaGj00z';
 // ==========================================
 const sendZaloText = async (userId, text) => {
     try {
-        await fetch('https://openapi.zalo.me/v2.0/oa/message', {
+        await fetch('https://openapi.zalo.me/v3.0/oa/message/cs', {
             method: 'POST',
             headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipient: { user_id: userId }, message: { text: text } })
