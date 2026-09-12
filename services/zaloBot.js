@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models/db');
 const crypto = require('crypto');
+const axios = require('axios'); // Bổ sung axios để gọi API ổn định và bắt lỗi chi tiết hơn
 
 // ==========================================
 // CẤU HÌNH ZALO MINI APP / ZALO OA
@@ -18,28 +19,36 @@ const ZALO_SECRET_TOKEN = process.env.ZALO_SECRET_TOKEN || 'uv7Ul-z70-kGaGj00z';
 // ==========================================
 const sendZaloText = async (userId, text) => {
     try {
-        await fetch('https://openapi.zalo.me/v3.0/oa/message/cs', {
-            method: 'POST',
-            headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recipient: { user_id: userId }, message: { text: text } })
+        await axios.post('https://openapi.zalo.me/v3.0/oa/message/cs', {
+            recipient: { user_id: userId },
+            message: { text: text }
+        }, {
+            headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' }
         });
-    } catch (e) { console.error("Lỗi gửi tin Zalo:", e.message); }
+    } catch (e) { 
+        // In ra lỗi chính xác từ máy chủ Zalo để dễ gỡ rối (Ví dụ: 403 Forbidden, Token hết hạn...)
+        console.error("❌ Lỗi gửi tin Zalo (Text):", e.response ? JSON.stringify(e.response.data) : e.message); 
+    }
 };
 
 const sendZaloPicture = async (userId, imageUrl, text) => {
     try {
-        await fetch('https://openapi.zalo.me/v2.0/oa/message', {
-            method: 'POST',
-            headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                recipient: { user_id: userId }, 
-                message: { 
-                    text: text,
-                    attachment: { type: "template", payload: { template_type: "media", elements: [{ media_type: "image", url: imageUrl }] } }
-                } 
-            })
+        // Nâng cấp lên v3.0 và sử dụng cấu trúc attachment gọn nhẹ chuẩn của Zalo
+        await axios.post('https://openapi.zalo.me/v3.0/oa/message/cs', {
+            recipient: { user_id: userId }, 
+            message: { 
+                text: text,
+                attachment: { 
+                    type: "image", 
+                    payload: { url: imageUrl } 
+                }
+            }
+        }, {
+            headers: { 'access_token': ZALO_TOKEN, 'Content-Type': 'application/json' }
         });
-    } catch (e) { console.error("Lỗi gửi ảnh Zalo:", e.message); }
+    } catch (e) { 
+        console.error("❌ Lỗi gửi ảnh Zalo (Picture):", e.response ? JSON.stringify(e.response.data) : e.message); 
+    }
 };
 
 const generateChartUrl = (chartConfig) => {
@@ -70,7 +79,7 @@ router.post('/api/zalo-webhook', async (req, res) => {
     // Dựa theo tài liệu Zalo, thông thường dữ liệu body cùng với timestamp hoặc MAC. 
     // Tuy nhiên, đối với tính năng Webhook chuẩn của Zalo Mini App, Zalo sử dụng HMAC:
     // (Bên dưới là mã giả, bạn cần điều chỉnh theo đúng thuật toán Zalo cung cấp nếu Zalo yêu cầu format cụ thể).
-    if (ZALO_SECRET_TOKEN !== 'Điền_Secret_Token_Vào_Đây' && zaloSignature) {
+    if (ZALO_SECRET_TOKEN !== 'uv7Ul-z70-kGaGj00z' && zaloSignature) {
         // Tạm ẩn thuật toán kiểm tra vì cần `appId` và cấu hình Body Parser thô.
         // const expectedSignature = crypto.createHmac('sha256', ZALO_SECRET_TOKEN).update(bodyStr).digest('hex');
         // if (expectedSignature !== zaloSignature) {
