@@ -132,6 +132,13 @@
                 <button onclick="document.getElementById('itsLogInput').click()" style="background: #e67e22; color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; display: inline-flex; align-items: center;">
                     📥 Import Log ITS
                 </button>
+                
+                <!-- [MỚI] Nút chọn thông số để đổi màu Bản đồ nhiệt (Ẩn lúc đầu) -->
+                <select id="itsMetricSelect" onchange="renderItsLogs()" style="display:none; background: #34495e; color: white; border: 1.5px solid #2c3e50; padding: 0 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; outline: none;">
+                    <option value="rsrp">📊 Mức thu (RSRP)</option>
+                    <option value="rsrq">📊 Chất lượng (RSRQ)</option>
+                    <option value="sinr">📊 Nhiễu (SINR)</option>
+                </select>
 
                 <div class="search-box">
                     <input type="text" id="mapSearchInput" placeholder="Nhập Cell/Site hoặc CSHT..." onkeypress="if(event.key === 'Enter') searchMap()">
@@ -164,11 +171,12 @@
     let globalCshtData = []; 
     let defaultBounds = [];  
     let globalLogLines = []; 
+    let globalItsData = []; // [MỚI] Mảng lưu trữ siêu dữ liệu Log ITS
     let azimuthOrigins = {}; 
     let latestOriginId = null; 
     
     let isTAMode = false;
-    let taDataCache = []; 
+    let taDataCache = [];
 
     // Hệ thống Toast thông báo thay thế hoàn toàn alert()
     function showToast(message, isError = false) {
@@ -722,6 +730,8 @@
     }
 
     async function loadMapData() {
+        document.getElementById('itsMetricSelect').style.display = 'none'; // [MỚI] Ẩn menu thông số khi tải lại Map
+        
         const network = document.getElementById('networkSelect').value;
         const loading = document.getElementById('mapLoading');
         document.getElementById('loadingText').innerText = "Đang tải dữ liệu mạng lưới...";
@@ -883,74 +893,90 @@
     }
 
     // ====================================================
-    // ĐỌC VÀ VẼ LOG FILE ITS (MULTI FILES)
+    // HỆ THỐNG XỬ LÝ LOG DRIVE TEST (MỚI: RSRP, RSRQ, SINR)
     // ====================================================
-    // SỬA LỖI MÀU SẮC & NGƯỠNG ĐO THEO HÌNH ẢNH YÊU CẦU
-    function getColor4G(level) {
-        if (level >= -65) return '#0000FF'; // Rất tốt: Blue
-        if (level >= -85) return '#008000'; // Tốt: Dark Green
-        if (level >= -95) return '#00FF00'; // Trung bình: Lime (Sáng)
-        if (level >= -105) return '#FFFF00'; // Kém: Yellow
-        if (level >= -110) return '#FF0000'; // Rất kém: Red
-        return '#000000'; // Điểm đen: Black
-    }
-    
-    function getColor3G(level) {
-        if (level >= -65) return '#0000FF'; // Rất tốt: Blue
-        if (level >= -75) return '#008000'; // Tốt: Dark Green
-        if (level >= -85) return '#00FF00'; // Trung bình: Lime (Sáng)
-        if (level >= -95) return '#FFFF00'; // Kém: Yellow
-        if (level >= -105) return '#FF0000'; // Rất kém: Red
-        return '#000000'; // Điểm đen: Black
+
+    function getColorRSRP(val) {
+        if (val === null || val === undefined || isNaN(val)) return '#95a5a6'; 
+        if (val >= -65) return '#0000FF'; // Blue
+        if (val >= -80) return '#008000'; // Dark Green
+        if (val >= -95) return '#00FF00'; // Lime
+        if (val >= -110) return '#FFFF00'; // Yellow
+        if (val >= -125) return '#FF0000'; // Red
+        return '#000000'; // Black
     }
 
-    // BỔ SUNG THAM SỐ STATS ĐỂ HIỂN THỊ THỐNG KÊ SỐ MẪU ĐO
-    function addLegend(is3G, is4G, stats = null) {
+    function getColorRSRQ(val) {
+        if (val === null || val === undefined || isNaN(val)) return '#95a5a6';
+        if (val >= -6) return '#0000FF'; // Blue
+        if (val >= -10) return '#008000'; // Dark Green
+        if (val >= -14) return '#00FF00'; // Lime
+        if (val >= -18) return '#FFFF00'; // Yellow
+        return '#FF0000'; // Red (Dưới -18)
+    }
+
+    function getColorSINR(val) {
+        if (val === null || val === undefined || isNaN(val)) return '#95a5a6';
+        if (val >= 15) return '#0000FF'; // Blue
+        if (val >= 10) return '#008000'; // Dark Green
+        if (val >= 5) return '#00FF00'; // Lime
+        if (val >= 0) return '#FFFF00'; // Yellow
+        if (val >= -5) return '#FF0000'; // Red
+        return '#000000'; // Black (Dưới -5)
+    }
+
+    function addLegend(metric, stats = null) {
         if (legendControl) map.removeControl(legendControl);
         legendControl = L.control({position: 'bottomright'});
         legendControl.onAdd = function (map) {
             let container = L.DomUtil.create('div', 'leaflet-collapsible-ctrl');
             let labels = [];
-            let title = is4G ? 'Mức thu 4G (RSRP)' : 'Mức thu 3G (RSCP)';
+            
+            let title = '';
+            let ranges = [];
+
+            if (metric === 'rsrp') {
+                title = 'Mức thu RSRP (dBm)';
+                ranges = [ 
+                    { text: 'Rất tốt [-65, Max]', color: '#0000FF' }, 
+                    { text: 'Tốt [-80, -65)', color: '#008000' }, 
+                    { text: 'Trung bình [-95, -80)', color: '#00FF00' }, 
+                    { text: 'Kém [-110, -95)', color: '#FFFF00' }, 
+                    { text: 'Rất kém [-125, -110)', color: '#FF0000' },
+                    { text: 'Điểm đen [Min, -125)', color: '#000000' }
+                ];
+            } else if (metric === 'rsrq') {
+                title = 'Chất lượng RSRQ (dB)';
+                ranges = [ 
+                    { text: 'Rất tốt [-6, Max]', color: '#0000FF' }, 
+                    { text: 'Tốt [-10, -6)', color: '#008000' }, 
+                    { text: 'Trung bình [-14, -10)', color: '#00FF00' }, 
+                    { text: 'Kém [-18, -14)', color: '#FFFF00' }, 
+                    { text: 'Rất kém [Min, -18)', color: '#FF0000' }
+                ];
+            } else if (metric === 'sinr') {
+                title = 'Nhiễu SINR (dB)';
+                ranges = [ 
+                    { text: 'Rất tốt [15, Max]', color: '#0000FF' }, 
+                    { text: 'Tốt [10, 15)', color: '#008000' }, 
+                    { text: 'Khá [5, 10)', color: '#00FF00' }, 
+                    { text: 'Trung bình [0, 5)', color: '#FFFF00' }, 
+                    { text: 'Kém [-5, 0)', color: '#FF0000' },
+                    { text: 'Rất kém [Min, -5)', color: '#000000' }
+                ];
+            }
             
             if (stats && stats.total > 0) {
                 title += `<br><span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">Tổng số: <b>${stats.total.toLocaleString('vi-VN')}</b> mẫu đo</span>`;
+                ranges.forEach((r, idx) => { r.count = stats[`cat${idx+1}`] || 0; });
             }
             
             let headerHtml = `<h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; font-weight: bold; border-bottom: 2px solid var(--primary); padding-bottom: 5px;">${title}</h4>`;
-            
-            const ranges4G = [ 
-                { text: 'Rất tốt [-65: 0)', color: '#0000FF' }, 
-                { text: 'Tốt [-85: -65)', color: '#008000' }, 
-                { text: 'Trung bình [-95: -85)', color: '#00FF00' }, 
-                { text: 'Kém [-105: -95)', color: '#FFFF00' }, 
-                { text: 'Rất kém [-110: -105)', color: '#FF0000' },
-                { text: 'Điểm đen [--: -110)', color: '#000000' }
-            ];
-            const ranges3G = [ 
-                { text: 'Rất tốt [-65: 0)', color: '#0000FF' }, 
-                { text: 'Tốt [-75: -65)', color: '#008000' }, 
-                { text: 'Trung bình [-85: -75)', color: '#00FF00' }, 
-                { text: 'Kém [-95: -85)', color: '#FFFF00' }, 
-                { text: 'Rất kém [-105: -95)', color: '#FF0000' },
-                { text: 'Điểm đen [--: -105)', color: '#000000' }
-            ];
-            
-            if (stats) {
-                ranges4G[0].count = stats.cat1; ranges3G[0].count = stats.cat1;
-                ranges4G[1].count = stats.cat2; ranges3G[1].count = stats.cat2;
-                ranges4G[2].count = stats.cat3; ranges3G[2].count = stats.cat3;
-                ranges4G[3].count = stats.cat4; ranges3G[3].count = stats.cat4;
-                ranges4G[4].count = stats.cat5; ranges3G[4].count = stats.cat5;
-                ranges4G[5].count = stats.cat6; ranges3G[5].count = stats.cat6;
-            }
-            
-            const ranges = is4G ? ranges4G : ranges3G;
 
             ranges.forEach(r => {
                 let countHtml = '';
                 if (r.count !== undefined && stats.total > 0) {
-                    let pct = ((r.count / stats.total) * 100).toFixed(1);
+                    let pct = ((r.count / stats.total) * 100).toFixed(2);
                     countHtml = `<span style="margin-left: auto; font-size: 11px; color: var(--text-main); font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
                 }
                 
@@ -976,22 +1002,94 @@
         legendControl.addTo(map);
     }
 
+    // [MỚI] Hàm vẽ lại bản đồ khi chọn Thông số trên UI
+    window.renderItsLogs = function() {
+        if (globalItsData.length === 0) return;
+        
+        itsLogLayer.clearLayers(); 
+        globalLogLines = [];
+        
+        let metric = document.getElementById('itsMetricSelect').value;
+        let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
+        let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
+
+        let logStats = { total: 0, cat1: 0, cat2: 0, cat3: 0, cat4: 0, cat5: 0, cat6: 0 };
+
+        globalItsData.forEach(item => {
+            let val = null;
+            let color = '#95a5a6';
+
+            if (metric === 'rsrp') {
+                val = item.level;
+                if (val !== null && !isNaN(val)) {
+                    color = getColorRSRP(val);
+                    logStats.total++;
+                    if (val >= -65) logStats.cat1++;
+                    else if (val >= -80) logStats.cat2++;
+                    else if (val >= -95) logStats.cat3++;
+                    else if (val >= -110) logStats.cat4++;
+                    else if (val >= -125) logStats.cat5++;
+                    else logStats.cat6++;
+                }
+            } else if (metric === 'rsrq') {
+                val = item.qual;
+                if (val !== null && !isNaN(val)) {
+                    color = getColorRSRQ(val);
+                    logStats.total++;
+                    if (val >= -6) logStats.cat1++;
+                    else if (val >= -10) logStats.cat2++;
+                    else if (val >= -14) logStats.cat3++;
+                    else if (val >= -18) logStats.cat4++;
+                    else logStats.cat5++;
+                }
+            } else if (metric === 'sinr') {
+                val = item.snr;
+                if (val !== null && !isNaN(val)) {
+                    color = getColorSINR(val);
+                    logStats.total++;
+                    if (val >= 15) logStats.cat1++;
+                    else if (val >= 10) logStats.cat2++;
+                    else if (val >= 5) logStats.cat3++;
+                    else if (val >= 0) logStats.cat4++;
+                    else if (val >= -5) logStats.cat5++;
+                    else logStats.cat6++;
+                }
+            }
+
+            const marker = L.circleMarker([item.lat, item.lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
+            
+            let popupContent = `<b>Tech:</b> ${item.tech}<br>`;
+            popupContent += `<b>RSRP (Level):</b> ${item.level} dBm<br>`;
+            popupContent += `<b>RSRQ (Qual):</b> ${item.qual !== null ? item.qual + ' dB' : 'N/A'}<br>`;
+            popupContent += `<b>SINR (SNR):</b> ${item.snr !== null ? item.snr + ' dB' : 'N/A'}<br>`;
+            popupContent += `<b>Serving Cell:</b> ${item.cellId}<br><b>Node/LAC:</b> ${item.node || item.lac}`;
+            
+            marker.bindPopup(popupContent);
+            marker.addTo(itsLogLayer);
+
+            if (item.servingCellObj) {
+                let arcCenter = getDestination(item.servingCellObj.lat, item.servingCellObj.lng, item.servingCellObj.azimuth, item.servingCellObj.baseRadius * scale);
+                const line = L.polyline([[item.lat, item.lng], arcCenter], { color: color, weight: 1.5, opacity: 0.8, dashArray: '4, 4' });
+                line.addTo(itsLogLayer);
+                globalLogLines.push({ line: line, startLat: item.lat, startLng: item.lng, cellObj: item.servingCellObj });
+            }
+        });
+
+        addLegend(metric, logStats);
+        document.getElementById('itsMetricSelect').style.display = 'inline-flex';
+    };
+
     async function processItsLog(event) {
         const files = event.target.files;
         if (!files || files.length === 0) return;
 
         itsLogLayer.clearLayers(); 
         globalLogLines = []; 
-        document.getElementById('loadingText').innerText = "Đang vẽ dữ liệu và đếm mẫu đo Drive Test...";
-        document.getElementById('mapLoading').style.display = 'block';
-
-        let is3G = false, is4G = false; 
+        globalItsData = [];
         let allLogBounds = [];
-        let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
-        let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
-        // BỘ ĐẾM SỐ LƯỢNG MẪU ĐO
-        let logStats = { total: 0, cat1: 0, cat2: 0, cat3: 0, cat4: 0, cat5: 0, cat6: 0 };
+        document.getElementById('loadingText').innerText = "Đang tải dữ liệu và phân tích đa thông số...";
+        document.getElementById('mapLoading').style.display = 'block';
 
         const readFile = (file) => {
             return new Promise((resolve) => {
@@ -1004,62 +1102,39 @@
                     const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
                     const idxLat = headers.indexOf('latitude'); const idxLng = headers.indexOf('longitude');
                     const idxNode = headers.indexOf('node'); const idxCellID = headers.indexOf('cellid');
-                    const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); const idxLevel = headers.indexOf('level');
+                    const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); 
+                    const idxLevel = headers.indexOf('level');
+                    const idxQual = headers.indexOf('qual');
+                    const idxSnr = headers.indexOf('snr');
 
-                    if (idxLat < 0 || idxLng < 0 || idxLevel < 0) { resolve(); return; } 
+                    if (idxLat < 0 || idxLng < 0) { resolve(); return; } 
 
                     for (let i = 1; i < lines.length; i++) {
                         const cols = lines[i].split('|'); if (cols.length < headers.length) continue;
                         const lat = parseFloat(cols[idxLat]); const lng = parseFloat(cols[idxLng]);
                         if (isNaN(lat) || isNaN(lng)) continue;
 
-                        const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; const level = parseFloat(cols[idxLevel]);
-                        if (isNaN(level)) continue; // Bỏ qua nếu dòng bị lỗi mức thu
+                        const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; 
+                        const level = parseFloat(cols[idxLevel]);
+                        const qual = idxQual >= 0 ? parseFloat(cols[idxQual]) : null;
+                        const snr = idxSnr >= 0 ? parseFloat(cols[idxSnr]) : null;
 
-                        const node = cols[idxNode] ? cols[idxNode].trim() : ''; const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
+                        const node = cols[idxNode] ? cols[idxNode].trim() : ''; 
+                        const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
                         const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
 
-                        let color = '#95a5a6'; let servingCellObj = null;
-                        
+                        let servingCellObj = null;
                         if (tech.includes('3G')) { 
-                            is3G = true; 
-                            color = getColor3G(level); 
                             servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId); 
-                            
-                            // Phân loại đếm mẫu cho 3G (RSCP)
-                            logStats.total++;
-                            if (level >= -65) logStats.cat1++;
-                            else if (level >= -75) logStats.cat2++;
-                            else if (level >= -85) logStats.cat3++;
-                            else if (level >= -95) logStats.cat4++;
-                            else if (level >= -105) logStats.cat5++;
-                            else logStats.cat6++;
-                        } 
-                        else if (tech.includes('4G')) { 
-                            is4G = true; 
-                            color = getColor4G(level); 
+                        } else if (tech.includes('4G')) { 
                             servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId); 
-                            
-                            // Phân loại đếm mẫu cho 4G (RSRP)
-                            logStats.total++;
-                            if (level >= -65) logStats.cat1++;
-                            else if (level >= -85) logStats.cat2++;
-                            else if (level >= -95) logStats.cat3++;
-                            else if (level >= -105) logStats.cat4++;
-                            else if (level >= -110) logStats.cat5++;
-                            else logStats.cat6++;
                         }
 
-                        const marker = L.circleMarker([lat, lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
-                        marker.bindPopup(`<b>Tech:</b> ${tech}<br><b>Level:</b> ${level} dBm<br><b>Serving Cell:</b> ${cellId}<br><b>Node/LAC:</b> ${node || lac}`);
-                        marker.addTo(itsLogLayer);
+                        // Lưu vào bộ nhớ tạm
+                        globalItsData.push({
+                            lat, lng, tech, level, qual, snr, node, cellId, lac, servingCellObj
+                        });
 
-                        if (servingCellObj) {
-                            let arcCenter = getDestination(servingCellObj.lat, servingCellObj.lng, servingCellObj.azimuth, servingCellObj.baseRadius * scale);
-                            const line = L.polyline([[lat, lng], arcCenter], { color: color, weight: 1.5, opacity: 0.8, dashArray: '4, 4' });
-                            line.addTo(itsLogLayer);
-                            globalLogLines.push({ line: line, startLat: lat, startLng: lng, cellObj: servingCellObj });
-                        }
                         allLogBounds.push([lat, lng]);
                     }
                     resolve(); 
@@ -1073,9 +1148,9 @@
         
         await Promise.all(readPromises);
 
-        // Gọi hàm hiển thị Legend VÀ truyền thêm tham số logStats
-        if (is4G) addLegend(false, true, logStats); 
-        else if (is3G) addLegend(true, false, logStats);
+        // Kích hoạt hàm Render biểu đồ lần đầu tiên với thông số đang chọn (Mặc định RSRP)
+        document.getElementById('itsMetricSelect').value = 'rsrp';
+        renderItsLogs();
         
         if (allLogBounds.length > 0) map.fitBounds(allLogBounds);
         
