@@ -133,13 +133,6 @@
                     📥 Import Log ITS
                 </button>
                 
-                <!-- [MỚI] Nút chọn thông số để đổi màu Bản đồ nhiệt (Ẩn lúc đầu) -->
-                <select id="itsMetricSelect" onchange="renderItsLogs()" style="display:none; background: #34495e; color: white; border: 1.5px solid #2c3e50; padding: 0 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; height: 34px; outline: none;">
-                    <option value="rsrp">📊 Mức thu (RSRP)</option>
-                    <option value="rsrq">📊 Chất lượng (RSRQ)</option>
-                    <option value="sinr">📊 Nhiễu (SINR)</option>
-                </select>
-
                 <div class="search-box">
                     <input type="text" id="mapSearchInput" placeholder="Nhập Cell/Site hoặc CSHT..." onkeypress="if(event.key === 'Enter') searchMap()">
                     <button onclick="searchMap()">🔍 Tìm kiếm</button>
@@ -172,6 +165,7 @@
     let defaultBounds = [];  
     let globalLogLines = []; 
     let globalItsData = []; // [MỚI] Mảng lưu trữ siêu dữ liệu Log ITS
+    let currentItsMetric = 'rsrp'; // [MỚI] Lưu thông số đang chọn
     let azimuthOrigins = {}; 
     let latestOriginId = null; 
     
@@ -729,9 +723,7 @@
         loadCshtData(); 
     }
 
-    async function loadMapData() {
-        document.getElementById('itsMetricSelect').style.display = 'none'; // [MỚI] Ẩn menu thông số khi tải lại Map
-        
+   async function loadMapData() {
         const network = document.getElementById('networkSelect').value;
         const loading = document.getElementById('mapLoading');
         document.getElementById('loadingText').innerText = "Đang tải dữ liệu mạng lưới...";
@@ -967,11 +959,20 @@
             }
             
             if (stats && stats.total > 0) {
-                title += `<br><span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">Tổng số: <b>${stats.total.toLocaleString('vi-VN')}</b> mẫu đo</span>`;
                 ranges.forEach((r, idx) => { r.count = stats[`cat${idx+1}`] || 0; });
             }
             
-            let headerHtml = `<h4 style="margin: 0 0 10px 0; color: var(--text-main); font-size: 13px; font-weight: bold; border-bottom: 2px solid var(--primary); padding-bottom: 5px;">${title}</h4>`;
+            // [MỚI] Thiết kế lại Header của Legend chứa thẳng Select Box
+            let headerHtml = `
+                <div style="border-bottom: 2px solid var(--primary); padding-bottom: 8px; margin-bottom: 10px;">
+                    <select onchange="renderItsLogs(this.value)" style="width: 100%; padding: 8px 6px; border-radius: 4px; font-size: 13px; font-weight: bold; background: #34495e; color: white; border: none; cursor: pointer; outline: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <option value="rsrp" ${metric === 'rsrp' ? 'selected' : ''}>📊 Mức thu sóng (RSRP)</option>
+                        <option value="rsrq" ${metric === 'rsrq' ? 'selected' : ''}>📊 Chất lượng (RSRQ)</option>
+                        <option value="sinr" ${metric === 'sinr' ? 'selected' : ''}>📊 Nhiễu sóng (SINR)</option>
+                    </select>
+                    ${stats && stats.total > 0 ? `<div style="font-size: 11px; font-weight: normal; color: var(--text-muted); margin-top: 6px; text-align: center;">Đã quét tổng cộng: <b>${stats.total.toLocaleString('vi-VN')}</b> mẫu đo</div>` : ''}
+                </div>
+            `;
 
             ranges.forEach(r => {
                 let countHtml = '';
@@ -1003,13 +1004,13 @@
     }
 
     // [MỚI] Hàm vẽ lại bản đồ khi chọn Thông số trên UI
-    window.renderItsLogs = function() {
+    window.renderItsLogs = function(selectedMetric) {
         if (globalItsData.length === 0) return;
+        if (selectedMetric) currentItsMetric = selectedMetric;
+        let metric = currentItsMetric;
         
         itsLogLayer.clearLayers(); 
         globalLogLines = [];
-        
-        let metric = document.getElementById('itsMetricSelect').value;
         let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
         let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
@@ -1076,7 +1077,14 @@
         });
 
         addLegend(metric, logStats);
-        document.getElementById('itsMetricSelect').style.display = 'inline-flex';
+        
+        // [MỚI] Tự động bung bảng Legend ra ngay khi vừa Import xong để user thấy ngay Dropdown
+        setTimeout(() => {
+            const legendPanel = document.getElementById('itsLegendContent');
+            if (legendPanel && !legendPanel.classList.contains('show')) {
+                legendPanel.classList.add('show');
+            }
+        }, 100);
     };
 
     async function processItsLog(event) {
@@ -1149,8 +1157,7 @@
         await Promise.all(readPromises);
 
         // Kích hoạt hàm Render biểu đồ lần đầu tiên với thông số đang chọn (Mặc định RSRP)
-        document.getElementById('itsMetricSelect').value = 'rsrp';
-        renderItsLogs();
+        renderItsLogs('rsrp');
         
         if (allLogBounds.length > 0) map.fitBounds(allLogBounds);
         
