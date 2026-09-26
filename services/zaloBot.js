@@ -467,7 +467,7 @@ Vẽ Biểu đồ (Charts):
             if (rows.length < 2) return await sendZaloText(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
             
             const data = rows.reverse();
-            const chartUrl = generateChartUrl({
+            const chartUrl = await generateChartUrl({
                 type: 'line', 
                 data: { 
                     labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
