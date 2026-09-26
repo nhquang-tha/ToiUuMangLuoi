@@ -138,7 +138,7 @@
                     <button onclick="searchMap()">🔍 Tìm kiếm</button>
                 </div>
 
-                <select id="networkSelect" onchange="loadMapData()">
+                <select id="networkSelect" onchange="loadAllMapData()">
                     <option value="4g" selected>Mạng 4G LTE</option>
                     <option value="3g">Mạng 3G WCDMA</option>
                     <option value="5g">Mạng 5G NR</option>
@@ -501,6 +501,9 @@
 
     async function loadCshtData() {
         try {
+            // Lấy loại mạng đang được chọn trên giao diện (3g, 4g, 5g)
+            const network = document.getElementById('networkSelect').value; 
+            
             const res = await fetch('/api/csht-data');
             const data = await res.json();
             
@@ -508,6 +511,24 @@
             globalCshtData = [];
 
             data.forEach(item => {
+                // Bộ lọc: Kiểm tra CSHT này có chứa mã trạm của mạng đang chọn hay không
+                let hasNetwork = false;
+                if (Array.isArray(item.allData)) {
+                    item.allData.forEach(prop => {
+                        let k = String(prop.key).toLowerCase();
+                        let v = String(prop.value || '').trim();
+                        // Phải có dữ liệu thật (Khác rỗng và Khác null)
+                        if (v !== '' && v !== 'null') {
+                            if (network === '3g' && k.includes('ma_tram_3g')) hasNetwork = true;
+                            if (network === '4g' && k.includes('ma_tram_4g')) hasNetwork = true;
+                            if (network === '5g' && k.includes('ma_tram_5g')) hasNetwork = true;
+                        }
+                    });
+                }
+                
+                // Nếu CSHT không chứa mã trạm tương ứng -> Bỏ qua không vẽ lên Map!
+                if (!hasNetwork) return;
+
                 const marker = L.circleMarker([item.lat, item.lng], {
                     radius: 5, fillColor: '#34495e', color: '#ffffff', weight: 2, fillOpacity: 1,
                     renderer: cshtRenderer
