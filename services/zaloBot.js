@@ -467,9 +467,29 @@ Vẽ Biểu đồ (Charts):
             if (rows.length < 2) return await sendZaloText(chatId, `❌ Cần ít nhất dữ liệu 2 tuần để vẽ biểu đồ QoS.`);
             
             const data = rows.reverse();
-            const chartUrl = await generateChartUrl({
-                type: 'bar', data: { labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), datasets: [{ label: 'Điểm QoS', data: data.map(d => d.QoS_Score), backgroundColor: '#e74c3c' }] },
-                options: { title: { display: true, text: `Biến động Điểm QoS (4 Tuần) - ${parsed.kw.toUpperCase()}`, fontSize: 16, fontColor: '#2c3e50' } }
+            const chartUrl = generateChartUrl({
+                type: 'line', 
+                data: { 
+                    labels: data.map(d => d.Tuan.split(' ')[1] || d.Tuan), 
+                    datasets: [{ 
+                        label: 'Điểm QoS', 
+                        data: data.map(d => d.QoS_Score), 
+                        borderColor: '#e74c3c', 
+                        backgroundColor: 'rgba(231, 76, 60, 0.2)', 
+                        fill: true, 
+                        borderWidth: 3,
+                        lineTension: 0.4, 
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#e74c3c',
+                        pointBorderWidth: 2
+                    }] 
+                },
+                options: { 
+                    title: { display: true, text: `Biến động Điểm QoS (4 Tuần) - ${parsed.kw.toUpperCase()}`, fontSize: 16, fontColor: '#2c3e50' },
+                    legend: { display: false },
+                    scales: { xAxes: [{ gridLines: { display: false } }], yAxes: [{ gridLines: { borderDash: [5, 5] } }] }
+                }
             });
             await sendZaloPicture(chatId, chartUrl, `⚙️ Biểu đồ Dịch vụ QoS: ${parsed.kw.toUpperCase()}`);
         } catch (e) {} return;
