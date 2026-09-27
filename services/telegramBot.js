@@ -49,6 +49,7 @@ if (bot) {
 
 <b>Tra cứu Thông tin:</b>
 📦 <code>vt &lt;tên_viết_tắt&gt;</code>: Tra cứu mã vật tư/thiết bị (VD: vt UBBP, vt RRU).
+🔌 <code>ip &lt;từ_khóa&gt;</code>: Tra cứu địa chỉ IP của trạm (VD: ip 4G-NLC044M hoặc ip NLC044M).
 🚑 <code>alarm &lt;bản_tin&gt;</code>: Phân tích nguyên nhân & cách xử lý cảnh báo.
 🏢 <code>csht &lt;mã_CSHT&gt;</code> hoặc <code>ne &lt;tên_rút_gọn&gt;</code>: Tra cứu CSHT.
 📡 <code>rf &lt;cell_code&gt;</code>: Tra thông tin RF của cell kèm link map.
@@ -278,52 +279,47 @@ if (bot) {
     // ==========================================
     // CÁC LỆNH TRA CỨU CSHT, RF, KPI, CEM, QOS, CHARTS
     // ==========================================
-    bot.onText(/^(?:\/)?(?:csht|ne)\s+(.+)$/i, async (msg, match) => {
+    
+    bot.onText(/^(?:\/)?ip\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
-        const keyword = match[1].trim();
-        const fuzzyKeyword = keyword.replace(/-/g, '%');
-        
-        bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin Cơ sở hạ tầng: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
+        let keyword = match[1].trim();
+        // Thuật toán bóc tách từ khóa: Cắt bỏ tiền tố (4G-, 5G-) và hậu tố (-THA, -TH) để quét chính xác vào Core Code
+        let cleanKeyword = keyword.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
+
+        bot.sendMessage(chatId, `⏳ Đang tra cứu thông tin IP cho: <b>${escapeHTML(keyword)}</b>...`, { parse_mode: 'HTML' });
 
         try {
-            // [ĐÃ SỬA]: Bọc LOWER vào tất cả các điều kiện LIKE
-            const [rows] = await db.query(`SELECT * FROM csht_data WHERE LOWER(Ma_CSHT) LIKE LOWER(?) OR LOWER(Ten_CSHT) LIKE LOWER(?) OR LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) LIMIT 1`, [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`]);
-            
+            const [rows] = await db.query(
+                `SELECT Ten_CSHT, Ma_CSHT, IP_3G, IP_4G, IP_5G FROM csht_data 
+                 WHERE LOWER(Ma_CSHT) LIKE LOWER(?) 
+                    OR LOWER(Ten_CSHT) LIKE LOWER(?) 
+                    OR LOWER(Ma_Tram_3G) LIKE LOWER(?) 
+                    OR LOWER(Ma_Tram_4G) LIKE LOWER(?) 
+                    OR LOWER(Ma_Tram_5G) LIKE LOWER(?) 
+                 LIMIT 1`, 
+                [`%${cleanKeyword}%`, `%${cleanKeyword}%`, `%${cleanKeyword}%`, `%${cleanKeyword}%`, `%${cleanKeyword}%`]
+            );
+
             if (rows.length > 0) {
                 let r = rows[0];
-                let mapLink = `https://www.google.com/maps/search/?api=1&query=${r.Latitude},${r.Longitude}`;
+                let text = `🔌 <b>THÔNG TIN IP TRẠM</b>\n---------------------------\n`;
+                text += `▪️ <b>Tên CSHT:</b> ${escapeHTML(r.Ten_CSHT || 'Không rõ')}\n`;
+                text += `▪️ <b>Mã CSHT:</b> <code>${escapeHTML(r.Ma_CSHT || 'Không rõ')}</code>\n`;
+                text += `▪️ <b>IP 3G:</b> <code>${escapeHTML(r.IP_3G || 'Không có')}</code>\n`;
+                text += `▪️ <b>IP 4G:</b> <code>${escapeHTML(r.IP_4G || 'Không có')}</code>\n`;
+                text += `▪️ <b>IP 5G:</b> <code>${escapeHTML(r.IP_5G || 'Không có')}</code>`;
                 
-                let text = `🏢 <b>THÔNG TIN CƠ SỞ HẠ TẦNG</b>\n---------------------------\n` +
-                           `▪️ <b>Tên CSHT:</b> ${escapeHTML(r.Ten_CSHT)}\n` +
-                           `▪️ <b>Mã CSHT:</b> ${escapeHTML(r.Ma_CSHT)}\n` +
-                           `▪️ <b>Địa chỉ:</b> ${escapeHTML(r.Dia_Chi)}\n`;
-                
-                if (r.Loai_Nha_Tram) text += `▪️ <b>Loại trạm:</b> ${escapeHTML(r.Loai_Nha_Tram)}\n`;
-                if (r.Don_Vi_Quan_Ly) text += `▪️ <b>Đơn vị QL:</b> ${escapeHTML(r.Don_Vi_Quan_Ly)}\n`;
-                
-                let tramList = [];
-                
-                if (r.Ma_Tram_3G) tramList.push(`3G: ${r.Ma_Tram_3G}`);
-                if (r.Ma_Tram_4G) tramList.push(`4G: ${r.Ma_Tram_4G}`);
-                if (r.Ma_Tram_5G) tramList.push(`5G: ${r.Ma_Tram_5G}`);
-                
-                if (tramList.length > 0) {
-                    text += `▪️ <b>Trạm phát sóng:</b> ${escapeHTML(tramList.join(' | '))}\n`;
-                }
-
-                text += `\n🗺️ <a href="${mapLink}">📍 CHỈ ĐƯỜNG GOOGLE MAPS</a>`;
-                
-                bot.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: false });
+                bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
             } else {
-                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin CSHT cho từ khóa: <b>${escapeHTML(keyword)}</b>`, { parse_mode: 'HTML' });
+                bot.sendMessage(chatId, `❌ Không tìm thấy thông tin IP nào khớp với: <b>${escapeHTML(keyword)}</b>`, { parse_mode: 'HTML' });
             }
         } catch (e) {
-            console.error(e);
-            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối tới cơ sở dữ liệu CSHT.`, { parse_mode: 'HTML' });
+            console.error("Lỗi tra cứu IP:", e);
+            bot.sendMessage(chatId, `❌ Đã xảy ra lỗi khi kết nối CSDL CSHT.`, { parse_mode: 'HTML' });
         }
     });
 
-    bot.onText(/^(?:\/)?rf\s+(.+)$/i, async (msg, match) => {
+    bot.onText(/^(?:\/)?(?:csht|ne)\s+(.+)$/i, async (msg, match) => {
         const chatId = msg.chat.id;
         const parsed = parseKeyword(match[1]);
         const keyword = parsed.kw;
