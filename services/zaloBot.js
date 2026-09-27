@@ -96,21 +96,7 @@ router.post('/api/zalo-webhook', async (req, res) => {
     // ==========================================
     
     if (command === 'start' || command === 'help') {
-        const resp = `👋 HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT
-
-Tra cứu Thông tin:
-📦 vt <tên_viết_tắt>: Tra cứu mã vật tư/thiết bị.
-🚑 alarm <bản_tin>: Phân tích nguyên nhân & cách xử lý cảnh báo.
-🏢 csht <mã_CSHT> hoặc ne <tên_rút_gọn>: Tra cứu CSHT.
-📡 rf <cell_code>: Tra thông tin RF của cell.
-📊 kpi <cell_code>: Tra thông tin KPI mới nhất của cell.
-⭐ cem <cell_code>: Tra thông tin CEM tuần mới nhất của cell.
-⚙️ qos <cell_code>: Tra thông tin QoS tuần mới nhất của cell.
-
-Vẽ Biểu đồ (Charts):
-📈 charkpi <cell_code>: Vẽ biểu đồ biến động KPI 7 ngày gần nhất.
-📉 charcem <cell_code>: Vẽ biểu đồ biến động CEM 4 tuần gần nhất.
-📉 charqos <cell_code>: Vẽ biểu đồ biến động QoS 4 tuần gần nhất.`;
+        const resp = `👋 HỆ THỐNG TRA CỨU MẠNG LƯỚI VNPT\n\nTra cứu Thông tin:\n📦 vt <tên_viết_tắt>: Tra cứu mã vật tư\n🔌 ip <từ_khóa>: Tra cứu địa chỉ IP trạm\n🚑 alarm <bản_tin>: Phân tích nguyên nhân cảnh báo\n🏢 csht <mã_CSHT> hoặc ne <tên_rút_gọn>: Tra cứu CSHT\n📡 rf <cell_code>: Tra thông tin RF của cell\n📊 kpi <cell_code>: Tra thông tin KPI\n⭐ cem <cell_code>: Tra thông tin CEM\n⚙️ qos <cell_code>: Tra thông tin QoS\n\nVẽ Biểu đồ:\n📈 charkpi <cell>\n📉 charcem <cell>\n📉 charqos <cell>`;
         await sendZaloText(chatId, resp);
         return;
     }
@@ -282,6 +268,30 @@ Vẽ Biểu đồ (Charts):
                 await sendZaloText(chatId, text);
             } else { await sendZaloText(chatId, `❌ Không tìm thấy CSHT cho từ khóa: ${keyword}`); }
         } catch (e) { await sendZaloText(chatId, "❌ Lỗi CSDL CSHT."); }
+        return;
+    }
+
+    if (command === 'ip') {
+        let cleanKeyword = keyword.replace(/^(?:2G_|3G_|4G-|5G-)/i, '').replace(/(?:_THA|-THA|_TH|-TH)$/i, '').trim();
+        await sendZaloText(chatId, `⏳ Đang tra cứu IP cho: ${keyword}...`);
+        try {
+            const [rows] = await db.query(
+                `SELECT Ten_CSHT, Ma_CSHT, IP_3G, IP_4G, IP_5G FROM csht_data WHERE LOWER(Ma_CSHT) LIKE LOWER(?) OR LOWER(Ten_CSHT) LIKE LOWER(?) OR LOWER(Ma_Tram_3G) LIKE LOWER(?) OR LOWER(Ma_Tram_4G) LIKE LOWER(?) OR LOWER(Ma_Tram_5G) LIKE LOWER(?) LIMIT 1`, 
+                [`%${cleanKeyword}%`, `%${cleanKeyword}%`, `%${cleanKeyword}%`, `%${cleanKeyword}%`, `%${cleanKeyword}%`]
+            );
+            if (rows.length > 0) {
+                let r = rows[0];
+                let text = `🔌 THÔNG TIN IP TRẠM\n--------------------\n`;
+                text += `▪️ Tên CSHT: ${r.Ten_CSHT || 'N/A'}\n`;
+                text += `▪️ Mã CSHT: ${r.Ma_CSHT || 'N/A'}\n`;
+                text += `▪️ IP 3G: ${r.IP_3G || 'Không có'}\n`;
+                text += `▪️ IP 4G: ${r.IP_4G || 'Không có'}\n`;
+                text += `▪️ IP 5G: ${r.IP_5G || 'Không có'}`;
+                await sendZaloText(chatId, text);
+            } else { 
+                await sendZaloText(chatId, `❌ Không tìm thấy thông tin IP cho từ khóa: ${keyword}`); 
+            }
+        } catch (e) { await sendZaloText(chatId, "❌ Lỗi CSDL."); }
         return;
     }
 
