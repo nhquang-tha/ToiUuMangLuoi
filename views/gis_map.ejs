@@ -164,8 +164,9 @@
     let globalCshtData = []; 
     let defaultBounds = [];  
     let globalLogLines = []; 
-    let globalItsData = []; // [MỚI] Mảng lưu trữ siêu dữ liệu Log ITS
-    let currentItsMetric = 'rsrp'; // [MỚI] Lưu thông số đang chọn
+    let globalItsData = []; 
+    let currentItsMetric = 'rsrp'; 
+    let activeItsCategories = [1, 2, 3, 4, 5, 6]; // [MỚI] Mảng lưu trữ trạng thái Checkbox của Legend
     let azimuthOrigins = {}; 
     let latestOriginId = null; 
     
@@ -995,19 +996,24 @@
                 </div>
             `;
 
-            ranges.forEach(r => {
+            ranges.forEach((r, idx) => {
+                let catId = idx + 1; // ID thứ tự của dải màu (1 đến 6)
                 let countHtml = '';
                 if (r.count !== undefined && stats.total > 0) {
                     let pct = ((r.count / stats.total) * 100).toFixed(2);
                     countHtml = `<span style="margin-left: auto; font-size: 11px; color: var(--text-main); font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
                 }
                 
+                // Kiểm tra xem dải màu này có đang được người dùng Tick chọn không
+                let isChecked = activeItsCategories.includes(catId) ? 'checked' : '';
+
                 labels.push(`
-                    <div style="display: flex; align-items: center; margin-bottom: 5px; width: 100%;">
+                    <label style="display: flex; align-items: center; margin-bottom: 5px; width: 100%; cursor: pointer;">
+                        <input type="checkbox" id="cb_cat_${catId}" value="${catId}" ${isChecked} onchange="updateItsFilters()" style="margin-right: 8px; cursor: pointer; width: 14px; height: 14px; accent-color: ${r.color};">
                         <i style="background:${r.color}; width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;"></i> 
                         <span style="font-size: 12px; font-weight: bold; color: var(--text-main); white-space: nowrap;">${r.text}</span>
                         ${countHtml}
-                    </div>
+                    </label>
                 `);
             });
 
@@ -1024,14 +1030,32 @@
         legendControl.addTo(map);
     }
 
+    // [MỚI] Hàm cập nhật bộ lọc khi bạn Tick/Bỏ Tick hộp kiểm
+    window.updateItsFilters = function() {
+        activeItsCategories = [];
+        for(let i=1; i<=6; i++) {
+            let cb = document.getElementById('cb_cat_' + i);
+            if(cb && cb.checked) {
+                activeItsCategories.push(i);
+            }
+        }
+        renderItsLogs(currentItsMetric, true); // Gọi lại render nhưng set cờ true để không vẽ lại Legend (tránh giật)
+    };
+
     // [MỚI] Hàm vẽ lại bản đồ khi chọn Thông số trên UI
-    window.renderItsLogs = function(selectedMetric) {
+    window.renderItsLogs = function(selectedMetric, isFilterUpdate = false) {
         if (globalItsData.length === 0) return;
-        if (selectedMetric) currentItsMetric = selectedMetric;
+        
+        // Nếu là đổi thông số (VD từ RSRP sang SINR), reset lại bật toàn bộ hộp kiểm
+        if (selectedMetric && !isFilterUpdate) {
+            currentItsMetric = selectedMetric;
+            activeItsCategories = [1, 2, 3, 4, 5, 6]; 
+        }
         let metric = currentItsMetric;
         
         itsLogLayer.clearLayers(); 
         globalLogLines = [];
+        
         let markerSize = parseFloat(document.getElementById('markerSizeSlider').value) || 3.5;
         let scale = parseFloat(document.getElementById('sectorSizeSlider').value) / 100;
 
@@ -1040,43 +1064,50 @@
         globalItsData.forEach(item => {
             let val = null;
             let color = '#95a5a6';
+            let catId = 0;
 
             if (metric === 'rsrp') {
                 val = item.level;
                 if (val !== null && !isNaN(val)) {
                     color = getColorRSRP(val);
-                    logStats.total++;
-                    if (val >= -65) logStats.cat1++;
-                    else if (val >= -80) logStats.cat2++;
-                    else if (val >= -95) logStats.cat3++;
-                    else if (val >= -110) logStats.cat4++;
-                    else if (val >= -125) logStats.cat5++;
-                    else logStats.cat6++;
+                    if (val >= -65) catId = 1;
+                    else if (val >= -80) catId = 2;
+                    else if (val >= -95) catId = 3;
+                    else if (val >= -110) catId = 4;
+                    else if (val >= -125) catId = 5;
+                    else catId = 6;
                 }
             } else if (metric === 'rsrq') {
                 val = item.qual;
                 if (val !== null && !isNaN(val)) {
                     color = getColorRSRQ(val);
-                    logStats.total++;
-                    if (val >= -6) logStats.cat1++;
-                    else if (val >= -10) logStats.cat2++;
-                    else if (val >= -14) logStats.cat3++;
-                    else if (val >= -18) logStats.cat4++;
-                    else logStats.cat5++;
+                    if (val >= -6) catId = 1;
+                    else if (val >= -10) catId = 2;
+                    else if (val >= -14) catId = 3;
+                    else if (val >= -18) catId = 4;
+                    else catId = 5;
                 }
             } else if (metric === 'sinr') {
                 val = item.snr;
                 if (val !== null && !isNaN(val)) {
                     color = getColorSINR(val);
-                    logStats.total++;
-                    if (val >= 15) logStats.cat1++;
-                    else if (val >= 10) logStats.cat2++;
-                    else if (val >= 5) logStats.cat3++;
-                    else if (val >= 0) logStats.cat4++;
-                    else if (val >= -5) logStats.cat5++;
-                    else logStats.cat6++;
+                    if (val >= 15) catId = 1;
+                    else if (val >= 10) catId = 2;
+                    else if (val >= 5) catId = 3;
+                    else if (val >= 0) catId = 4;
+                    else if (val >= -5) catId = 5;
+                    else catId = 6;
                 }
             }
+
+            // Tính tổng số lượng hiển thị trên Legend
+            if (catId > 0) {
+                logStats.total++;
+                logStats[`cat${catId}`]++;
+            }
+
+            // [LỌC] Nếu tọa độ này nằm trong nhóm đã bị bỏ Tick thì thoát luôn, không vẽ!
+            if (catId > 0 && !activeItsCategories.includes(catId)) return;
 
             const marker = L.circleMarker([item.lat, item.lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
             
@@ -1097,15 +1128,17 @@
             }
         });
 
-        addLegend(metric, logStats);
-        
-        // [MỚI] Tự động bung bảng Legend ra ngay khi vừa Import xong để user thấy ngay Dropdown
-        setTimeout(() => {
-            const legendPanel = document.getElementById('itsLegendContent');
-            if (legendPanel && !legendPanel.classList.contains('show')) {
-                legendPanel.classList.add('show');
-            }
-        }, 100);
+        // Chỉ vẽ lại khung Legend khi Đổi thông số. Nếu chỉ Bật/Tắt Checkbox thì không vẽ lại để chống giật
+        if (!isFilterUpdate) {
+            addLegend(metric, logStats);
+            
+            setTimeout(() => {
+                const legendPanel = document.getElementById('itsLegendContent');
+                if (legendPanel && !legendPanel.classList.contains('show')) {
+                    legendPanel.classList.add('show');
+                }
+            }, 100);
+        }
     };
 
     async function processItsLog(event) {
