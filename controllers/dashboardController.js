@@ -193,10 +193,14 @@ async function aggregateDashboardData() {
         await db.query(`DELETE FROM kpi_4g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0' OR Thoi_gian IS NULL OR Thoi_gian = ''`);
         await db.query(`DELETE FROM kpi_5g WHERE Thoi_gian = 'Thời' OR Thoi_gian = '0' OR Thoi_gian IS NULL OR Thoi_gian = ''`);
 
-        // 4. Đồng bộ dữ liệu Toàn mạng (Dashboard)
+        // 4. Đồng bộ dữ liệu Toàn mạng (Dashboard) - Áp dụng Công thức Weighted Average Throughput
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
+            SELECT Thoi_gian, 
+                   SUM(Total_Data_Traffic_Volume_GB), 
+                   SUM(User_DL_Avg_Throughput_Kbps * Total_Data_Traffic_Volume_GB) / NULLIF(SUM(Total_Data_Traffic_Volume_GB), 0), 
+                   AVG(RB_Util_Rate_DL), 
+                   AVG(CQI_4G)
             FROM kpi_4g GROUP BY Thoi_gian
             ON DUPLICATE KEY UPDATE 
                 sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
@@ -205,17 +209,24 @@ async function aggregateDashboardData() {
 
         await db.query(`
             INSERT INTO Dashboard (thoi_gian, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-            SELECT Thoi_gian, SUM(Total_Data_Traffic_Volume_GB), AVG(A_User_DL_Avg_Throughput), AVG(CQI_5G)
+            SELECT Thoi_gian, 
+                   SUM(Total_Data_Traffic_Volume_GB), 
+                   SUM(A_User_DL_Avg_Throughput * Total_Data_Traffic_Volume_GB) / NULLIF(SUM(Total_Data_Traffic_Volume_GB), 0), 
+                   AVG(CQI_5G)
             FROM kpi_5g GROUP BY Thoi_gian
             ON DUPLICATE KEY UPDATE 
                 sum_TRAFFIC_5G = VALUES(sum_TRAFFIC_5G), AVG_USER_DL_AVG_THPUT_5G = VALUES(AVG_USER_DL_AVG_THPUT_5G), 
                 AVG_CQI_5G = VALUES(AVG_CQI_5G)
         `);
 
-        // 5. Đồng bộ dữ liệu theo Quận/Huyện (district_dashboard)
+        // 5. Đồng bộ dữ liệu theo Quận/Huyện (district_dashboard) - Áp dụng Weighted Average
         await db.query(`
             INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_4G, AVG_USER_DL_AVG_THPUT_4G, AVG_RES_BLK_DL_4G, AVG_CQI_4G)
-            SELECT Thoi_gian, District_code, SUM(Total_Data_Traffic_Volume_GB), AVG(User_DL_Avg_Throughput_Kbps), AVG(RB_Util_Rate_DL), AVG(CQI_4G)
+            SELECT Thoi_gian, District_code, 
+                   SUM(Total_Data_Traffic_Volume_GB), 
+                   SUM(User_DL_Avg_Throughput_Kbps * Total_Data_Traffic_Volume_GB) / NULLIF(SUM(Total_Data_Traffic_Volume_GB), 0), 
+                   AVG(RB_Util_Rate_DL), 
+                   AVG(CQI_4G)
             FROM kpi_4g WHERE District_code IS NOT NULL AND District_code != '' GROUP BY Thoi_gian, District_code
             ON DUPLICATE KEY UPDATE 
                 sum_TRAFFIC_4G = VALUES(sum_TRAFFIC_4G), AVG_USER_DL_AVG_THPUT_4G = VALUES(AVG_USER_DL_AVG_THPUT_4G), 
@@ -224,7 +235,10 @@ async function aggregateDashboardData() {
 
         await db.query(`
             INSERT INTO district_dashboard (thoi_gian, district, sum_TRAFFIC_5G, AVG_USER_DL_AVG_THPUT_5G, AVG_CQI_5G)
-            SELECT t5.Thoi_gian, t4map.District_code, SUM(t5.Total_Data_Traffic_Volume_GB), AVG(t5.A_User_DL_Avg_Throughput), AVG(t5.CQI_5G)
+            SELECT t5.Thoi_gian, t4map.District_code, 
+                   SUM(t5.Total_Data_Traffic_Volume_GB), 
+                   SUM(t5.A_User_DL_Avg_Throughput * t5.Total_Data_Traffic_Volume_GB) / NULLIF(SUM(t5.Total_Data_Traffic_Volume_GB), 0), 
+                   AVG(t5.CQI_5G)
             FROM kpi_5g t5
             JOIN (
                 SELECT DISTINCT SUBSTRING(REPLACE(REPLACE(Cell_name, '4G-', ''), '4G_', ''), 1, 6) as core_code, District_code 
