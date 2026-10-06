@@ -108,6 +108,8 @@ router.get('/logout', (req, res) => {
     req.session.destroy(); 
     res.redirect('/login'); 
 });
+
 router.get('/swap-mimo', isAuthenticated, swapController.renderSwapMimoPage);
 router.get('/api/swap-mimo', isAuthenticated, swapController.getSwapData);
+
 module.exports = router;
