@@ -133,37 +133,34 @@ exports.getSwapData = async (req, res) => {
             }
         });
 
-        // 4. Thuật toán Ghép Cặp (Pairing) tự tìm trạm gần nhất trong khu vực đã chọn
+        // 4. Thuật toán Ghép Cặp (Pairing) chéo tự do trong phạm vi District (Ưu tiên theo Traffic)
         let pairs = [];
-        let usedDowngrades = new Set(); 
+        
+        // Xếp hạng: Trạm Nâng cấp có Traffic cao nhất được ưu tiên xếp lên đầu
+        upgradeCandidates.sort((a, b) => b.traf - a.traf);
+        
+        // Xếp hạng: Trạm Hạ cấp có Traffic thấp nhất (lãng phí nhất) được đem ra dùng trước
+        downgradeCandidates.sort((a, b) => a.traf - b.traf);
 
-        upgradeCandidates.forEach(upCell => {
-            let bestMatch = null;
-            let minDistance = Infinity;
+        // Số lượng cặp có thể Swap thành công (1 đổi 1)
+        let matchCount = Math.min(upgradeCandidates.length, downgradeCandidates.length);
 
-            downgradeCandidates.forEach(downCell => {
-                if (usedDowngrades.has(downCell.cell)) return; 
-
-                let dist = calculateDistance(upCell.lat, upCell.lng, downCell.lat, downCell.lng);
-                
-                // Cứ tìm trạm nào gần nhất là ghép, không bị giới hạn km nữa
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    bestMatch = downCell;
-                }
+        for (let i = 0; i < matchCount; i++) {
+            let upCell = upgradeCandidates[i];
+            let downCell = downgradeCandidates[i];
+            
+            // Vẫn tính khoảng cách để hiển thị tham khảo trên bảng báo cáo
+            let dist = calculateDistance(upCell.lat, upCell.lng, downCell.lat, downCell.lng);
+            
+            pairs.push({
+                upgrade: upCell,
+                downgrade: downCell,
+                distance: dist.toFixed(2)
             });
+        }
 
-            if (bestMatch) {
-                pairs.push({
-                    upgrade: upCell,
-                    downgrade: bestMatch,
-                    distance: minDistance.toFixed(2)
-                });
-                usedDowngrades.add(bestMatch.cell); 
-            }
-        });
-
-        pairs.sort((a, b) => a.distance - b.distance);
+        // Sắp xếp báo cáo để đưa các trạm Nâng cấp cấp bách nhất lên đầu
+        pairs.sort((a, b) => b.upgrade.traf - a.upgrade.traf);
 
         res.json({
             success: true,
