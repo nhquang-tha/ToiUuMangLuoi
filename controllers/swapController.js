@@ -35,11 +35,19 @@ exports.getSwapData = async (req, res) => {
 
         // 2. [TỐI ƯU BIG DATA] Lấy dữ liệu từng mảng riêng biệt để tránh bùng nổ JOIN (Cartesian Product)
         
+        // Kiểm tra an toàn các cột có thể bị thiếu ở các Database cũ
+        const [kpiCols] = await db.query('SHOW COLUMNS FROM kpi_4g');
+        const hasMimo = kpiCols.some(c => String(c.Field).toLowerCase() === 'mimo');
+        const hasCellType = kpiCols.some(c => String(c.Field).toLowerCase() === 'celltype');
+
+        const mimoSelect = hasMimo ? "MAX(MIMO) as kpi_mimo," : "'' as kpi_mimo,";
+        const cellTypeSelect = hasCellType ? "MAX(CellType) as cell_type," : "'' as cell_type,";
+
         // A. Lấy trung bình KPI 4G
         const [kpiRows] = await db.query(`
             SELECT Cell_name, 
-                   MAX(MIMO) as kpi_mimo,
-                   MAX(CellType) as cell_type,
+                   ${mimoSelect}
+                   ${cellTypeSelect}
                    AVG(Total_Data_Traffic_Volume_GB) as avg_traf,
                    AVG(User_DL_Avg_Throughput_Kbps) as avg_thput,
                    AVG(RB_Util_Rate_DL) as avg_prb
@@ -49,31 +57,23 @@ exports.getSwapData = async (req, res) => {
             GROUP BY Cell_name
         `, dates);
 
-        // B. Lấy thông tin Tọa độ & MIMO cấu hình từ RF
-        const [rfRows] = await db.query(`SELECT Cell_code, Latitude, Longitude, MIMO as rf_mimo, Band FROM rf_4g`);
+        // B. Lấy thông tin Tọa độ & MIMO cấu hình từ RF (Dùng SELECT * để tránh lỗi Missing Column)
+        const [rfRows] = await db.query(`SELECT * FROM rf_4g`);
         let rfMap = {};
-        rfRows.forEach(r => rfMap[r.Cell_code] = r);
+        rfRows.forEach(r => {
+            // Bao thầu mọi định dạng chữ hoa/chữ thường của DB
+            let cellCode = r.Cell_code || r.Cell_Code || r.CELL_CODE || r.cell_code || r.CELL_NAME;
+            if (cellCode) {
+                rfMap[cellCode] = {
+                    Latitude: r.Latitude || r.latitude || r.LATITUDE || r.Lat,
+                    Longitude: r.Longitude || r.longitude || r.LONGITUDE || r.Long,
+                    rf_mimo: r.MIMO || r.mimo || r.Mimo,
+                    Band: r.Band || r.band || r.BAND
+                };
+            }
+        });
 
-        // C. Lấy điểm CEM/QoS từ bảng Cache qoe_qos (Đã được Server tự động tổng hợp siêu nhanh)
-        let qoeQosMap = {};
-        try {
-            const [qoeQosRows] = await db.query(`SELECT Cell_Name, QoE_Score, QoS_Score FROM qoe_qos`);
-            qoeQosRows.forEach(r => qoeQosMap[r.Cell_Name] = r);
-        } catch(e) {} // Bỏ qua nếu bảng qoe_qos chưa khởi tạo
-
-        let upgradeCandidates = [];
-        let downgradeCandidates = [];
-
-        // 3. Map dữ liệu trên RAM (Tốc độ ánh sáng O(N))
-        kpiRows.forEach(k => {
-            const cell = k.Cell_name;
-            const rf = rfMap[cell] || {};
-            
-            // Lọc trạm 1800MHz (Dựa vào CellType KPI hoặc Band RF)
-            let isL1800 = false;
-            if (k.cell_type && k.cell_type.includes('L18')) isL1800 = true;
-            if (rf.Band && String(rf.Band).includes('1800')) isL1800 = true;
-            if (!isL1800 && !cell.match(/[A-Za-z]+.*[456]$/)) return; // Thuật toán phụ: Nếu VNPT đuôi 4,5,6 thường là L1800
+        // C. Lấy điểm CEM/QoS từ bảng Cache qoe_qos
 
             let mimo = String(rf.rf_mimo || k.kpi_mimo || '').toUpperCase();
             let traf = parseFloat(k.avg_traf) || 0;
