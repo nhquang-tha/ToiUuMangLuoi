@@ -141,8 +141,11 @@
     const userPerms = currentUser && currentUser.permissions ? currentUser.permissions : [];
     const isAdm = currentUser && currentUser.role === 'admin';
     const canSee = (menuKey) => {
+        // [FIX] Nếu là Admin thì auto Full Quyền không cần dò mảng!
+        if (isAdm) return true;
+        // Nếu là User thường thì mới bắt đầu dò trong mảng Permissions
         if (userPerms.length > 0) return userPerms.includes(menuKey);
-        return isAdm;
+        return false;
     };
 %>
 
