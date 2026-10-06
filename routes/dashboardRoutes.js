@@ -5,6 +5,7 @@ const multer = require('multer');
 const { isAuthenticated, isAdmin } = require('../middlewares/authMiddleware');
 
 const dashboardController = require('../controllers/dashboardController');
+const swapController = require('../controllers/swapController'); // [MỚI]
 const rfController = require('../controllers/rfController'); 
 const userController = require('../controllers/userController');
 const mapController = require('../controllers/mapController'); 
@@ -107,5 +108,6 @@ router.get('/logout', (req, res) => {
     req.session.destroy(); 
     res.redirect('/login'); 
 });
-
+router.get('/swap-mimo', isAuthenticated, swapController.renderSwapMimoPage);
+router.get('/api/swap-mimo', isAuthenticated, swapController.getSwapData);
 module.exports = router;
