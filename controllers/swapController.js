@@ -20,74 +20,88 @@ exports.renderSwapMimoPage = (req, res) => {
 
 exports.getSwapData = async (req, res) => {
     try {
-        // Nhận tham số cấu hình từ UI (hoặc dùng mặc định)
-        const upTraf = parseFloat(req.query.upTraf) || 80;    // Traffic > 80 GB
-        const upThput = parseFloat(req.query.upThput) || 15;  // Thput < 15 Mbps
-        const downTraf = parseFloat(req.query.downTraf) || 20;// Traffic < 20 GB
-        const downPrb = parseFloat(req.query.downPrb) || 15;  // PRB < 15%
-        const maxDist = parseFloat(req.query.maxDist) || 15;  // Khoảng cách tối đa để Swap (km)
+        const upTraf = parseFloat(req.query.upTraf) || 80;    
+        const upThput = parseFloat(req.query.upThput) || 15;  
+        const downTraf = parseFloat(req.query.downTraf) || 20;
+        const downPrb = parseFloat(req.query.downPrb) || 15;  
+        const maxDist = parseFloat(req.query.maxDist) || 15;  
 
-        // 1. Lấy danh sách 30 ngày gần nhất có dữ liệu KPI 4G
+        // 1. Lấy danh sách tối đa 30 ngày KPI gần nhất
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
-        let dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-')));
-        dates = dates.slice(0, 30); // Lấy đúng 30 ngày
+        if (datesRaw.length === 0) return res.json({ error: "Không có dữ liệu KPI 4G để phân tích." });
         
-        if (dates.length === 0) return res.json({ error: "Không có dữ liệu KPI 4G để phân tích." });
+        let dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-'))).slice(0, 30);
         const placeholders = dates.map(() => '?').join(',');
 
-        // 2. Query gom nhóm dữ liệu 30 ngày (Chỉ lấy L1800)
-        // Điều kiện L1800: CellType chứa L18, hoặc Band của RF là 1800
-        const query = `
-            SELECT k.Cell_name, 
-                   IFNULL(r.MIMO, k.MIMO) as MIMO, 
-                   r.Latitude, r.Longitude,
-                   AVG(k.Total_Data_Traffic_Volume_GB) as avg_traf,
-                   AVG(k.User_DL_Avg_Throughput_Kbps) as avg_thput,
-                   AVG(k.RB_Util_Rate_DL) as avg_prb,
-                   AVG(c.CEI_Percent) as avg_cem,
-                   AVG(q.QoS_Score) as avg_qos
-            FROM kpi_4g k
-            LEFT JOIN rf_4g r ON k.Cell_name = r.Cell_code
-            LEFT JOIN mbb_cem c ON k.Cell_name = c.Cell_Name
-            LEFT JOIN mbb_qos q ON k.Cell_name = q.Cell_Name
-            WHERE k.Thoi_gian IN (${placeholders})
-              AND k.Cell_name NOT LIKE '%IBS%' AND k.Cell_name NOT LIKE '%DAS%' AND k.Cell_name NOT LIKE 'MBF_TH%'
-              AND (k.CellType LIKE '%L18%' OR r.Band LIKE '%1800%')
-            GROUP BY k.Cell_name, r.Latitude, r.Longitude, r.MIMO, k.MIMO
-        `;
+        // 2. [TỐI ƯU BIG DATA] Lấy dữ liệu từng mảng riêng biệt để tránh bùng nổ JOIN (Cartesian Product)
         
-        const [rows] = await db.query(query, dates);
+        // A. Lấy trung bình KPI 4G
+        const [kpiRows] = await db.query(`
+            SELECT Cell_name, 
+                   MAX(MIMO) as kpi_mimo,
+                   MAX(CellType) as cell_type,
+                   AVG(Total_Data_Traffic_Volume_GB) as avg_traf,
+                   AVG(User_DL_Avg_Throughput_Kbps) as avg_thput,
+                   AVG(RB_Util_Rate_DL) as avg_prb
+            FROM kpi_4g 
+            WHERE Thoi_gian IN (${placeholders}) 
+              AND Cell_name NOT LIKE '%IBS%' AND Cell_name NOT LIKE '%DAS%' AND Cell_name NOT LIKE 'MBF_TH%'
+            GROUP BY Cell_name
+        `, dates);
+
+        // B. Lấy thông tin Tọa độ & MIMO cấu hình từ RF
+        const [rfRows] = await db.query(`SELECT Cell_code, Latitude, Longitude, MIMO as rf_mimo, Band FROM rf_4g`);
+        let rfMap = {};
+        rfRows.forEach(r => rfMap[r.Cell_code] = r);
+
+        // C. Lấy điểm CEM/QoS từ bảng Cache qoe_qos (Đã được Server tự động tổng hợp siêu nhanh)
+        let qoeQosMap = {};
+        try {
+            const [qoeQosRows] = await db.query(`SELECT Cell_Name, QoE_Score, QoS_Score FROM qoe_qos`);
+            qoeQosRows.forEach(r => qoeQosMap[r.Cell_Name] = r);
+        } catch(e) {} // Bỏ qua nếu bảng qoe_qos chưa khởi tạo
 
         let upgradeCandidates = [];
         let downgradeCandidates = [];
 
-        // 3. Lọc danh sách theo Tiêu chí
-        rows.forEach(r => {
-            let mimo = String(r.MIMO || '').toUpperCase();
-            let traf = parseFloat(r.avg_traf) || 0;
-            let thputMbps = (parseFloat(r.avg_thput) || 0) / 1024;
-            let prb = parseFloat(r.avg_prb) || 0;
-            let lat = parseFloat(r.Latitude);
-            let lng = parseFloat(r.Longitude);
+        // 3. Map dữ liệu trên RAM (Tốc độ ánh sáng O(N))
+        kpiRows.forEach(k => {
+            const cell = k.Cell_name;
+            const rf = rfMap[cell] || {};
+            
+            // Lọc trạm 1800MHz (Dựa vào CellType KPI hoặc Band RF)
+            let isL1800 = false;
+            if (k.cell_type && k.cell_type.includes('L18')) isL1800 = true;
+            if (rf.Band && String(rf.Band).includes('1800')) isL1800 = true;
+            if (!isL1800 && !cell.match(/[A-Za-z]+.*[456]$/)) return; // Thuật toán phụ: Nếu VNPT đuôi 4,5,6 thường là L1800
 
-            if (isNaN(lat) || isNaN(lng)) return;
+            let mimo = String(rf.rf_mimo || k.kpi_mimo || '').toUpperCase();
+            let traf = parseFloat(k.avg_traf) || 0;
+            let thputMbps = (parseFloat(k.avg_thput) || 0) / 1024;
+            let prb = parseFloat(k.avg_prb) || 0;
+            let lat = parseFloat(rf.Latitude);
+            let lng = parseFloat(rf.Longitude);
 
-            // Nâng cấp: Đang là 2T2R (hoặc 1T1R), Traffic CAO, Thput THẤP
-            if (mimo.includes('2T') || mimo.includes('1T') || mimo === '') {
+            if (isNaN(lat) || isNaN(lng)) return; // Bỏ qua các trạm không có tọa độ
+
+            const qq = qoeQosMap[cell] || {};
+            let cemScore = qq.QoE_Score ? parseFloat(qq.QoE_Score).toFixed(1) : 'N/A';
+            let qosScore = qq.QoS_Score ? parseFloat(qq.QoS_Score).toFixed(1) : 'N/A';
+
+            // Phân loại UPGRADE (Lên 4T4R)
+            if (mimo === '' || mimo.includes('2T') || mimo.includes('1T')) {
                 if (traf >= upTraf && thputMbps <= upThput) {
                     upgradeCandidates.push({
-                        cell: r.Cell_name, lat, lng, mimo: mimo || '2T2R', traf, thput: thputMbps, prb,
-                        cem: r.avg_cem ? parseFloat(r.avg_cem).toFixed(1) : 'N/A',
-                        qos: r.avg_qos ? parseFloat(r.avg_qos).toFixed(1) : 'N/A'
+                        cell, lat, lng, mimo: mimo || '2T2R', traf, thput: thputMbps, prb, cem: cemScore, qos: qosScore
                     });
                 }
             }
             
-            // Hạ cấp: Đang là 4T4R (hoặc cao hơn), Traffic THẤP, PRB THẤP
+            // Phân loại DOWNGRADE (Xuống 2T2R)
             if (mimo.includes('4T') || mimo.includes('8T') || mimo.includes('MASSIVE')) {
                 if (traf <= downTraf && prb <= downPrb) {
                     downgradeCandidates.push({
-                        cell: r.Cell_name, lat, lng, mimo, traf, thput: thputMbps, prb
+                        cell, lat, lng, mimo, traf, thput: thputMbps, prb
                     });
                 }
             }
@@ -95,18 +109,17 @@ exports.getSwapData = async (req, res) => {
 
         // 4. Thuật toán Ghép Cặp (Pairing) ưu tiên khoảng cách gần nhất
         let pairs = [];
-        let usedDowngrades = new Set(); // Đánh dấu cell 4T4R đã bị lấy đi swap
+        let usedDowngrades = new Set(); 
 
         upgradeCandidates.forEach(upCell => {
             let bestMatch = null;
             let minDistance = Infinity;
 
             downgradeCandidates.forEach(downCell => {
-                if (usedDowngrades.has(downCell.cell)) return; // Bỏ qua cell đã được ghép cặp
+                if (usedDowngrades.has(downCell.cell)) return; 
 
                 let dist = calculateDistance(upCell.lat, upCell.lng, downCell.lat, downCell.lng);
                 
-                // Tìm trạm gần nhất và thỏa mãn khoảng cách tối đa
                 if (dist < minDistance && dist <= maxDist) {
                     minDistance = dist;
                     bestMatch = downCell;
@@ -119,11 +132,10 @@ exports.getSwapData = async (req, res) => {
                     downgrade: bestMatch,
                     distance: minDistance.toFixed(2)
                 });
-                usedDowngrades.add(bestMatch.cell); // Khóa cell hạ cấp này lại
+                usedDowngrades.add(bestMatch.cell); 
             }
         });
 
-        // Sắp xếp các cặp theo khoảng cách từ Gần -> Xa
         pairs.sort((a, b) => a.distance - b.distance);
 
         res.json({
@@ -138,7 +150,7 @@ exports.getSwapData = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Lỗi thuật toán SWAP MIMO:", error);
-        res.status(500).json({ error: "Lỗi hệ thống khi tính toán." });
+        console.error("❌ Lỗi thuật toán SWAP MIMO:", error);
+        res.status(500).json({ error: "Lỗi hệ thống khi tính toán. Vui lòng thử lại sau." });
     }
 };
