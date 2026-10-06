@@ -36,6 +36,15 @@
     #loadingMsg { display: none; text-align: center; padding: 30px; font-size: 16px; font-weight: bold; color: #8e44ad; }
     .stats-bar { display: flex; gap: 20px; margin-bottom: 15px; font-size: 14px; font-weight: bold; color: #34495e; }
     .stats-bar span { padding: 6px 12px; background: #eee; border-radius: 6px; }
+
+    /* [MỚI] CSS Custom Dropdown Checkbox */
+    .multi-select-container { position: relative; width: 100%; }
+    .multi-select-header { padding: 8px 10px; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #2c3e50; font-size: 12px; height: 35px; box-sizing: border-box;}
+    .multi-select-dropdown { position: absolute; top: 100%; left: 0; width: 100%; max-height: 250px; overflow-y: auto; background: #fff; border: 1px solid #bdc3c7; border-top: none; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 100; display: none; }
+    .multi-select-dropdown.show { display: block; }
+    .multi-select-option { display: flex; align-items: center; padding: 8px 10px; cursor: pointer; font-size: 12px; transition: background 0.2s; color: #34495e; }
+    .multi-select-option:hover { background: #f1f4f6; }
+    .multi-select-option input { margin-right: 8px; cursor: pointer; width: 14px; height: 14px; accent-color: #f39c12;}
 </style>
 
 <div class="layout">
@@ -66,10 +75,22 @@
                     <input type="number" id="downPrb" value="15">
                 </div>
                 <div class="filter-box" style="border-left-color:#f39c12;">
-                    <label>Quận/Huyện (Giữ Ctrl để chọn nhiều)</label>
-                    <select id="districtFilter" multiple style="width: 100%; padding: 4px; border: 1px solid #bdc3c7; border-radius: 4px; height: 50px; font-size: 12px; outline: none; background: #fff; cursor: pointer;">
-                        <option value="ALL" selected style="font-weight:bold; color: #2c3e50;">-- TẤT CẢ QUẬN/HUYỆN --</option>
-                    </select>
+                    <label>Quận/Huyện Lựa Chọn</label>
+                    <div class="multi-select-container">
+                        <div class="multi-select-header" onclick="toggleDistrictDropdown()">
+                            <span id="districtSelectedText">TẤT CẢ QUẬN/HUYỆN</span>
+                            <span style="font-size: 10px;">▼</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="districtDropdown">
+                            <label class="multi-select-option" style="border-bottom: 1px solid #eee; background: #fafafa;">
+                                <input type="checkbox" id="cb_dist_all" value="ALL" checked onchange="toggleAllDistricts(this)">
+                                <strong>-- TẤT CẢ QUẬN/HUYỆN --</strong>
+                            </label>
+                            <div id="districtListContainer">
+                                <!-- Checkbox sẽ được JavaScript đổ vào đây -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <button class="btn-run" onclick="runAlgorithm()">🚀 KÍCH HOẠT THUẬT TOÁN GHÉP CẶP 1-1</button>
@@ -110,19 +131,74 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-    // [MỚI] Tự động tải danh sách Quận/Huyện từ CSDL khi mở trang
+    // Logic Mở/Đóng Dropdown
+    function toggleDistrictDropdown() {
+        document.getElementById('districtDropdown').classList.toggle('show');
+    }
+
+    // Tự động đóng dropdown khi click ra ngoài
+    document.addEventListener('click', function(event) {
+        const container = document.querySelector('.multi-select-container');
+        if (container && !container.contains(event.target)) {
+            document.getElementById('districtDropdown').classList.remove('show');
+        }
+    });
+
+    // Check All / Uncheck All
+    function toggleAllDistricts(cbAll) {
+        const checkboxes = document.querySelectorAll('.cb-dist-item');
+        checkboxes.forEach(cb => cb.checked = cbAll.checked);
+        updateDistrictSelectedText();
+    }
+
+    // Đánh dấu lại nút ALL nếu tick thủ công đủ tất cả
+    function checkDistrictSelection() {
+        const checkboxes = document.querySelectorAll('.cb-dist-item');
+        const cbAll = document.getElementById('cb_dist_all');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        cbAll.checked = allChecked;
+        updateDistrictSelectedText();
+    }
+
+    // Cập nhật text hiển thị trên Header của Dropdown
+    function updateDistrictSelectedText() {
+        const checkboxes = document.querySelectorAll('.cb-dist-item:checked');
+        const cbAll = document.getElementById('cb_dist_all');
+        const textSpan = document.getElementById('districtSelectedText');
+        
+        if (cbAll.checked || checkboxes.length === document.querySelectorAll('.cb-dist-item').length) {
+            textSpan.innerText = 'TẤT CẢ QUẬN/HUYỆN';
+            textSpan.style.color = '#2c3e50';
+        } else if (checkboxes.length === 0) {
+            textSpan.innerText = '⚠️ Chưa chọn khu vực';
+            textSpan.style.color = '#e74c3c';
+        } else if (checkboxes.length <= 2) {
+            textSpan.innerText = Array.from(checkboxes).map(cb => cb.value).join(', ');
+            textSpan.style.color = '#d35400';
+        } else {
+            textSpan.innerText = `Đã chọn ${checkboxes.length} khu vực`;
+            textSpan.style.color = '#d35400';
+        }
+    }
+
+    // Tự động tải danh sách Quận/Huyện và render dạng Checkbox
     document.addEventListener('DOMContentLoaded', async () => {
         try {
             const res = await fetch('/api/districts');
             const dists = await res.json();
-            const select = document.getElementById('districtFilter');
+            const container = document.getElementById('districtListContainer');
             dists.forEach(d => {
                 if(d) {
-                    let opt = document.createElement('option');
-                    opt.value = d; opt.text = d;
-                    select.appendChild(opt);
+                    let html = `
+                        <label class="multi-select-option">
+                            <input type="checkbox" class="cb-dist-item" value="${d}" checked onchange="checkDistrictSelection()">
+                            ${d}
+                        </label>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
                 }
             });
+            updateDistrictSelectedText(); // Khởi tạo text hiển thị
         } catch(e) { console.log("Không tải được danh sách Quận/Huyện."); }
     });
 
@@ -136,9 +212,18 @@
         const downTraf = document.getElementById('downTraf').value;
         const downPrb = document.getElementById('downPrb').value;
         
-        // Lấy danh sách Quận/Huyện được chọn
-        const opts = document.getElementById('districtFilter').selectedOptions;
-        const districts = Array.from(opts).map(opt => opt.value).join(',');
+        // Lấy danh sách Quận/Huyện từ các Checkbox đã đánh dấu tick
+        let districts = 'ALL';
+        if (!document.getElementById('cb_dist_all').checked) {
+            const checkedBoxes = document.querySelectorAll('.cb-dist-item:checked');
+            districts = Array.from(checkedBoxes).map(cb => cb.value).join(',');
+            
+            if (districts === '') {
+                alert('Vui lòng chọn ít nhất 1 Quận/Huyện để quét.');
+                document.getElementById('loadingMsg').style.display = 'none';
+                return;
+            }
+        }
 
         try {
             const res = await fetch(`/api/swap-mimo?upTraf=${upTraf}&upThput=${upThput}&downTraf=${downTraf}&downPrb=${downPrb}&districts=${encodeURIComponent(districts)}`);
