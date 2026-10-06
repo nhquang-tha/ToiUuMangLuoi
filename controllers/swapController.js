@@ -24,7 +24,11 @@ exports.getSwapData = async (req, res) => {
         const upThput = parseFloat(req.query.upThput) || 15;  
         const downTraf = parseFloat(req.query.downTraf) || 20;
         const downPrb = parseFloat(req.query.downPrb) || 15;  
-        const maxDist = parseFloat(req.query.maxDist) || 15;  
+        
+        // Nhận tham số Quận/Huyện từ UI
+        const districtsParam = req.query.districts || 'ALL';
+        const selectedDistricts = districtsParam.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+        const filterByDistrict = !selectedDistricts.includes('all') && selectedDistricts.length > 0;
 
         // 1. Lấy danh sách tối đa 30 ngày KPI gần nhất
         const [datesRaw] = await db.query(`SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ''`);
@@ -33,20 +37,22 @@ exports.getSwapData = async (req, res) => {
         let dates = datesRaw.map(d => d.Thoi_gian).sort((a, b) => new Date(b.split('/').reverse().join('-')) - new Date(a.split('/').reverse().join('-'))).slice(0, 30);
         const placeholders = dates.map(() => '?').join(',');
 
-        // 2. [TỐI ƯU BIG DATA] Lấy dữ liệu từng mảng riêng biệt để tránh bùng nổ JOIN
-        
+        // 2. [TỐI ƯU BIG DATA] Lấy dữ liệu từng mảng riêng biệt để tránh bùng nổ JOIN (Cartesian Product)
         const [kpiCols] = await db.query('SHOW COLUMNS FROM kpi_4g');
         const hasMimo = kpiCols.some(c => String(c.Field).toLowerCase() === 'mimo');
         const hasCellType = kpiCols.some(c => String(c.Field).toLowerCase() === 'celltype');
+        const hasDistrict = kpiCols.some(c => String(c.Field).toLowerCase() === 'district_code'); // Tự động dò cột District
 
         const mimoSelect = hasMimo ? "MAX(MIMO) as kpi_mimo," : "'' as kpi_mimo,";
         const cellTypeSelect = hasCellType ? "MAX(CellType) as cell_type," : "'' as cell_type,";
+        const districtSelect = hasDistrict ? "MAX(District_code) as district," : "'' as district,";
 
         // A. Lấy trung bình KPI 4G
         const [kpiRows] = await db.query(`
             SELECT Cell_name, 
                    ${mimoSelect}
                    ${cellTypeSelect}
+                   ${districtSelect}
                    AVG(Total_Data_Traffic_Volume_GB) as avg_traf,
                    AVG(User_DL_Avg_Throughput_Kbps) as avg_thput,
                    AVG(RB_Util_Rate_DL) as avg_prb
@@ -81,8 +87,12 @@ exports.getSwapData = async (req, res) => {
         let upgradeCandidates = [];
         let downgradeCandidates = [];
 
-        // 3. Map dữ liệu trên RAM
+        // 3. Map dữ liệu & Áp dụng bộ lọc Khu vực
         kpiRows.forEach(k => {
+            // [MỚI] Bộ lọc theo District Code
+            let cellDist = String(k.district || '').trim().toLowerCase();
+            if (filterByDistrict && !selectedDistricts.includes(cellDist)) return; 
+
             const cell = k.Cell_name;
             const rf = rfMap[cell] || {};
             
@@ -123,7 +133,7 @@ exports.getSwapData = async (req, res) => {
             }
         });
 
-        // 4. Thuật toán Ghép Cặp (Pairing)
+        // 4. Thuật toán Ghép Cặp (Pairing) tự tìm trạm gần nhất trong khu vực đã chọn
         let pairs = [];
         let usedDowngrades = new Set(); 
 
@@ -136,7 +146,8 @@ exports.getSwapData = async (req, res) => {
 
                 let dist = calculateDistance(upCell.lat, upCell.lng, downCell.lat, downCell.lng);
                 
-                if (dist < minDistance && dist <= maxDist) {
+                // Cứ tìm trạm nào gần nhất là ghép, không bị giới hạn km nữa
+                if (dist < minDistance) {
                     minDistance = dist;
                     bestMatch = downCell;
                 }
