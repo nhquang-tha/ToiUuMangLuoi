@@ -97,6 +97,8 @@
                             <tr>
                                 <th>#</th>
                                 <th>Tên Cell 4G</th>
+                                <th>Khu Vực (District)</th>
+                                <th>MIMO</th>
                                 <th>Ngày Cập Nhật</th>
                                 <th>Throughput (Kbps) <br><small style="color:#e74c3c">&lt;7000</small></th>
                                 <th>PRB DL (%) <br><small style="color:#e74c3c">&gt;20%</small></th>
@@ -207,6 +209,8 @@
             tr.innerHTML = `
                 <td>${start + index + 1}</td>
                 <td style="font-weight: bold; color: #2980b9;">${row.Cell_name}</td>
+                <td style="color: #7f8c8d; font-weight: 500;">${row.District || '-'}</td>
+                <td style="color: #8e44ad; font-weight: bold;">${row.MIMO || '-'}</td>
                 <td>${row.Latest_Date}</td>
                 <td class="${thputStyle}">${row.User_DL_Avg_Throughput_Kbps}</td>
                 <td class="${prbStyle}">${row.RB_Util_Rate_DL}</td>
@@ -271,6 +275,8 @@
         let exportData = window.cachedData.map((row, i) => ({
             "STT": i + 1,
             "Tên Cell 4G": row.Cell_name,
+            "Khu Vực": row.District || '-',
+            "MIMO": row.MIMO || '-',
             "Ngày Cập Nhật": row.Latest_Date,
             "Throughput (Kbps)": parseFloat(row.User_DL_Avg_Throughput_Kbps),
             "PRB DL (%)": parseFloat(row.RB_Util_Rate_DL),
