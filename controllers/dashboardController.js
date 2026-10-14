@@ -256,11 +256,28 @@ async function aggregateDashboardData() {
     }
 }
 
-/* STREAMING_CHUNK:Syncing worst cells caching... */
 async function syncWorstCells() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Worst Cells 4G...");
-        await db.query('TRUNCATE TABLE worst_cells');
+        
+        // [MỚI] Tự động cập nhật cấu trúc bảng thêm cột district và mimo
+        await db.query(`DROP TABLE IF EXISTS worst_cells`);
+        await db.query(`
+            CREATE TABLE worst_cells (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                latest_date VARCHAR(50),
+                days_filter INT,
+                cell_name VARCHAR(255),
+                district VARCHAR(100),
+                mimo VARCHAR(50),
+                thput FLOAT,
+                prb FLOAT,
+                cqi FLOAT,
+                drop_rate FLOAT,
+                violations TEXT
+            )
+        `);
+
         const [datesRaw] = await db.query('SELECT DISTINCT Thoi_gian FROM kpi_4g WHERE Thoi_gian IS NOT NULL AND Thoi_gian != ""');
         if (datesRaw.length === 0) return;
         
@@ -273,8 +290,11 @@ async function syncWorstCells() {
             const placeholders = targetDates.map(() => '?').join(',');
             const t0_date = targetDates[0]; 
             
+            // [MỚI] Bổ sung MAX(District_code) và MAX(MIMO) vào query
             const query = `
                 SELECT Cell_name, 
+                    MAX(District_code) as District_code,
+                    MAX(MIMO) as MIMO,
                     AVG(User_DL_Avg_Throughput_Kbps) as User_DL_Avg_Throughput_Kbps, 
                     AVG(RB_Util_Rate_DL) as RB_Util_Rate_DL, AVG(CQI_4G) as CQI_4G, AVG(Service_Drop_all) as Service_Drop_all,
                     COUNT(Thoi_gian) as So_Ngay_Vi_Pham,
@@ -298,6 +318,8 @@ async function syncWorstCells() {
                     t0_date, 
                     days, 
                     r.Cell_name || null, 
+                    r.District_code || '',  // [MỚI] 
+                    r.MIMO || '',           // [MỚI]
                     getSafeFloat(r.User_DL_Avg_Throughput_Kbps), 
                     getSafeFloat(r.RB_Util_Rate_DL), 
                     getSafeFloat(r.CQI_4G), 
@@ -309,7 +331,7 @@ async function syncWorstCells() {
             if (insertData.length > 0) {
                 const chunkSize = 500;
                 for (let i = 0; i < insertData.length; i += chunkSize) {
-                    await db.query(`INSERT INTO worst_cells (latest_date, days_filter, cell_name, thput, prb, cqi, drop_rate, violations) VALUES ?`, [insertData.slice(i, i + chunkSize)]);
+                    await db.query(`INSERT INTO worst_cells (latest_date, days_filter, cell_name, district, mimo, thput, prb, cqi, drop_rate, violations) VALUES ?`, [insertData.slice(i, i + chunkSize)]);
                 }
             }
         }
@@ -319,7 +341,6 @@ async function syncWorstCells() {
     }
 }
 
-/* STREAMING_CHUNK:Syncing 3G congestion caching... */
 async function syncCongestion3G() {
     try {
         console.log("⏳ Bắt đầu tính toán cache Congestion 3G...");
@@ -1724,7 +1745,10 @@ exports.getWorstCellsData = async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM worst_cells WHERE days_filter = ?', [days]);
         const formattedRows = rows.map(r => ({
-            Cell_name: r.cell_name, Latest_Date: r.latest_date,
+            Cell_name: r.cell_name, 
+            District: r.district,         // [MỚI]
+            MIMO: r.mimo,                 // [MỚI]
+            Latest_Date: r.latest_date,
             User_DL_Avg_Throughput_Kbps: Number(r.thput).toFixed(2), 
             RB_Util_Rate_DL: Number(r.prb).toFixed(2),
             CQI_4G: Number(r.cqi).toFixed(2), 
