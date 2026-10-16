@@ -1224,14 +1224,21 @@
                         const lacRaw = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
 
                         let servingCellObj = null;
+                        let cellIdInt = parseInt(cellIdRaw, 10);
 
                         // TÌM KIẾM CELL PHÁT SÓNG CHÍNH XÁC THEO MẠNG
                         if (tech.includes('5G')) {
-                            servingCellObj = cellMap5G[`${nodeRaw}_${parseInt(cellIdRaw, 10)}`];
+                            // [MỚI] Mapping CellID 5G từ Log (14, 15, 16) về Lcrid vật lý (11, 12, 13)
+                            let mappedCellId = cellIdInt;
+                            if (cellIdInt === 14) mappedCellId = 11;
+                            else if (cellIdInt === 15) mappedCellId = 12;
+                            else if (cellIdInt === 16) mappedCellId = 13;
+                            
+                            servingCellObj = cellMap5G[`${nodeRaw}_${mappedCellId}`];
                         } else if (tech.includes('4G')) { 
-                            servingCellObj = cellMap4G[`${nodeRaw}_${parseInt(cellIdRaw, 10)}`];
+                            servingCellObj = cellMap4G[`${nodeRaw}_${cellIdInt}`];
                         } else if (tech.includes('3G')) {
-                            servingCellObj = cellMap3G[`${parseInt(lacRaw, 10)}_${parseInt(cellIdRaw, 10)}`];
+                            servingCellObj = cellMap3G[`${parseInt(lacRaw, 10)}_${cellIdInt}`];
                         }
 
                         globalItsData.push({
