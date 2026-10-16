@@ -912,12 +912,12 @@
 
     function getColorRSRP(val) {
         if (val === null || val === undefined || isNaN(val)) return '#95a5a6'; 
-        if (val >= -65) return '#0000FF'; // Blue
-        if (val >= -80) return '#008000'; // Dark Green
-        if (val >= -95) return '#00FF00'; // Lime
-        if (val >= -110) return '#FFFF00'; // Yellow
-        if (val >= -125) return '#FF0000'; // Red
-        return '#000000'; // Black
+        if (val >= -70) return '#008000';  // [>= -70] Green
+        if (val >= -90) return '#00ff00';  // [-90, -70) Lime
+        if (val >= -100) return '#80ff80'; // [-100, -90) Light Green
+        if (val >= -110) return '#ffff00'; // [-110, -100) Yellow
+        if (val >= -120) return '#ff8040'; // [-120, -110) Orange
+        return '#ff0000';                  // [< -120] Red
     }
 
     function getColorRSRQ(val) {
@@ -952,12 +952,12 @@
             if (metric === 'rsrp') {
                 title = 'Mức thu RSRP (dBm)';
                 ranges = [ 
-                    { text: 'Rất tốt [-65, Max]', color: '#0000FF' }, 
-                    { text: 'Tốt [-80, -65)', color: '#008000' }, 
-                    { text: 'Trung bình [-95, -80)', color: '#00FF00' }, 
-                    { text: 'Kém [-110, -95)', color: '#FFFF00' }, 
-                    { text: 'Rất kém [-125, -110)', color: '#FF0000' },
-                    { text: 'Điểm đen [Min, -125)', color: '#000000' }
+                    { text: '[>= -70] Tốt', color: '#008000' }, 
+                    { text: '[-90, -70) Khá', color: '#00ff00' }, 
+                    { text: '[-100, -90) Trung bình', color: '#80ff80' }, 
+                    { text: '[-110, -100) Kém', color: '#ffff00' }, 
+                    { text: '[-120, -110) Rất kém', color: '#ff8040' },
+                    { text: '[< -120] Điểm đen', color: '#ff0000' }
                 ];
             } else if (metric === 'rsrq') {
                 title = 'Chất lượng RSRQ (dB)';
@@ -984,7 +984,6 @@
                 ranges.forEach((r, idx) => { r.count = stats[`cat${idx+1}`] || 0; });
             }
             
-            // [MỚI] Thiết kế lại Header của Legend chứa thẳng Select Box
             let headerHtml = `
                 <div style="border-bottom: 2px solid var(--primary); padding-bottom: 8px; margin-bottom: 10px;">
                     <select onchange="renderItsLogs(this.value)" style="width: 100%; padding: 8px 6px; border-radius: 4px; font-size: 13px; font-weight: bold; background: #34495e; color: white; border: none; cursor: pointer; outline: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -997,14 +996,13 @@
             `;
 
             ranges.forEach((r, idx) => {
-                let catId = idx + 1; // ID thứ tự của dải màu (1 đến 6)
+                let catId = idx + 1; 
                 let countHtml = '';
                 if (r.count !== undefined && stats.total > 0) {
                     let pct = ((r.count / stats.total) * 100).toFixed(2);
                     countHtml = `<span style="margin-left: auto; font-size: 11px; color: var(--text-main); font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
                 }
                 
-                // Kiểm tra xem dải màu này có đang được người dùng Tick chọn không
                 let isChecked = activeItsCategories.includes(catId) ? 'checked' : '';
 
                 labels.push(`
@@ -1030,7 +1028,6 @@
         legendControl.addTo(map);
     }
 
-    // [MỚI] Hàm cập nhật bộ lọc khi bạn Tick/Bỏ Tick hộp kiểm
     window.updateItsFilters = function() {
         activeItsCategories = [];
         for(let i=1; i<=6; i++) {
@@ -1039,14 +1036,12 @@
                 activeItsCategories.push(i);
             }
         }
-        renderItsLogs(currentItsMetric, true); // Gọi lại render nhưng set cờ true để không vẽ lại Legend (tránh giật)
+        renderItsLogs(currentItsMetric, true); 
     };
 
-    // [MỚI] Hàm vẽ lại bản đồ khi chọn Thông số trên UI
     window.renderItsLogs = function(selectedMetric, isFilterUpdate = false) {
         if (globalItsData.length === 0) return;
         
-        // Nếu là đổi thông số (VD từ RSRP sang SINR), reset lại bật toàn bộ hộp kiểm
         if (selectedMetric && !isFilterUpdate) {
             currentItsMetric = selectedMetric;
             activeItsCategories = [1, 2, 3, 4, 5, 6]; 
@@ -1070,11 +1065,11 @@
                 val = item.level;
                 if (val !== null && !isNaN(val)) {
                     color = getColorRSRP(val);
-                    if (val >= -65) catId = 1;
-                    else if (val >= -80) catId = 2;
-                    else if (val >= -95) catId = 3;
+                    if (val >= -70) catId = 1;
+                    else if (val >= -90) catId = 2;
+                    else if (val >= -100) catId = 3;
                     else if (val >= -110) catId = 4;
-                    else if (val >= -125) catId = 5;
+                    else if (val >= -120) catId = 5;
                     else catId = 6;
                 }
             } else if (metric === 'rsrq') {
@@ -1100,19 +1095,17 @@
                 }
             }
 
-            // Tính tổng số lượng hiển thị trên Legend
             if (catId > 0) {
                 logStats.total++;
                 logStats[`cat${catId}`]++;
             }
 
-            // [LỌC] Nếu tọa độ này nằm trong nhóm đã bị bỏ Tick thì thoát luôn, không vẽ!
             if (catId > 0 && !activeItsCategories.includes(catId)) return;
 
             const marker = L.circleMarker([item.lat, item.lng], { radius: markerSize, fillColor: color, color: '#34495e', weight: 0.5, fillOpacity: 1 });
             
             let popupContent = `<b>Tech:</b> ${item.tech}<br>`;
-            popupContent += `<b>RSRP (Level):</b> ${item.level} dBm<br>`;
+            popupContent += `<b>RSRP (Level):</b> ${item.level !== null ? item.level + ' dBm' : 'N/A'}<br>`;
             popupContent += `<b>RSRQ (Qual):</b> ${item.qual !== null ? item.qual + ' dB' : 'N/A'}<br>`;
             popupContent += `<b>SINR (SNR):</b> ${item.snr !== null ? item.snr + ' dB' : 'N/A'}<br>`;
             popupContent += `<b>Serving Cell:</b> ${item.cellId}<br><b>Node/LAC:</b> ${item.node || item.lac}`;
@@ -1128,10 +1121,8 @@
             }
         });
 
-        // Chỉ vẽ lại khung Legend khi Đổi thông số. Nếu chỉ Bật/Tắt Checkbox thì không vẽ lại để chống giật
         if (!isFilterUpdate) {
             addLegend(metric, logStats);
-            
             setTimeout(() => {
                 const legendPanel = document.getElementById('itsLegendContent');
                 if (legendPanel && !legendPanel.classList.contains('show')) {
@@ -1177,24 +1168,44 @@
                         if (isNaN(lat) || isNaN(lng)) continue;
 
                         const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; 
-                        const level = parseFloat(cols[idxLevel]);
+                        const level = idxLevel >= 0 ? parseFloat(cols[idxLevel]) : null;
                         const qual = idxQual >= 0 ? parseFloat(cols[idxQual]) : null;
                         const snr = idxSnr >= 0 ? parseFloat(cols[idxSnr]) : null;
 
-                        const node = cols[idxNode] ? cols[idxNode].trim() : ''; 
-                        const cellId = cols[idxCellID] ? cols[idxCellID].trim() : '';
-                        const lac = cols[idxLAC] ? cols[idxLAC].trim() : '';
+                        const nodeStr = cols[idxNode] ? cols[idxNode].trim().toLowerCase() : ''; 
+                        const cellIdStr = cols[idxCellID] ? cols[idxCellID].trim().toLowerCase() : '';
+                        const lacStr = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
 
-                        let servingCellObj = null;
-                        if (tech.includes('3G')) { 
-                            servingCellObj = globalPolygons.find(p => p.rawData.lac === lac && p.rawData.ci === cellId); 
-                        } else if (tech.includes('4G')) { 
-                            servingCellObj = globalPolygons.find(p => p.rawData.enodeb === node && p.rawData.lcrid === cellId); 
-                        }
+                        // [MỚI] Thuật toán tìm Cell mở rộng hỗ trợ 5G, 4G, 3G
+                        let servingCellObj = globalPolygons.find(p => {
+                            let site = String(p.rawData.site).toLowerCase().trim();
+                            let cell = String(p.rawData.cell).toLowerCase().trim();
+                            
+                            let getRfVal = (keyStr) => {
+                                if(!p.rawData.rfData) return null;
+                                let f = p.rawData.rfData.find(x => x.key.toLowerCase() === keyStr.toLowerCase() || x.key.toLowerCase().replace(/_/g,'') === keyStr.toLowerCase());
+                                return f ? String(f.value).toLowerCase().trim() : null;
+                            };
+                            
+                            let dbLac = getRfVal('lac') || getRfVal('tac');
+                            let dbCi = getRfVal('ci') || getRfVal('cell_id') || getRfVal('lcrid');
+                            let dbNode = getRfVal('enodeb') || getRfVal('nodeb') || getRfVal('gnodeb') || getRfVal('gnodeb_id') || getRfVal('site_code');
+                            
+                            if (tech.includes('5G') || tech.includes('4G')) {
+                                if (dbNode === nodeStr && dbCi === cellIdStr && dbNode !== '' && dbCi !== '') return true;
+                                if (site === nodeStr && (dbCi === cellIdStr || cell.endsWith(cellIdStr)) && site !== '') return true;
+                            } else {
+                                if (dbLac === lacStr && dbCi === cellIdStr && dbLac !== '' && dbCi !== '') return true;
+                            }
+                            return false;
+                        });
 
-                        // Lưu vào bộ nhớ tạm
                         globalItsData.push({
-                            lat, lng, tech, level, qual, snr, node, cellId, lac, servingCellObj
+                            lat, lng, tech, level, qual, snr, 
+                            node: cols[idxNode] ? cols[idxNode].trim() : '', 
+                            cellId: cols[idxCellID] ? cols[idxCellID].trim() : '', 
+                            lac: cols[idxLAC] ? cols[idxLAC].trim() : '', 
+                            servingCellObj
                         });
 
                         allLogBounds.push([lat, lng]);
@@ -1210,7 +1221,6 @@
         
         await Promise.all(readPromises);
 
-        // Kích hoạt hàm Render biểu đồ lần đầu tiên với thông số đang chọn (Mặc định RSRP)
         renderItsLogs('rsrp');
         
         if (allLogBounds.length > 0) map.fitBounds(allLogBounds);
