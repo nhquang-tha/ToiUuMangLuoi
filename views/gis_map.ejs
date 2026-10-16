@@ -1176,7 +1176,7 @@
                         const cellIdStr = cols[idxCellID] ? cols[idxCellID].trim().toLowerCase() : '';
                         const lacStr = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
 
-                        // [MỚI] Thuật toán tìm Cell mở rộng hỗ trợ 5G, 4G, 3G
+                        // [MỚI] Thuật toán tìm Cell SIÊU TỐI ƯU (Bao thầu mọi định dạng tên của 5G, 4G, 3G)
                         let servingCellObj = globalPolygons.find(p => {
                             let site = String(p.rawData.site).toLowerCase().trim();
                             let cell = String(p.rawData.cell).toLowerCase().trim();
@@ -1192,10 +1192,36 @@
                             let dbNode = getRfVal('enodeb') || getRfVal('nodeb') || getRfVal('gnodeb') || getRfVal('gnodeb_id') || getRfVal('site_code');
                             
                             if (tech.includes('5G') || tech.includes('4G')) {
-                                if (dbNode === nodeStr && dbCi === cellIdStr && dbNode !== '' && dbCi !== '') return true;
-                                if (site === nodeStr && (dbCi === cellIdStr || cell.endsWith(cellIdStr)) && site !== '') return true;
+                                // 1. Khớp tuyệt đối (Nếu DB cấu hình chuẩn mực)
+                                if (dbNode === nodeStr && dbCi === cellIdStr && nodeStr !== '' && cellIdStr !== '') return true;
+                                
+                                // 2. Khớp linh hoạt (Bao thầu các Site name chứa tiền tố như "5G_350246")
+                                let siteMatch = false;
+                                if (site === nodeStr) siteMatch = true;
+                                else if (nodeStr !== '' && site.includes(nodeStr)) siteMatch = true;
+                                else if (nodeStr !== '' && dbNode && dbNode.includes(nodeStr)) siteMatch = true;
+
+                                // 3. Xử lý trường hợp Cell Name chứa hậu tố ID (Ví dụ: "5G_350246_13")
+                                let cellMatch = false;
+                                if (dbCi === cellIdStr) cellMatch = true;
+                                else if (cellIdStr !== '' && (cell.endsWith(cellIdStr) || cell.endsWith('_' + cellIdStr) || cell.endsWith('-' + cellIdStr))) cellMatch = true;
+                                
+                                // 4. Bẫy lỗi Cell ID bị thêm số 0 ở đầu (Ví dụ log là 3, DB là 03)
+                                else if (dbCi && parseInt(dbCi, 10) === parseInt(cellIdStr, 10)) cellMatch = true;
+                                else {
+                                    // Bóc tách con số cuối cùng của tên Cell trên bản đồ để đối chiếu
+                                    let matchNum = cell.match(/\d+$/);
+                                    if (matchNum && parseInt(matchNum[0], 10) === parseInt(cellIdStr, 10)) cellMatch = true;
+                                }
+
+                                if (siteMatch && cellMatch) return true;
+
                             } else {
-                                if (dbLac === lacStr && dbCi === cellIdStr && dbLac !== '' && dbCi !== '') return true;
+                                // Logic đối chiếu mạng 3G (Sử dụng LAC và CI)
+                                if (dbLac === lacStr && dbCi === cellIdStr && lacStr !== '' && cellIdStr !== '') return true;
+                                if (lacStr !== '' && cellIdStr !== '') {
+                                    if (parseInt(dbLac, 10) === parseInt(lacStr, 10) && parseInt(dbCi, 10) === parseInt(cellIdStr, 10)) return true;
+                                }
                             }
                             return false;
                         });
