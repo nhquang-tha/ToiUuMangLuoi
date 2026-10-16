@@ -1143,37 +1143,50 @@
         document.getElementById('loadingText').innerText = "Đang tạo bộ đệm (Hash Map) siêu tốc...";
         document.getElementById('mapLoading').style.display = 'block';
 
-        // === THUẬT TOÁN HASH MAP O(1) GIÚP LOAD HÀNG TRIỆU DÒNG LOG TRONG 1 GIÂY ===
+        // === THUẬT TOÁN HASH MAP O(1) BÁM SÁT CẤU TRÚC DB RF CỦA TỪNG MẠNG ===
         let cellMap3G = {}; 
         let cellMap4G = {}; 
         let cellMap5G = {}; 
 
         globalPolygons.forEach(p => {
-            let lac = p.rawData.lac || '';
-            let ci = p.rawData.ci || p.rawData.lcrid || '';
-            let node = p.rawData.enodeb || p.rawData.site || '';
+            let lac_3g = '', ci_3g = '';
+            let node_4g = '', lcrid_4g = '';
+            let node_5g = '', lcrid_5g = '';
 
+            // Quét qua dữ liệu RF của trạm để bóc tách chính xác các trường
             if (p.rawData.rfData) {
                 p.rawData.rfData.forEach(rf => {
-                    let k = rf.key.toLowerCase().replace(/_/g, '');
+                    let k = rf.key.toLowerCase().trim();
                     let v = String(rf.value).trim().toLowerCase();
-                    if (k === 'lac' || k === 'tac') lac = v;
-                    if (k === 'ci' || k === 'cellid' || k === 'lcrid') ci = v;
-                    if (k === 'enodeb' || k === 'nodeb' || k === 'sitecode' || k === 'gnodeb') node = v;
+                    
+                    // Khớp 3G
+                    if (k === 'bsc_lac' || k === 'lac') lac_3g = v;
+                    if (k === 'ci') ci_3g = v;
+                    
+                    // Khớp 4G
+                    if (k === 'enodebid' || k === 'enodeb_id') node_4g = v;
+                    if (k === 'lcrid') lcrid_4g = v;
+                    
+                    // Khớp 5G
+                    if (k === 'gnodeb_id' || k === 'gnodebid') node_5g = v;
+                    if (k === 'lcrid') lcrid_5g = v;
                 });
             }
 
-            if (lac && ci) cellMap3G[`${parseInt(lac,10)}_${parseInt(ci,10)}`] = p;
-            if (node && ci) cellMap4G[`${node}_${parseInt(ci,10)}`] = p;
-
-            // Bóc tách siêu liên kết cho 5G (Nối Node: 350246 và Cell: 13 từ 5G_350246_13)
-            let cellMatch = p.cellStr.match(/(\d+)$/);
-            let cellNum = cellMatch ? parseInt(cellMatch[1], 10) : parseInt(ci, 10);
-            let coreCode = p.fastCoreCode ? String(p.fastCoreCode).toLowerCase() : node;
+            // Fallback: Lấy trực tiếp từ Object nếu rfData bị khuyết
+            if (!lac_3g) lac_3g = String(p.rawData.BSC_LAC || p.rawData.LAC || '').trim().toLowerCase();
+            if (!ci_3g) ci_3g = String(p.rawData.CI || '').trim().toLowerCase();
             
-            if (coreCode && !isNaN(cellNum)) {
-                cellMap5G[`${coreCode}_${cellNum}`] = p;
-            }
+            if (!node_4g) node_4g = String(p.rawData.ENodeBID || p.rawData.eNodeB_ID || p.rawData.enodeb || '').trim().toLowerCase();
+            if (!lcrid_4g) lcrid_4g = String(p.rawData.Lcrid || p.rawData.LCRID || p.rawData.ci || '').trim().toLowerCase();
+            
+            if (!node_5g) node_5g = String(p.rawData.gNodeB_ID || p.rawData.gNodeBID || p.rawData.gnodeb || '').trim().toLowerCase();
+            if (!lcrid_5g) lcrid_5g = String(p.rawData.Lcrid || p.rawData.LCRID || p.rawData.ci || '').trim().toLowerCase();
+
+            // Đưa vào thư viện tra cứu nhanh (Dùng parseInt để đồng nhất '03' và '3')
+            if (lac_3g && ci_3g) cellMap3G[`${parseInt(lac_3g, 10)}_${parseInt(ci_3g, 10)}`] = p;
+            if (node_4g && lcrid_4g) cellMap4G[`${node_4g}_${parseInt(lcrid_4g, 10)}`] = p;
+            if (node_5g && lcrid_5g) cellMap5G[`${node_5g}_${parseInt(lcrid_5g, 10)}`] = p;
         });
 
         document.getElementById('loadingText').innerText = "Đang tải dữ liệu và phân tích đa thông số...";
@@ -1212,7 +1225,7 @@
 
                         let servingCellObj = null;
 
-                        // TÌM KIẾM CELL PHÁT SÓNG QUA HASH MAP CỰC NHANH
+                        // TÌM KIẾM CELL PHÁT SÓNG CHÍNH XÁC THEO MẠNG
                         if (tech.includes('5G')) {
                             servingCellObj = cellMap5G[`${nodeRaw}_${parseInt(cellIdRaw, 10)}`];
                         } else if (tech.includes('4G')) { 
