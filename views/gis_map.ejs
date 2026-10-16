@@ -912,12 +912,12 @@
 
     function getColorRSRP(val) {
         if (val === null || val === undefined || isNaN(val)) return '#95a5a6'; 
-        if (val >= -70) return '#008000';  // [>= -70] Green
-        if (val >= -90) return '#00ff00';  // [-90, -70) Lime
-        if (val >= -100) return '#80ff80'; // [-100, -90) Light Green
-        if (val >= -110) return '#ffff00'; // [-110, -100) Yellow
-        if (val >= -120) return '#ff8040'; // [-120, -110) Orange
-        return '#ff0000';                  // [< -120] Red
+        if (val >= -70) return '#008000';  // [>= -70] Dark Green
+        if (val >= -90) return '#00FF00';  // [-90, -70) Lime
+        if (val >= -100) return '#80FF80'; // [-100, -90) Light Green
+        if (val >= -110) return '#FFFF00'; // [-110, -100) Yellow
+        if (val >= -120) return '#FF8040'; // [-120, -110) Orange
+        return '#FF0000';                  // [< -120] Red
     }
 
     function getColorRSRQ(val) {
@@ -953,11 +953,11 @@
                 title = 'Mức thu RSRP (dBm)';
                 ranges = [ 
                     { text: '[>= -70] Tốt', color: '#008000' }, 
-                    { text: '[-90, -70) Khá', color: '#00ff00' }, 
-                    { text: '[-100, -90) Trung bình', color: '#80ff80' }, 
-                    { text: '[-110, -100) Kém', color: '#ffff00' }, 
-                    { text: '[-120, -110) Rất kém', color: '#ff8040' },
-                    { text: '[< -120] Điểm đen', color: '#ff0000' }
+                    { text: '[-90, -70) Khá', color: '#00FF00' }, 
+                    { text: '[-100, -90) Trung bình', color: '#80FF80' }, 
+                    { text: '[-110, -100) Kém', color: '#FFFF00' }, 
+                    { text: '[-120, -110) Rất kém', color: '#FF8040' },
+                    { text: '[< -120] Điểm đen', color: '#FF0000' }
                 ];
             } else if (metric === 'rsrq') {
                 title = 'Chất lượng RSRQ (dB)';
@@ -1002,7 +1002,6 @@
                     let pct = ((r.count / stats.total) * 100).toFixed(2);
                     countHtml = `<span style="margin-left: auto; font-size: 11px; color: var(--text-main); font-weight: bold; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${r.count.toLocaleString('vi-VN')} (${pct}%)</span>`;
                 }
-                
                 let isChecked = activeItsCategories.includes(catId) ? 'checked' : '';
 
                 labels.push(`
@@ -1141,8 +1140,43 @@
         globalItsData = [];
         let allLogBounds = [];
 
-        document.getElementById('loadingText').innerText = "Đang tải dữ liệu và phân tích đa thông số...";
+        document.getElementById('loadingText').innerText = "Đang tạo bộ đệm (Hash Map) siêu tốc...";
         document.getElementById('mapLoading').style.display = 'block';
+
+        // === THUẬT TOÁN HASH MAP O(1) GIÚP LOAD HÀNG TRIỆU DÒNG LOG TRONG 1 GIÂY ===
+        let cellMap3G = {}; 
+        let cellMap4G = {}; 
+        let cellMap5G = {}; 
+
+        globalPolygons.forEach(p => {
+            let lac = p.rawData.lac || '';
+            let ci = p.rawData.ci || p.rawData.lcrid || '';
+            let node = p.rawData.enodeb || p.rawData.site || '';
+
+            if (p.rawData.rfData) {
+                p.rawData.rfData.forEach(rf => {
+                    let k = rf.key.toLowerCase().replace(/_/g, '');
+                    let v = String(rf.value).trim().toLowerCase();
+                    if (k === 'lac' || k === 'tac') lac = v;
+                    if (k === 'ci' || k === 'cellid' || k === 'lcrid') ci = v;
+                    if (k === 'enodeb' || k === 'nodeb' || k === 'sitecode' || k === 'gnodeb') node = v;
+                });
+            }
+
+            if (lac && ci) cellMap3G[`${parseInt(lac,10)}_${parseInt(ci,10)}`] = p;
+            if (node && ci) cellMap4G[`${node}_${parseInt(ci,10)}`] = p;
+
+            // Bóc tách siêu liên kết cho 5G (Nối Node: 350246 và Cell: 13 từ 5G_350246_13)
+            let cellMatch = p.cellStr.match(/(\d+)$/);
+            let cellNum = cellMatch ? parseInt(cellMatch[1], 10) : parseInt(ci, 10);
+            let coreCode = p.fastCoreCode ? String(p.fastCoreCode).toLowerCase() : node;
+            
+            if (coreCode && !isNaN(cellNum)) {
+                cellMap5G[`${coreCode}_${cellNum}`] = p;
+            }
+        });
+
+        document.getElementById('loadingText').innerText = "Đang tải dữ liệu và phân tích đa thông số...";
 
         const readFile = (file) => {
             return new Promise((resolve) => {
@@ -1168,63 +1202,24 @@
                         if (isNaN(lat) || isNaN(lng)) continue;
 
                         const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; 
-                        const level = idxLevel >= 0 ? parseFloat(cols[idxLevel]) : null;
+                        const level = parseFloat(cols[idxLevel]);
                         const qual = idxQual >= 0 ? parseFloat(cols[idxQual]) : null;
                         const snr = idxSnr >= 0 ? parseFloat(cols[idxSnr]) : null;
 
-                        const nodeStr = cols[idxNode] ? cols[idxNode].trim().toLowerCase() : ''; 
-                        const cellIdStr = cols[idxCellID] ? cols[idxCellID].trim().toLowerCase() : '';
-                        const lacStr = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
+                        const nodeRaw = cols[idxNode] ? cols[idxNode].trim().toLowerCase() : ''; 
+                        const cellIdRaw = cols[idxCellID] ? cols[idxCellID].trim().toLowerCase() : '';
+                        const lacRaw = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
 
-                        // [MỚI] Thuật toán tìm Cell SIÊU TỐI ƯU (Bao thầu mọi định dạng tên của 5G, 4G, 3G)
-                        let servingCellObj = globalPolygons.find(p => {
-                            let site = String(p.rawData.site).toLowerCase().trim();
-                            let cell = String(p.rawData.cell).toLowerCase().trim();
-                            
-                            let getRfVal = (keyStr) => {
-                                if(!p.rawData.rfData) return null;
-                                let f = p.rawData.rfData.find(x => x.key.toLowerCase() === keyStr.toLowerCase() || x.key.toLowerCase().replace(/_/g,'') === keyStr.toLowerCase());
-                                return f ? String(f.value).toLowerCase().trim() : null;
-                            };
-                            
-                            let dbLac = getRfVal('lac') || getRfVal('tac');
-                            let dbCi = getRfVal('ci') || getRfVal('cell_id') || getRfVal('lcrid');
-                            let dbNode = getRfVal('enodeb') || getRfVal('nodeb') || getRfVal('gnodeb') || getRfVal('gnodeb_id') || getRfVal('site_code');
-                            
-                            if (tech.includes('5G') || tech.includes('4G')) {
-                                // 1. Khớp tuyệt đối (Nếu DB cấu hình chuẩn mực)
-                                if (dbNode === nodeStr && dbCi === cellIdStr && nodeStr !== '' && cellIdStr !== '') return true;
-                                
-                                // 2. Khớp linh hoạt (Bao thầu các Site name chứa tiền tố như "5G_350246")
-                                let siteMatch = false;
-                                if (site === nodeStr) siteMatch = true;
-                                else if (nodeStr !== '' && site.includes(nodeStr)) siteMatch = true;
-                                else if (nodeStr !== '' && dbNode && dbNode.includes(nodeStr)) siteMatch = true;
+                        let servingCellObj = null;
 
-                                // 3. Xử lý trường hợp Cell Name chứa hậu tố ID (Ví dụ: "5G_350246_13")
-                                let cellMatch = false;
-                                if (dbCi === cellIdStr) cellMatch = true;
-                                else if (cellIdStr !== '' && (cell.endsWith(cellIdStr) || cell.endsWith('_' + cellIdStr) || cell.endsWith('-' + cellIdStr))) cellMatch = true;
-                                
-                                // 4. Bẫy lỗi Cell ID bị thêm số 0 ở đầu (Ví dụ log là 3, DB là 03)
-                                else if (dbCi && parseInt(dbCi, 10) === parseInt(cellIdStr, 10)) cellMatch = true;
-                                else {
-                                    // Bóc tách con số cuối cùng của tên Cell trên bản đồ để đối chiếu
-                                    let matchNum = cell.match(/\d+$/);
-                                    if (matchNum && parseInt(matchNum[0], 10) === parseInt(cellIdStr, 10)) cellMatch = true;
-                                }
-
-                                if (siteMatch && cellMatch) return true;
-
-                            } else {
-                                // Logic đối chiếu mạng 3G (Sử dụng LAC và CI)
-                                if (dbLac === lacStr && dbCi === cellIdStr && lacStr !== '' && cellIdStr !== '') return true;
-                                if (lacStr !== '' && cellIdStr !== '') {
-                                    if (parseInt(dbLac, 10) === parseInt(lacStr, 10) && parseInt(dbCi, 10) === parseInt(cellIdStr, 10)) return true;
-                                }
-                            }
-                            return false;
-                        });
+                        // TÌM KIẾM CELL PHÁT SÓNG QUA HASH MAP CỰC NHANH
+                        if (tech.includes('5G')) {
+                            servingCellObj = cellMap5G[`${nodeRaw}_${parseInt(cellIdRaw, 10)}`];
+                        } else if (tech.includes('4G')) { 
+                            servingCellObj = cellMap4G[`${nodeRaw}_${parseInt(cellIdRaw, 10)}`];
+                        } else if (tech.includes('3G')) {
+                            servingCellObj = cellMap3G[`${parseInt(lacRaw, 10)}_${parseInt(cellIdRaw, 10)}`];
+                        }
 
                         globalItsData.push({
                             lat, lng, tech, level, qual, snr, 
