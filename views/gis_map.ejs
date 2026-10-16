@@ -1140,8 +1140,70 @@
         globalItsData = [];
         let allLogBounds = [];
 
-        document.getElementById('loadingText').innerText = "Đang tạo bộ đệm (Hash Map) siêu tốc...";
+        document.getElementById('loadingText').innerText = "Đang đọc file và nhận diện công nghệ mạng...";
         document.getElementById('mapLoading').style.display = 'block';
+
+        // 1. ĐỌC NỘI DUNG TẤT CẢ CÁC FILE LOG VÀO RAM
+        const fileContents = [];
+        const readPromises = Array.from(files).map(file => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.readAsText(file);
+            });
+        });
+        const results = await Promise.all(readPromises);
+        results.forEach(text => fileContents.push(text));
+
+        // 2. NHẬN DIỆN CÔNG NGHỆ TỰ ĐỘNG (Ưu tiên 5G -> 4G -> 3G)
+        let targetNetwork = null;
+        for (let text of fileContents) {
+            const lines = text.split(/\r?\n/);
+            if (lines.length < 2) continue;
+            const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
+            const idxTech = headers.indexOf('networktech');
+
+            if (idxTech >= 0) {
+                // Quét nhanh 200 dòng đầu tiên để nhận diện công nghệ
+                for (let i = 1; i < Math.min(lines.length, 200); i++) {
+                    const cols = lines[i].split('|');
+                    if (cols.length > idxTech && cols[idxTech]) {
+                        const tech = cols[idxTech].toUpperCase();
+                        if (tech.includes('5G')) { targetNetwork = '5g'; break; }
+                        else if (tech.includes('4G') || tech.includes('LTE')) { if(!targetNetwork) targetNetwork = '4g'; }
+                        else if (tech.includes('3G') || tech.includes('UMTS') || tech.includes('WCDMA')) { if(!targetNetwork) targetNetwork = '3g'; }
+                    }
+                }
+            }
+            if (targetNetwork === '5g') break; // Nếu thấy 5G thì chốt luôn, không cần quét file khác
+        }
+
+        const currentNetwork = document.getElementById('networkSelect').value;
+        if (!targetNetwork) targetNetwork = currentNetwork;
+
+        // 3. TỰ ĐỘNG CHUYỂN ĐỔI BẢN ĐỒ (AUTO-SWITCH MAP) NẾU LỆCH CÔNG NGHỆ
+        if (targetNetwork !== currentNetwork) {
+            document.getElementById('loadingText').innerText = `Phát hiện Log ${targetNetwork.toUpperCase()}, đang tự động tải trạm...`;
+            document.getElementById('networkSelect').value = targetNetwork;
+            
+            // Kích hoạt hàm Load Map
+            loadAllMapData();
+            
+            // Đợi Bản đồ tải xong (kết thúc khi Spinner loading bị ẩn bởi setTimeout của loadMapData)
+            await new Promise(resolve => {
+                const checkInterval = setInterval(() => {
+                    if (document.getElementById('mapLoading').style.display === 'none') {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
+            
+            // Bản đồ tải xong -> Bật lại Spinner để tiếp tục vẽ Log
+            document.getElementById('mapLoading').style.display = 'block';
+        }
+
+        document.getElementById('loadingText').innerText = "Đang tạo bộ đệm (Hash Map) siêu tốc...";
 
         // === THUẬT TOÁN HASH MAP O(1) BÁM SÁT CẤU TRÚC DB RF CỦA TỪNG MẠNG ===
         let cellMap3G = {}; 
@@ -1153,114 +1215,91 @@
             let node_4g = '', lcrid_4g = '';
             let node_5g = '', lcrid_5g = '';
 
-            // Quét qua dữ liệu RF của trạm để bóc tách chính xác các trường
             if (p.rawData.rfData) {
                 p.rawData.rfData.forEach(rf => {
                     let k = rf.key.toLowerCase().trim();
                     let v = String(rf.value).trim().toLowerCase();
                     
-                    // Khớp 3G
                     if (k === 'bsc_lac' || k === 'lac') lac_3g = v;
                     if (k === 'ci') ci_3g = v;
                     
-                    // Khớp 4G
                     if (k === 'enodebid' || k === 'enodeb_id') node_4g = v;
                     if (k === 'lcrid') lcrid_4g = v;
                     
-                    // Khớp 5G
                     if (k === 'gnodeb_id' || k === 'gnodebid') node_5g = v;
                     if (k === 'lcrid') lcrid_5g = v;
                 });
             }
 
-            // Fallback: Lấy trực tiếp từ Object nếu rfData bị khuyết
             if (!lac_3g) lac_3g = String(p.rawData.BSC_LAC || p.rawData.LAC || '').trim().toLowerCase();
             if (!ci_3g) ci_3g = String(p.rawData.CI || '').trim().toLowerCase();
-            
             if (!node_4g) node_4g = String(p.rawData.ENodeBID || p.rawData.eNodeB_ID || p.rawData.enodeb || '').trim().toLowerCase();
             if (!lcrid_4g) lcrid_4g = String(p.rawData.Lcrid || p.rawData.LCRID || p.rawData.ci || '').trim().toLowerCase();
-            
             if (!node_5g) node_5g = String(p.rawData.gNodeB_ID || p.rawData.gNodeBID || p.rawData.gnodeb || '').trim().toLowerCase();
             if (!lcrid_5g) lcrid_5g = String(p.rawData.Lcrid || p.rawData.LCRID || p.rawData.ci || '').trim().toLowerCase();
 
-            // Đưa vào thư viện tra cứu nhanh (Dùng parseInt để đồng nhất '03' và '3')
             if (lac_3g && ci_3g) cellMap3G[`${parseInt(lac_3g, 10)}_${parseInt(ci_3g, 10)}`] = p;
             if (node_4g && lcrid_4g) cellMap4G[`${node_4g}_${parseInt(lcrid_4g, 10)}`] = p;
             if (node_5g && lcrid_5g) cellMap5G[`${node_5g}_${parseInt(lcrid_5g, 10)}`] = p;
         });
 
-        document.getElementById('loadingText').innerText = "Đang tải dữ liệu và phân tích đa thông số...";
+        document.getElementById('loadingText').innerText = "Đang phân tích định tuyến đa thông số...";
 
-        const readFile = (file) => {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const text = e.target.result; 
-                    const lines = text.split(/\r?\n/);
-                    if (lines.length < 2) { resolve(); return; } 
+        // 4. XỬ LÝ TOÀN BỘ FILE LOG VÀ KHỚP VỚI CELL BẢN ĐỒ
+        for (let text of fileContents) {
+            const lines = text.split(/\r?\n/);
+            if (lines.length < 2) continue;
 
-                    const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
-                    const idxLat = headers.indexOf('latitude'); const idxLng = headers.indexOf('longitude');
-                    const idxNode = headers.indexOf('node'); const idxCellID = headers.indexOf('cellid');
-                    const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); 
-                    const idxLevel = headers.indexOf('level');
-                    const idxQual = headers.indexOf('qual');
-                    const idxSnr = headers.indexOf('snr');
+            const headers = lines[0].split('|').map(h => h.trim().toLowerCase());
+            const idxLat = headers.indexOf('latitude'); const idxLng = headers.indexOf('longitude');
+            const idxNode = headers.indexOf('node'); const idxCellID = headers.indexOf('cellid');
+            const idxLAC = headers.indexOf('lac'); const idxTech = headers.indexOf('networktech'); 
+            const idxLevel = headers.indexOf('level');
+            const idxQual = headers.indexOf('qual');
+            const idxSnr = headers.indexOf('snr');
 
-                    if (idxLat < 0 || idxLng < 0) { resolve(); return; } 
+            if (idxLat < 0 || idxLng < 0) continue;
 
-                    for (let i = 1; i < lines.length; i++) {
-                        const cols = lines[i].split('|'); if (cols.length < headers.length) continue;
-                        const lat = parseFloat(cols[idxLat]); const lng = parseFloat(cols[idxLng]);
-                        if (isNaN(lat) || isNaN(lng)) continue;
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split('|'); if (cols.length < headers.length) continue;
+                const lat = parseFloat(cols[idxLat]); const lng = parseFloat(cols[idxLng]);
+                if (isNaN(lat) || isNaN(lng)) continue;
 
-                        const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; 
-                        const level = parseFloat(cols[idxLevel]);
-                        const qual = idxQual >= 0 ? parseFloat(cols[idxQual]) : null;
-                        const snr = idxSnr >= 0 ? parseFloat(cols[idxSnr]) : null;
+                const tech = cols[idxTech] ? cols[idxTech].toUpperCase() : ''; 
+                const level = parseFloat(cols[idxLevel]);
+                const qual = idxQual >= 0 ? parseFloat(cols[idxQual]) : null;
+                const snr = idxSnr >= 0 ? parseFloat(cols[idxSnr]) : null;
 
-                        const nodeRaw = cols[idxNode] ? cols[idxNode].trim().toLowerCase() : ''; 
-                        const cellIdRaw = cols[idxCellID] ? cols[idxCellID].trim().toLowerCase() : '';
-                        const lacRaw = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
+                const nodeRaw = cols[idxNode] ? cols[idxNode].trim().toLowerCase() : ''; 
+                const cellIdRaw = cols[idxCellID] ? cols[idxCellID].trim().toLowerCase() : '';
+                const lacRaw = cols[idxLAC] ? cols[idxLAC].trim().toLowerCase() : '';
 
-                        let servingCellObj = null;
-                        let cellIdInt = parseInt(cellIdRaw, 10);
+                let servingCellObj = null;
 
-                        // TÌM KIẾM CELL PHÁT SÓNG CHÍNH XÁC THEO MẠNG
-                        if (tech.includes('5G')) {
-                            // [MỚI] Mapping CellID 5G từ Log (14, 15, 16) về Lcrid vật lý (11, 12, 13)
-                            let mappedCellId = cellIdInt;
-                            if (cellIdInt === 14) mappedCellId = 11;
-                            else if (cellIdInt === 15) mappedCellId = 12;
-                            else if (cellIdInt === 16) mappedCellId = 13;
-                            
-                            servingCellObj = cellMap5G[`${nodeRaw}_${mappedCellId}`];
-                        } else if (tech.includes('4G')) { 
-                            servingCellObj = cellMap4G[`${nodeRaw}_${cellIdInt}`];
-                        } else if (tech.includes('3G')) {
-                            servingCellObj = cellMap3G[`${parseInt(lacRaw, 10)}_${cellIdInt}`];
-                        }
+                // TÌM KIẾM CELL PHÁT SÓNG CHÍNH XÁC THEO MẠNG (Đã bao gồm ánh xạ 5G Lcrid 14->11)
+                if (tech.includes('5G')) {
+                    let mappedCellId = parseInt(cellIdRaw, 10);
+                    if (mappedCellId === 14) mappedCellId = 11;
+                    else if (mappedCellId === 15) mappedCellId = 12;
+                    else if (mappedCellId === 16) mappedCellId = 13;
+                    servingCellObj = cellMap5G[`${nodeRaw}_${mappedCellId}`];
+                } else if (tech.includes('4G') || tech.includes('LTE')) { 
+                    servingCellObj = cellMap4G[`${nodeRaw}_${parseInt(cellIdRaw, 10)}`];
+                } else if (tech.includes('3G') || tech.includes('UMTS') || tech.includes('WCDMA')) {
+                    servingCellObj = cellMap3G[`${parseInt(lacRaw, 10)}_${parseInt(cellIdRaw, 10)}`];
+                }
 
-                        globalItsData.push({
-                            lat, lng, tech, level, qual, snr, 
-                            node: cols[idxNode] ? cols[idxNode].trim() : '', 
-                            cellId: cols[idxCellID] ? cols[idxCellID].trim() : '', 
-                            lac: cols[idxLAC] ? cols[idxLAC].trim() : '', 
-                            servingCellObj
-                        });
+                globalItsData.push({
+                    lat, lng, tech, level, qual, snr, 
+                    node: cols[idxNode] ? cols[idxNode].trim() : '', 
+                    cellId: cols[idxCellID] ? cols[idxCellID].trim() : '', 
+                    lac: cols[idxLAC] ? cols[idxLAC].trim() : '', 
+                    servingCellObj
+                });
 
-                        allLogBounds.push([lat, lng]);
-                    }
-                    resolve(); 
-                };
-                reader.readAsText(file);
-            });
-        };
-
-        const readPromises = [];
-        for (let i = 0; i < files.length; i++) readPromises.push(readFile(files[i]));
-        
-        await Promise.all(readPromises);
+                allLogBounds.push([lat, lng]);
+            }
+        }
 
         renderItsLogs('rsrp');
         
