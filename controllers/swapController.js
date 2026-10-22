@@ -156,6 +156,11 @@ exports.getSwapData = async (req, res) => {
             if (filterByDistrict && !selectedDistricts.includes(cellDist)) return; 
 
             const cell = k.Cell_name;
+            if (!cell) return;
+
+            // [MỚI] Loại bỏ Small Cell (Ký hiệu chữ 'S' kẹp giữa số trạm và số cell. VD: 4G-NCG056S11-THA)
+            if (cell.match(/\dS\d{2}(-[A-Za-z]+)?$/i)) return;
+
             const rf = rfMap[cell] || {};
             
             let isL1800 = false;
