@@ -69,12 +69,18 @@ exports.getSwapData = async (req, res) => {
             
             await db.query(`DELETE FROM swap_mimo_cache WHERE days_filter = ?`, [days]); // Xóa cache cũ
 
+            // [FIX BẢO MẬT DB]: Tự động dò tìm xem các cột có tồn tại không trước khi Query
             const [kpiCols] = await db.query('SHOW COLUMNS FROM kpi_4g');
             const hasDistrict = kpiCols.some(c => String(c.Field).toLowerCase() === 'district_code');
+            const hasCellType = kpiCols.some(c => String(c.Field).toLowerCase() === 'celltype');
+            
             const districtSelect = hasDistrict ? "MAX(District_code) as district," : "'' as district,";
+            const cellTypeSelect = hasCellType ? "MAX(CellType) as cell_type," : "'' as cell_type,";
 
             const query = `
-                SELECT Cell_name, MAX(CellType) as cell_type, ${districtSelect}
+                SELECT Cell_name, 
+                       ${cellTypeSelect}
+                       ${districtSelect}
                        AVG(Total_Data_Traffic_Volume_GB) as avg_traf,
                        AVG(User_DL_Avg_Throughput_Kbps) as avg_thput,
                        AVG(RB_Util_Rate_DL) as avg_prb
@@ -101,9 +107,20 @@ exports.getSwapData = async (req, res) => {
         }
 
         // 4. Lấy dữ liệu Cấu hình RF & CEM
-        const [rfRows] = await db.query(`SELECT Cell_code, Latitude, Longitude, MIMO as rf_mimo, Band FROM rf_4g`);
+        // [FIX BẢO MẬT DB]: Dùng SELECT * để chống lỗi nếu Database thiếu cột MIMO hoặc Band
+        const [rfRows] = await db.query(`SELECT * FROM rf_4g`);
         let rfMap = {};
-        rfRows.forEach(r => rfMap[r.Cell_code] = r);
+        rfRows.forEach(r => {
+            let cellCode = r.Cell_code || r.Cell_Code || r.CELL_CODE || r.cell_code || r.CELL_NAME;
+            if (cellCode) {
+                rfMap[cellCode] = {
+                    Latitude: r.Latitude || r.latitude || r.LATITUDE || r.Lat,
+                    Longitude: r.Longitude || r.longitude || r.LONGITUDE || r.Long,
+                    rf_mimo: r.MIMO || r.mimo || r.Mimo || '',
+                    Band: r.Band || r.band || r.BAND || ''
+                };
+            }
+        });
 
         let qoeQosMap = {};
         try {
