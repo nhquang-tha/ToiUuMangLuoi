@@ -56,8 +56,18 @@
         </header>
         
         <div class="card">
-            <h4 style="margin-top:0; color:#2c3e50;">⚙️ Cấu Hình Tiêu Chí Lọc (Trung bình 30 Ngày)</h4>
+            <h4 style="margin-top:0; color:#2c3e50;">⚙️ Cấu Hình Tiêu Chí Lọc & Phân Tích</h4>
             <div class="filter-grid">
+                <!-- Thêm Box chọn Ngày -->
+                <div class="filter-box" style="border-left-color:#8e44ad;">
+                    <label>Chu kỳ quét KPI</label>
+                    <select id="daysFilter" style="width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; outline: none; font-weight: bold; color: #2c3e50; cursor: pointer;">
+                        <option value="30">Trung bình 30 Ngày</option>
+                        <option value="60">Trung bình 60 Ngày</option>
+                        <option value="90">Trung bình 90 Ngày</option>
+                    </select>
+                </div>
+                
                 <div class="filter-box red">
                     <label>UP: Nâng cấp (2T->4T) | Traffic > (GB)</label>
                     <input type="number" id="upTraf" value="80">
@@ -207,6 +217,7 @@
         document.getElementById('resultArea').style.display = 'none';
         document.getElementById('btnExport').style.display = 'none';
         
+        const days = document.getElementById('daysFilter').value; // [MỚI] Lấy số ngày
         const upTraf = document.getElementById('upTraf').value;
         const upThput = document.getElementById('upThput').value;
         const downTraf = document.getElementById('downTraf').value;
@@ -226,7 +237,8 @@
         }
 
         try {
-            const res = await fetch(`/api/swap-mimo?upTraf=${upTraf}&upThput=${upThput}&downTraf=${downTraf}&downPrb=${downPrb}&districts=${encodeURIComponent(districts)}`);
+            // [MỚI] Truyền thêm tham số days vào API
+            const res = await fetch(`/api/swap-mimo?days=${days}&upTraf=${upTraf}&upThput=${upThput}&downTraf=${downTraf}&downPrb=${downPrb}&districts=${encodeURIComponent(districts)}`);
             const data = await res.json();
             
             document.getElementById('loadingMsg').style.display = 'none';
