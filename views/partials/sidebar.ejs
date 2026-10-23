@@ -190,6 +190,9 @@
             <% if (canSee('swap_mimo')) { %>
             <li class="menu-item"><a href="/swap-mimo" class="<%= typeof currentPath !== 'undefined' && currentPath === 'SWAP MIMO' ? 'active' : '' %>"><i class="ph ph-arrows-left-right" style="color: #3498db;"></i> <span class="menu-text">Đề xuất SWAP MIMO</span></a></li>
             <% } %>
+            <% if (canSee('project_monitor')) { %>
+            <li class="menu-item"><a href="/project-monitor" class="<%= typeof currentPath !== 'undefined' && currentPath === 'Project Monitor' ? 'active' : '' %>"><i class="ph ph-projector-screen-chart" style="color: #1abc9c;"></i> <span class="menu-text">Theo dõi dự án</span></a></li>
+            <% } %>
         <% } %>
 
         <% if (canSee('kpi_analytics') || canSee('qoe_qos') || canSee('poi_report') || canSee('optimizing_qoe_qos') || canSee('bad_cells') || canSee('downtilt_coverage')) { %>
