@@ -13,24 +13,20 @@
     
     .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
     
-    .grid-container { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
-    @media (max-width: 900px) { .grid-container { grid-template-columns: 1fr; } }
+    /* Giao diện Thanh chọn Dự án mới */
+    .project-header-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid #3498db; flex-wrap: wrap; }
+    .project-select { flex: 1; min-width: 250px; padding: 10px 15px; border: 1px solid #bdc3c7; border-radius: 6px; font-size: 14px; font-weight: bold; color: #2c3e50; outline: none; cursor: pointer; background: #fdfdfd; }
+    .project-select:hover { border-color: #3498db; }
 
-    .project-list { max-height: 400px; overflow-y: auto; }
-    .project-item { padding: 12px 15px; border: 1px solid #ecf0f1; border-radius: 6px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; border-left: 4px solid #bdc3c7; }
-    .project-item:hover { background: #f8f9fa; }
-    .project-item.active { border-left-color: #1abc9c; background: #eefaf6; }
-    .project-item h4 { margin: 0 0 5px 0; color: #2c3e50; }
-    .project-item p { margin: 0; font-size: 12px; color: #7f8c8d; }
-
-    .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; transition: 0.2s; color: white;}
+    .btn { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: 0.2s; color: white;}
     .btn-primary { background: #1abc9c; } .btn-primary:hover { background: #16a085; }
-    .btn-danger { background: #e74c3c; padding: 4px 8px; font-size: 11px;} .btn-danger:hover { background: #c0392b; }
+    .btn-danger { background: #e74c3c; } .btn-danger:hover { background: #c0392b; }
     
     .form-control { width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box; margin-bottom: 15px; font-family: inherit;}
 
-    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .data-table th, .data-table td { padding: 10px; border: 1px solid #ecf0f1; text-align: center; }
+    /* Làm bảng rộng và thoáng hơn */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th, .data-table td { padding: 14px 15px; border: 1px solid #ecf0f1; text-align: center; }
     .data-table th { background-color: #f1f4f6; color: #2c3e50; font-weight: bold; white-space: nowrap; }
     .data-table tr:hover { background-color: #f9fbfd; }
 
@@ -38,11 +34,11 @@
     .trend-down-good { color: #27ae60; font-weight: bold; }
     .trend-up-bad { color: #e74c3c; font-weight: bold; }
     .trend-down-bad { color: #e74c3c; font-weight: bold; }
-    .val-text { font-size: 14px; font-weight: 600; color: #2c3e50; }
-    .delta-text { font-size: 11px; margin-left: 5px; }
+    .val-text { font-size: 15px; font-weight: 600; color: #2c3e50; }
+    .delta-text { font-size: 12px; margin-left: 5px; }
 
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
-    .modal-content { background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+    .modal-content { background: white; padding: 25px; border-radius: 8px; width: 450px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
 </style>
 
 <div class="layout">
@@ -53,46 +49,47 @@
             <button class="btn btn-primary" onclick="openModal('modalCreateProject')">➕ Tạo Dự Án Mới</button>
         </header>
         
-        <div class="grid-container">
-            <!-- Sidebar Danh sách dự án -->
-            <div class="card">
-                <h3 style="margin-top:0; color:#2c3e50; border-bottom:2px solid #ecf0f1; padding-bottom:10px;">Danh sách Dự Án</h3>
-                <div class="project-list" id="projectList">
-                    <div style="text-align:center; padding: 20px; color:#7f8c8d;">Đang tải...</div>
+        <!-- Thanh chọn Dự án (Dropdown) -->
+        <div class="project-header-bar">
+            <label style="font-weight: bold; color: #34495e; white-space: nowrap; font-size: 15px;">📂 Lựa Chọn Dự Án:</label>
+            <select id="projectDropdown" class="project-select" onchange="onProjectSelectChange()">
+                <option value="">-- Vui lòng chọn dự án --</option>
+            </select>
+            <button class="btn btn-danger" id="btnDeleteProject" style="display:none;" onclick="deleteCurrentProject()">🗑️ Xóa Dự Án</button>
+        </div>
+
+        <!-- Vùng dữ liệu toàn màn hình (Full Width) -->
+        <div class="card" id="projectDetailArea" style="display:none; padding: 0; overflow:hidden;">
+            <div style="padding: 20px; background: #fdfdfd; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <h2 id="currentProjectName" style="margin:0 0 8px 0; color:#2980b9; font-size: 22px;">Tên Dự Án</h2>
+                    <p id="currentProjectDesc" style="margin:0; color:#7f8c8d; font-size:14px;">Mô tả</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="openModal('modalAddCell')" style="background:#3498db;">➕ Thêm Cell Theo Dõi</button>
                 </div>
             </div>
-
-            <!-- Vùng dữ liệu -->
-            <div class="card" id="projectDetailArea" style="display:none; padding: 0; overflow:hidden;">
-                <div style="padding: 20px; background: #fdfdfd; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <h2 id="currentProjectName" style="margin:0 0 5px 0; color:#1abc9c;">Tên Dự Án</h2>
-                        <p id="currentProjectDesc" style="margin:0; color:#7f8c8d; font-size:13px;">Mô tả</p>
-                    </div>
-                    <div>
-                        <button class="btn btn-primary" onclick="openModal('modalAddCell')" style="background:#3498db;">➕ Thêm Cell Theo Dõi</button>
-                    </div>
+            
+            <div style="padding: 20px; overflow-x: auto;">
+                <div id="loadingData" style="display:none; text-align:center; padding: 30px; font-weight:bold; color:#3498db; font-size: 16px;">
+                    <span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Đang xử lý tính toán và đối soát dữ liệu Before/After...
                 </div>
-                
-                <div style="padding: 20px; overflow-x: auto;">
-                    <div id="loadingData" style="display:none; text-align:center; padding: 20px; font-weight:bold; color:#1abc9c;">Đang xử lý tính toán Before/After...</div>
-                    <table class="data-table" id="dataTable">
-                        <thead>
-                            <tr>
-                                <th>Tên Cell 4G</th>
-                                <th>Ngày Tác Động</th>
-                                <th>Traffic (GB)</th>
-                                <th>Thput DL (Mbps)</th>
-                                <th>PRB DL (%)</th>
-                                <th>CQI 4G (%)</th>
-                                <th>QoE / QoS Score</th>
-                                <th>Đánh Giá</th>
-                                <th>Thao Tác</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody"></tbody>
-                    </table>
-                </div>
+                <table class="data-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Tên Cell 4G</th>
+                            <th>Ngày Tác Động</th>
+                            <th>Traffic (GB)</th>
+                            <th>Thput DL (Mbps)</th>
+                            <th>PRB DL (%)</th>
+                            <th>CQI 4G (%)</th>
+                            <th>QoE / QoS Score</th>
+                            <th>Đánh Giá</th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
             </div>
         </div>
     </main>
@@ -101,7 +98,7 @@
 <!-- Modal Tạo Dự Án -->
 <div id="modalCreateProject" class="modal">
     <div class="modal-content">
-        <h3 style="margin-top:0;">Tạo Dự Án Mới</h3>
+        <h3 style="margin-top:0; color:#2c3e50;">Tạo Dự Án Mới</h3>
         <input type="text" id="prjName" class="form-control" placeholder="Tên dự án (VD: Đánh giá SWAP MIMO T10)...">
         <textarea id="prjDesc" class="form-control" placeholder="Mô tả mục tiêu dự án..." rows="3"></textarea>
         <div style="text-align: right;">
@@ -114,14 +111,14 @@
 <!-- Modal Thêm Cell -->
 <div id="modalAddCell" class="modal">
     <div class="modal-content">
-        <h3 style="margin-top:0;">Thêm Cell Vào Dự Án</h3>
-        <p style="font-size:12px; color:#666; margin-bottom:10px;">Ngày tác động là ngày bạn nâng/hạ cấp phần cứng. Hệ thống sẽ so sánh dữ liệu trước và sau ngày này.</p>
+        <h3 style="margin-top:0; color:#2c3e50;">Thêm Cell Vào Dự Án</h3>
+        <p style="font-size:13px; color:#666; margin-bottom:15px; line-height: 1.5;">Ngày tác động là ngày bạn nâng/hạ cấp phần cứng. Hệ thống sẽ tự động so sánh dữ liệu trước và sau ngày này.</p>
         
-        <label style="font-weight:bold; font-size:12px;">Ngày tác động (Tùy chọn):</label>
+        <label style="font-weight:bold; font-size:13px; color:#34495e; display:block; margin-bottom:5px;">Ngày tác động (Tùy chọn):</label>
         <input type="date" id="actionDate" class="form-control">
         
-        <label style="font-weight:bold; font-size:12px;">Danh sách Cell (Mỗi Cell 1 dòng, hoặc cách bằng dấu phẩy):</label>
-        <textarea id="cellList" class="form-control" rows="5" placeholder="4G-NIS078M11-THA&#10;4G-NIS078M12-THA"></textarea>
+        <label style="font-weight:bold; font-size:13px; color:#34495e; display:block; margin-bottom:5px;">Danh sách Cell (Cách nhau bằng dấu phẩy hoặc xuống dòng):</label>
+        <textarea id="cellList" class="form-control" rows="6" placeholder="4G-NIS078M11-THA&#10;4G-NIS078M12-THA"></textarea>
         
         <div style="text-align: right;">
             <button class="btn" style="background:#95a5a6;" onclick="closeModal('modalAddCell')">Hủy</button>
@@ -132,32 +129,54 @@
 
 <script>
     let currentProjectId = null;
+    let projectDataList = [];
 
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
     async function loadProjects() {
         const res = await fetch('/api/projects');
-        const projects = await res.json();
-        const list = document.getElementById('projectList');
-        list.innerHTML = '';
+        projectDataList = await res.json();
         
-        projects.forEach(p => {
-            let div = document.createElement('div');
-            div.className = `project-item ${currentProjectId == p.id ? 'active' : ''}`;
-            div.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <h4>${p.name}</h4>
-                        <p>${p.description || 'Không có mô tả'}</p>
-                        <span style="font-size:11px; background:#eee; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; margin-top:5px;">${p.cell_count} Cells</span>
-                    </div>
-                    <button class="btn btn-danger" onclick="deleteProject(event, ${p.id})">X</button>
-                </div>
-            `;
-            div.onclick = () => selectProject(p.id, p.name, p.description);
-            list.appendChild(div);
+        const dropdown = document.getElementById('projectDropdown');
+        dropdown.innerHTML = '<option value="">-- Vui lòng chọn dự án để theo dõi --</option>';
+        
+        projectDataList.forEach(p => {
+            let opt = document.createElement('option');
+            opt.value = p.id;
+            opt.text = `📌 ${p.name} (${p.cell_count} Cells)`;
+            if (currentProjectId == p.id) opt.selected = true;
+            dropdown.appendChild(opt);
         });
+
+        if (currentProjectId) {
+            let selectedP = projectDataList.find(p => p.id == currentProjectId);
+            if(selectedP) showProjectDetails(selectedP);
+        }
+    }
+
+    function onProjectSelectChange() {
+        const val = document.getElementById('projectDropdown').value;
+        if (!val) {
+            currentProjectId = null;
+            document.getElementById('projectDetailArea').style.display = 'none';
+            document.getElementById('btnDeleteProject').style.display = 'none';
+            return;
+        }
+        
+        currentProjectId = val;
+        let p = projectDataList.find(x => x.id == currentProjectId);
+        if(p) {
+            showProjectDetails(p);
+            loadProjectData();
+        }
+    }
+
+    function showProjectDetails(p) {
+        document.getElementById('currentProjectName').innerText = p.name;
+        document.getElementById('currentProjectDesc').innerText = p.description || 'Đang theo dõi hiệu suất Mạng lưới...';
+        document.getElementById('projectDetailArea').style.display = 'block';
+        document.getElementById('btnDeleteProject').style.display = 'inline-block';
     }
 
     async function createProject() {
@@ -165,34 +184,32 @@
         const desc = document.getElementById('prjDesc').value;
         if(!name) return alert("Nhập tên dự án!");
         
-        await fetch('/api/projects', {
+        const res = await fetch('/api/projects', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name, description: desc})
         });
+        const data = await res.json();
+        
         closeModal('modalCreateProject');
         document.getElementById('prjName').value = '';
         document.getElementById('prjDesc').value = '';
-        loadProjects();
+        
+        // Auto select dự án vừa tạo
+        currentProjectId = data.id; 
+        await loadProjects();
+        onProjectSelectChange();
     }
 
-    async function deleteProject(event, id) {
-        event.stopPropagation();
-        if(!confirm("Chắc chắn xóa dự án này?")) return;
-        await fetch('/api/projects/'+id, { method: 'DELETE' });
-        if(currentProjectId == id) {
-            currentProjectId = null;
-            document.getElementById('projectDetailArea').style.display = 'none';
-        }
+    async function deleteCurrentProject() {
+        if(!currentProjectId) return;
+        if(!confirm("⚠️ Chắc chắn xóa toàn bộ dự án này? (Dữ liệu danh sách Cell theo dõi cũng sẽ bị xóa)")) return;
+        
+        await fetch('/api/projects/' + currentProjectId, { method: 'DELETE' });
+        
+        currentProjectId = null;
+        document.getElementById('projectDetailArea').style.display = 'none';
+        document.getElementById('btnDeleteProject').style.display = 'none';
         loadProjects();
-    }
-
-    async function selectProject(id, name, desc) {
-        currentProjectId = id;
-        document.getElementById('currentProjectName').innerText = name;
-        document.getElementById('currentProjectDesc').innerText = desc || 'Đang theo dõi hiệu suất Mạng lưới...';
-        document.getElementById('projectDetailArea').style.display = 'block';
-        loadProjects(); // Reload để highlight active
-        loadProjectData();
     }
 
     async function addCells() {
@@ -208,17 +225,19 @@
         closeModal('modalAddCell');
         document.getElementById('cellList').value = '';
         loadProjectData();
+        loadProjects(); // Cập nhật lại số lượng Cell trên Dropdown
     }
 
     async function removeCell(cellId) {
         if(!confirm("Xóa Cell này khỏi dự án?")) return;
         await fetch(`/api/projects/${currentProjectId}/cells/${cellId}`, { method: 'DELETE' });
         loadProjectData();
+        loadProjects();
     }
 
-    // [LÕI HIỂN THỊ 1]: Hàm render thông minh các mũi tên tăng/giảm dựa trên logic (Tốt/Xấu)
+    // [HIỂN THỊ MŨI TÊN CHỈ BÁO]
     function renderTrend(before, after, metricType) {
-        if (!before || before === 0) return `<span class="val-text">${after.toFixed(1)}</span>`; // Không có Before -> Chỉ hiện giá trị After
+        if (!before || before === 0) return `<span class="val-text">${after.toFixed(1)}</span>`; 
         
         let delta = after - before;
         let pct = (delta / before * 100).toFixed(1);
@@ -241,7 +260,7 @@
         return `<span class="val-text">${after.toFixed(1)}</span> <span class="delta-text ${cls}">${icon} ${deltaStr}</span>`;
     }
 
-    // [LÕI HIỂN THỊ 2]: Hàm tự động đánh giá chất lượng tổng thể
+    // [HIỂN THỊ HUY HIỆU ĐÁNH GIÁ CHẤT LƯỢNG]
     function evaluateQuality(thputB, thputA, prbB, prbA, cqiB, cqiA) {
         if (!thputB && !prbB && !cqiB) return '<span style="color:#7f8c8d; font-size: 11px; font-style: italic;">Chưa có Đ.Giá</span>';
         
@@ -262,12 +281,13 @@
 
         let titleStr = reasons.join(', ') || 'Các chỉ số duy trì mức ổn định';
 
-        if (score > 0) return `<span title="${titleStr}" style="background: #eefaf6; color: #27ae60; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 11px; border: 1px solid #27ae60; cursor: help;">📈 TỐT LÊN</span>`;
-        if (score < 0) return `<span title="${titleStr}" style="background: #fdf2f2; color: #e74c3c; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 11px; border: 1px solid #e74c3c; cursor: help;">📉 KÉM ĐI</span>`;
-        return `<span title="${titleStr}" style="background: #f8f9fa; color: #7f8c8d; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 11px; border: 1px solid #bdc3c7; cursor: help;">➖ ỔN ĐỊNH</span>`;
+        if (score > 0) return `<span title="${titleStr}" style="background: #eefaf6; color: #27ae60; padding: 6px 12px; border-radius: 12px; font-weight: bold; font-size: 12px; border: 1px solid #27ae60; cursor: help;">📈 TỐT LÊN</span>`;
+        if (score < 0) return `<span title="${titleStr}" style="background: #fdf2f2; color: #e74c3c; padding: 6px 12px; border-radius: 12px; font-weight: bold; font-size: 12px; border: 1px solid #e74c3c; cursor: help;">📉 KÉM ĐI</span>`;
+        return `<span title="${titleStr}" style="background: #f8f9fa; color: #7f8c8d; padding: 6px 12px; border-radius: 12px; font-weight: bold; font-size: 12px; border: 1px solid #bdc3c7; cursor: help;">➖ ỔN ĐỊNH</span>`;
     }
 
     async function loadProjectData() {
+        document.getElementById('dataTable').style.display = 'none';
         document.getElementById('loadingData').style.display = 'block';
         document.getElementById('tableBody').innerHTML = '';
 
@@ -275,10 +295,11 @@
         const data = await res.json();
         
         document.getElementById('loadingData').style.display = 'none';
+        document.getElementById('dataTable').style.display = 'table';
         const tbody = document.getElementById('tableBody');
 
         if(data.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" style="padding: 30px; color: #7f8c8d;">Dự án chưa có Cell nào. Hãy thêm Cell để theo dõi.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="padding: 40px; color: #7f8c8d; font-size: 15px;">Dự án chưa có Cell nào. Hãy thêm Cell để bắt đầu theo dõi.</td></tr>`;
             return;
         }
 
@@ -287,17 +308,17 @@
             
             let tr = `
                 <tr>
-                    <td style="font-weight:bold; color:#2980b9;">${r.cell_name}</td>
-                    <td style="color:#7f8c8d;">${r.action_date}</td>
+                    <td style="font-weight:bold; color:#2980b9; font-size: 15px;">${r.cell_name}</td>
+                    <td style="color:#7f8c8d; font-weight: 500;">${r.action_date}</td>
                     <td>${renderTrend(r.traf_before, r.traf_after, 'traf')}</td>
                     <td>${renderTrend(r.thput_before, r.thput_after, 'thput')}</td>
                     <td>${renderTrend(r.prb_before, r.prb_after, 'prb')}</td>
                     <td>${renderTrend(r.cqi_before, r.cqi_after, 'cqi')}</td>
-                    <td style="font-weight:bold; color:#8e44ad;">${r.cem_score} / ${r.qos_score}</td>
+                    <td style="font-weight:bold; color:#8e44ad; font-size: 15px;">${r.cem_score} / ${r.qos_score}</td>
                     <td style="text-align: center;">${evalHtml}</td>
                     <td style="text-align: center; white-space: nowrap;">
-                        <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.cell_name)}" target="_blank" class="btn" style="background:#3498db; padding: 4px 8px; font-size: 11px; text-decoration: none;">📊 Xem KPI</a>
-                        <button class="btn btn-danger" onclick="removeCell(${r.cell_id})">X</button>
+                        <a href="/kpi-analytics?network=4g&cell=${encodeURIComponent(r.cell_name)}" target="_blank" class="btn" style="background:#3498db; padding: 6px 12px; font-size: 12px; text-decoration: none; margin-right: 5px;">📊 Xem KPI</a>
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="removeCell(${r.cell_id})">🗑️ Xóa</button>
                     </td>
                 </tr>
             `;
@@ -307,5 +328,8 @@
 
     window.onload = loadProjects;
 </script>
+<style>
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
 </body>
 </html>
