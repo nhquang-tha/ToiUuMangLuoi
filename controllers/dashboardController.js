@@ -1863,14 +1863,18 @@ exports.getAllPoiExportData = async (req, res) => {
     try {
         const query = `
             SELECT p.POI, k.Thoi_gian, 
-                   SUM(k.Total_Data_Traffic_Volume_GB) as Traf_4G, AVG(k.User_DL_Avg_Throughput_Kbps) as Thput_4G, AVG(k.CQI_4G) as CQI_4G,
+                   SUM(k.Total_Data_Traffic_Volume_GB) as Traf_4G, 
+                   (AVG(k.User_DL_Avg_Throughput_Kbps) / 1024) as Thput_4G, 
+                   AVG(k.CQI_4G) as CQI_4G,
                    0 as Traf_5G, 0 as Thput_5G, 0 as CQI_5G
-            FROM poi_4g p JOIN kpi_4g k ON p.Cell_name = k.Cell_name 
+            FROM poi_4g p JOIN kpi_4g k ON p.Cell_Code = k.Cell_name 
             WHERE k.Thoi_gian IS NOT NULL GROUP BY p.POI, k.Thoi_gian
             UNION ALL
             SELECT p.POI, k.Thoi_gian, 
                    0 as Traf_4G, 0 as Thput_4G, 0 as CQI_4G,
-                   SUM(k.Total_Data_Traffic_Volume_GB) as Traf_5G, AVG(k.A_User_DL_Avg_Throughput) as Thput_5G, AVG(k.CQI_5G) as CQI_5G
+                   SUM(k.Total_Data_Traffic_Volume_GB) as Traf_5G, 
+                   AVG(k.A_User_DL_Avg_Throughput) as Thput_5G, 
+                   AVG(k.CQI_5G) as CQI_5G
             FROM poi_5g p JOIN kpi_5g k ON p.Cell_Code = k.Ten_CELL 
             WHERE k.Thoi_gian IS NOT NULL GROUP BY p.POI, k.Thoi_gian
         `;
@@ -1883,22 +1887,32 @@ exports.getAllPoiExportData = async (req, res) => {
                 aggregated[key] = { POI: r.POI, Thoi_gian: r.Thoi_gian, count4g: 0, count5g: 0, Traf_4G: 0, Thput_4G: 0, CQI_4G: 0, Traf_5G: 0, Thput_5G: 0, CQI_5G: 0 };
             }
             let a = aggregated[key];
-            if (r.Traf_4G > 0 || r.CQI_4G > 0) {
+            if (r.Traf_4G > 0 || r.CQI_4G > 0 || r.Thput_4G > 0) {
                 a.count4g++; a.Traf_4G += r.Traf_4G; a.Thput_4G += r.Thput_4G; a.CQI_4G += r.CQI_4G;
             }
-            if (r.Traf_5G > 0 || r.CQI_5G > 0) {
+            if (r.Traf_5G > 0 || r.CQI_5G > 0 || r.Thput_5G > 0) {
                 a.count5g++; a.Traf_5G += r.Traf_5G; a.Thput_5G += r.Thput_5G; a.CQI_5G += r.CQI_5G;
             }
         });
         
         let finalData = Object.values(aggregated).map(a => {
-            if (a.count4g > 0) { a.Thput_4G = a.Thput_4G / a.count4g; a.CQI_4G = a.CQI_4G / a.count4g; }
-            if (a.count5g > 0) { a.Thput_5G = a.Thput_5G / a.count5g; a.CQI_5G = a.CQI_5G / a.count5g; }
+            // Tính trung bình cộng của các chỉ số
+            if (a.count4g > 0) { 
+                a.Thput_4G = a.Thput_4G / a.count4g; 
+                a.CQI_4G = a.CQI_4G / a.count4g; 
+            }
+            if (a.count5g > 0) { 
+                a.Thput_5G = a.Thput_5G / a.count5g; 
+                a.CQI_5G = a.CQI_5G / a.count5g; 
+            }
             return a;
         });
         
         res.json(finalData);
-    } catch (e) { res.status(500).json([]); }
+    } catch (e) { 
+        console.error("Lỗi xuất Excel POI:", e);
+        res.status(500).json([]); 
+    }
 };
 
 exports.getPoiData = async (req, res) => {
@@ -1907,16 +1921,22 @@ exports.getPoiData = async (req, res) => {
 
     try {
         const query4G = `
-            SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, AVG(k.User_DL_Avg_Throughput_Kbps) as thput_4g 
+            SELECT k.Thoi_gian, 
+                   SUM(k.Total_Data_Traffic_Volume_GB) as traffic_4g, 
+                   (AVG(k.User_DL_Avg_Throughput_Kbps) / 1024) as thput_4g 
             FROM kpi_4g k JOIN poi_4g p ON k.Cell_name = p.Cell_Code 
-            WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
+            WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' 
+            GROUP BY k.Thoi_gian
         `;
         const [data4g] = await db.query(query4G, [poiName]);
 
         const query5G = `
-            SELECT k.Thoi_gian, SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, AVG(k.A_User_DL_Avg_Throughput) as thput_5g 
+            SELECT k.Thoi_gian, 
+                   SUM(k.Total_Data_Traffic_Volume_GB) as traffic_5g, 
+                   AVG(k.A_User_DL_Avg_Throughput) as thput_5g 
             FROM kpi_5g k JOIN poi_5g p ON k.Ten_CELL = p.Cell_Code 
-            WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' GROUP BY k.Thoi_gian
+            WHERE p.POI = ? AND k.Thoi_gian IS NOT NULL AND k.Thoi_gian != '' 
+            GROUP BY k.Thoi_gian
         `;
         const [data5g] = await db.query(query5G, [poiName]);
 
