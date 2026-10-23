@@ -5,7 +5,8 @@ const multer = require('multer');
 const { isAuthenticated, isAdmin } = require('../middlewares/authMiddleware');
 
 const dashboardController = require('../controllers/dashboardController');
-const swapController = require('../controllers/swapController'); // [MỚI]
+const swapController = require('../controllers/swapController');
+const projectController = require('../controllers/projectController'); // [MỚI]
 const rfController = require('../controllers/rfController'); 
 const userController = require('../controllers/userController');
 const mapController = require('../controllers/mapController'); 
@@ -111,5 +112,14 @@ router.get('/logout', (req, res) => {
 
 router.get('/swap-mimo', isAuthenticated, swapController.renderSwapMimoPage);
 router.get('/api/swap-mimo', isAuthenticated, swapController.getSwapData);
+
+// BỔ SUNG ROUTES CHO THEO DÕI DỰ ÁN
+router.get('/project-monitor', isAuthenticated, projectController.renderProjectPage);
+router.get('/api/projects', isAuthenticated, projectController.getProjects);
+router.post('/api/projects', isAuthenticated, projectController.createProject);
+router.post('/api/projects/:id/cells', isAuthenticated, projectController.addCellsToProject);
+router.get('/api/projects/:id/data', isAuthenticated, projectController.getProjectData);
+router.delete('/api/projects/:id', isAuthenticated, projectController.deleteProject);
+router.delete('/api/projects/:id/cells/:cellId', isAuthenticated, projectController.removeCell);
 
 module.exports = router;
