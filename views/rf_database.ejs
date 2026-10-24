@@ -63,10 +63,12 @@
                         <option value="4g" selected>RF Mạng 4G LTE</option>
                         <option value="5g">RF Mạng 5G NR</option>
                         <option value="3g">RF Mạng 3G WCDMA</option>
+                        <!-- [MỚI] THÊM MỤC LỰA CHỌN CSHT -->
+                        <option value="csht">🏢 Cơ Sở Hạ Tầng (CSHT)</option>
                     </select>
                 </div>
                 <div style="flex: 2; min-width: 250px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Tìm kiếm (Nhập Tên Cell hoặc Site):</label>
+                    <label style="display:block; margin-bottom:8px; font-weight:bold; color:#2c3e50;">Tìm kiếm (Nhập Tên Cell, Site hoặc Mã CSHT):</label>
                     <input type="text" id="searchInput" placeholder="Ví dụ: THA001M hoặc THA001..." onkeypress="if(event.key === 'Enter') fetchRFData()" style="width: 100%; padding: 12px; border: 1px solid #bdc3c7; border-radius: 6px; outline: none;">
                 </div>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -133,6 +135,15 @@
         xlsxScript.src = atob('aHR0cHM6Ly91bnBrZy5jb20veGxzeC9kaXN0L3hsc3guZnVsbC5taW4uanM=');
         document.head.appendChild(xlsxScript);
         
+        // Đổi màu Border khi chọn loại mạng (Để UI có sinh khí hơn)
+        document.getElementById('networkSelect').addEventListener('change', function(e) {
+            let color = '#3498db';
+            if (e.target.value === '3g') color = '#f39c12';
+            else if (e.target.value === '5g') color = '#27ae60';
+            else if (e.target.value === 'csht') color = '#34495e';
+            e.target.style.borderLeftColor = color;
+        });
+
         // Tự động tải dữ liệu khi vừa mở trang (Bắt đầu với 4G)
         fetchRFData();
     });
@@ -165,7 +176,7 @@
             document.getElementById('loadingMsg').style.display = 'none';
 
             if (data.length === 0) {
-                document.getElementById('errorMsg').innerText = `Không tìm thấy trạm/cell nào khớp với từ khóa tìm kiếm.`;
+                document.getElementById('errorMsg').innerText = `Không tìm thấy dữ liệu nào khớp với từ khóa tìm kiếm.`;
                 document.getElementById('errorMsg').style.display = 'block';
                 return;
             }
@@ -239,12 +250,12 @@
             
             html += `<td><b>${start + index + 1}</b></td>`;
             
-            // Render linh động theo cột Data của loại mạng
+            // Render linh động theo cột Data của loại mạng (Bao gồm CSHT)
             window.currentColumns.forEach(col => {
                 let val = row[col];
                 if (val === null || val === undefined) val = '';
-                // Highlight tên Cell
-                if (col.toLowerCase() === 'cell_code' || col.toLowerCase() === 'cell_name' || col.toLowerCase() === 'site_name') {
+                // Highlight tên Cell / Site / CSHT
+                if (col.toLowerCase() === 'cell_code' || col.toLowerCase() === 'cell_name' || col.toLowerCase() === 'site_name' || col.toLowerCase() === 'ma_csht' || col.toLowerCase() === 'ten_csht') {
                     html += `<td><b style="color: #2980b9;">${val}</b></td>`;
                 } else {
                     html += `<td>${val}</td>`;
@@ -326,10 +337,10 @@
 
         let ws = XLSX.utils.json_to_sheet(exportData);
         let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, `RF_${net}`);
+        XLSX.utils.book_append_sheet(wb, ws, `Data_${net}`);
         
         let search = document.getElementById('searchInput').value.trim();
-        let fileName = search ? `Co_So_Du_Lieu_RF_${net}_${search}.xlsx` : `Co_So_Du_Lieu_RF_${net}_ToanBo.xlsx`;
+        let fileName = search ? `Du_Lieu_${net}_${search}.xlsx` : `Du_Lieu_${net}_ToanBo.xlsx`;
         
         XLSX.writeFile(wb, fileName);
     }
