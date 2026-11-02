@@ -66,6 +66,8 @@
                     <p id="currentProjectDesc" style="margin:0; color:#7f8c8d; font-size:14px;">Mô tả</p>
                 </div>
                 <div>
+                    <!-- CHÈN THÊM NÚT XUẤT EXCEL Ở ĐÂY -->
+                    <button class="btn btn-success" onclick="exportToExcel()" style="background:#27ae60; margin-right: 10px;">📥 Xuất Excel</button>
                     <button class="btn btn-primary" onclick="openModal('modalAddCell')" style="background:#3498db;">➕ Thêm Cell Theo Dõi</button>
                 </div>
             </div>
@@ -346,6 +348,7 @@
         });
     }
 
+    // CHÈN THÊM HÀM XUẤT EXCEL VÀO ĐÂY
     function exportToExcel() {
         if (typeof XLSX === 'undefined') {
             alert('Thư viện Excel đang tải, vui lòng thử lại...');
@@ -355,26 +358,26 @@
         let projectName = document.getElementById('currentProjectName').innerText;
         let table = document.getElementById('dataTable');
         
-        // Clone bảng để xóa cột Thao Tác (Cột cuối) trước khi xuất
+        // Clone bảng để xóa cột Thao Tác (Cột cuối cùng) trước khi xuất file
         let clonedTable = table.cloneNode(true);
         let rows = clonedTable.rows;
         for (let i = 0; i < rows.length; i++) {
-            rows[i].deleteCell(-1); 
+            if (rows[i].cells.length > 0) {
+                rows[i].deleteCell(-1); 
+            }
         }
 
         let ws = XLSX.utils.table_to_sheet(clonedTable);
         let wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Danh_Sach_Cell");
         
-        let safeName = projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        let safeName = projectName.replace(/[^a-z0-9A-Z]/gi, '_').toLowerCase();
         XLSX.writeFile(wb, `Theo_Doi_Du_An_${safeName}.xlsx`);
     }
 
     window.onload = loadProjects;
 </script>
+<!-- ĐẢM BẢO THƯ VIỆN XLSX ĐƯỢC LOAD Ở CUỐI TRANG -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<style>
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-</style>
 </body>
 </html>
