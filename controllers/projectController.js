@@ -86,7 +86,51 @@ exports.getProjectData = async (req, res) => {
         
         if (cells.length === 0) return res.json([]);
 
-        // Tải Cache QoE/QoS để ghép điểm CEM, QoS hiện tại
+        // [MỚI] Tải dữ liệu lịch sử QoE/QoS của các Cell trong dự án
+        let cellNames = cells.map(c => c.cell_name);
+        let placeholders = cellNames.map(()=>'?').join(',');
+        let cemRows = [], qosRows = [];
+        
+        try {
+            [cemRows] = await db.query(`SELECT Cell_Name, Tuan, CEI_Percent as score FROM mbb_cem WHERE Cell_Name IN (${placeholders})`, cellNames);
+            [qosRows] = await db.query(`SELECT Cell_Name, Tuan, QoS_Score as score FROM mbb_qos WHERE Cell_Name IN (${placeholders})`, cellNames);
+        } catch(e) { console.error("Lỗi lấy lịch sử CEM/QoS", e); }
+
+        let cemMap = {}; cemRows.forEach(r => { let c = r.Cell_Name.toUpperCase(); if(!cemMap[c]) cemMap[c]=[]; cemMap[c].push(r); });
+        let qosMap = {}; qosRows.forEach(r => { let c = r.Cell_Name.toUpperCase(); if(!qosMap[c]) qosMap[c]=[]; qosMap[c].push(r); });
+
+        // Các hàm hỗ trợ xử lý số Tuần (Week) từ Ngày (Date)
+        function getWeek(dateString) {
+            if (!dateString) return null;
+            let d = new Date(dateString);
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+            let yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            let weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+            return { week: weekNo, year: d.getUTCFullYear() };
+        }
+        function parseTuan(tuanStr) {
+            if (!tuanStr) return null;
+            let match = String(tuanStr).match(/(\d+).+?(\d{4})/);
+            if (match) return { week: parseInt(match[1], 10), year: parseInt(match[2], 10) };
+            return null;
+        }
+        function isBefore(tuanStr, targetWeek) {
+            let t = parseTuan(tuanStr);
+            if (!t || !targetWeek) return false;
+            if (t.year < targetWeek.year) return true;
+            if (t.year === targetWeek.year && t.week < targetWeek.week) return true;
+            return false;
+        }
+        function isAfterOrEqual(tuanStr, targetWeek) {
+            let t = parseTuan(tuanStr);
+            if (!t || !targetWeek) return false;
+            if (t.year > targetWeek.year) return true;
+            if (t.year === targetWeek.year && t.week >= targetWeek.week) return true;
+            return false;
+        }
+
+        // Tải Cache QoE/QoS để ghép điểm CEM, QoS hiện tại (Fallback nếu ko có ngày tác động)
         let qoeQosMap = {};
         try {
             const [qoeRows] = await db.query('SELECT Cell_Name, QoE_Score, QoS_Score FROM qoe_qos');
@@ -142,6 +186,37 @@ exports.getProjectData = async (req, res) => {
             let kpi = kpiResult[0] || {};
             let qq = qoeQosMap[cellName] || {};
 
+            // [MỚI] Tính toán Before/After cho QoE và QoS dựa theo Tuần Tác Động
+            let cem_before = null, cem_after = null;
+            let qos_before = null, qos_after = null;
+
+            if (actionDate) {
+                let actionWeek = getWeek(actionDate);
+                let c_cem = cemMap[cellName] || [];
+                let c_qos = qosMap[cellName] || [];
+
+                let cb_sum=0, cb_cnt=0, ca_sum=0, ca_cnt=0;
+                c_cem.forEach(r => {
+                    let s = parseFloat(r.score) || 0;
+                    if(isBefore(r.Tuan, actionWeek)) { cb_sum+=s; cb_cnt++; }
+                    else if(isAfterOrEqual(r.Tuan, actionWeek)) { ca_sum+=s; ca_cnt++; }
+                });
+                if(cb_cnt>0) cem_before = cb_sum/cb_cnt;
+                if(ca_cnt>0) cem_after = ca_sum/ca_cnt;
+
+                let qb_sum=0, qb_cnt=0, qa_sum=0, qa_cnt=0;
+                c_qos.forEach(r => {
+                    let s = parseFloat(r.score) || 0;
+                    if(isBefore(r.Tuan, actionWeek)) { qb_sum+=s; qb_cnt++; }
+                    else if(isAfterOrEqual(r.Tuan, actionWeek)) { qa_sum+=s; qa_cnt++; }
+                });
+                if(qb_cnt>0) qos_before = qb_sum/qb_cnt;
+                if(qa_cnt>0) qos_after = qa_sum/qa_cnt;
+            } else {
+                cem_after = qq.QoE_Score ? parseFloat(qq.QoE_Score) : null;
+                qos_after = qq.QoS_Score ? parseFloat(qq.QoS_Score) : null;
+            }
+
             // Định dạng Action Date ra hiển thị
             let displayDate = "-";
             if (actionDate) {
@@ -166,8 +241,10 @@ exports.getProjectData = async (req, res) => {
                 cqi_before: kpi.cqi_before || 0,
                 cqi_after: kpi.cqi_after || 0,
                 
-                cem_score: qq.QoE_Score ? parseFloat(qq.QoE_Score).toFixed(1) : '-',
-                qos_score: qq.QoS_Score ? parseFloat(qq.QoS_Score).toFixed(1) : '-'
+                cem_before: cem_before,
+                cem_after: cem_after,
+                qos_before: qos_before,
+                qos_after: qos_after
             });
         }
 
